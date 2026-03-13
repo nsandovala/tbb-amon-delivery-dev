@@ -1,15 +1,21 @@
-import { db } from "../client";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../client";
+import type { Tenant } from "@/types";
 
-export async function getTenantBySlug(slug: string) {
- const q = query(
-   collection(db, "tenants"),
-   where("slug", "==", slug)
- );
+export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
+  const tenantsRef = collection(db, "tenants");
+  const q = query(tenantsRef, where("slug", "==", slug));
+  const snapshot = await getDocs(q);
 
- const snap = await getDocs(q);
+  if (snapshot.empty) return null;
 
- if (snap.empty) return null;
+  const doc = snapshot.docs[0];
+  const data = doc.data();
 
- return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  return {
+    id: doc.id,
+    ...data,
+    createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+    updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+  } as Tenant;
 }

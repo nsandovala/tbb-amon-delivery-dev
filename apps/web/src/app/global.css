@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #0B0B0B;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .glow-border {
+    border: 1px solid transparent;
+    transition: all 0.2s ease-in-out;
+  }
+  .glow-border:hover {
+    border-color: #00FF9C;
+    box-shadow: 0 0 10px rgba(0, 255, 156, 0.4);
+  }
+}

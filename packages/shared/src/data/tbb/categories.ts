@@ -1,0 +1,42 @@
+export const TBB_CATEGORIES = [
+  {
+    id: "aumenta-tu-ki",
+    name: "AUMENTA TU KI",
+    slug: "aumenta-tu-ki",
+    sortOrder: 1,
+    isActive: true,
+    ui: { badgeText: "PROMOS", icon: "🔥" },
+  },
+  {
+    id: "multiverso-burger",
+    name: "MULTIVERSO BURGER",
+    slug: "multiverso-burger",
+    sortOrder: 2,
+    isActive: true,
+    ui: { icon: "🍔" },
+  },
+  {
+    id: "multiverso-mechada",
+    name: "MULTIVERSO MECHADA",
+    slug: "multiverso-mechada",
+    sortOrder: 3,
+    isActive: true,
+    ui: { icon: "🥩" },
+  },
+  {
+    id: "papas-kaioken",
+    name: "PAPAS KAIOKEN",
+    slug: "papas-kaioken",
+    sortOrder: 4,
+    isActive: true,
+    ui: { icon: "🍟" },
+  },
+  {
+    id: "bebidas-og",
+    name: "BEBIDAS OG",
+    slug: "bebidas-og",
+    sortOrder: 5,
+    isActive: true,
+    ui: { icon: "🥤" },
+  },
+];

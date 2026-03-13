@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fase 1: Permitir todo en el frontend
+    // TODO: Ajustar reglas con Authentication más adelante.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
