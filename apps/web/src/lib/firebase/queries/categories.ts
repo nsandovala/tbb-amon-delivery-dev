@@ -1,21 +1,22 @@
-import { collection, query, orderBy, getDocs } from "firebase/firestore";
-import { db } from "../client";
+import { adminDb } from "../admin";
 import type { Category } from "@/types";
 
 export async function getTenantCategories(
   tenantId: string
 ): Promise<Category[]> {
-  const categoriesRef = collection(db, `tenants/${tenantId}/categories`);
-  const q = query(categoriesRef, orderBy("order", "asc"));
-  const snapshot = await getDocs(q);
+  const snapshot = await adminDb
+    .collection(`tenants/${tenantId}/categories`)
+    .orderBy("sortOrder", "asc")
+    .get();
 
   return snapshot.docs.map((doc) => {
     const data = doc.data();
+
     return {
       id: doc.id,
       ...data,
-      createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-      updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+      createdAt: data?.createdAt?.toDate?.()?.toISOString?.() ?? null,
+      updatedAt: data?.updatedAt?.toDate?.()?.toISOString?.() ?? null,
     } as Category;
   });
 }

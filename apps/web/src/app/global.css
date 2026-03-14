@@ -26,3 +26,15 @@ body {
     box-shadow: 0 0 10px rgba(0, 255, 156, 0.4);
   }
 }
+/* Ocultar scrollbar horizontal/vertical sin romper el scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+

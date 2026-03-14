@@ -1,11 +1,12 @@
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../client";
+import { adminDb } from "../admin";
 import type { Tenant } from "@/types";
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  const tenantsRef = collection(db, "tenants");
-  const q = query(tenantsRef, where("slug", "==", slug));
-  const snapshot = await getDocs(q);
+  const snapshot = await adminDb
+    .collection("tenants")
+    .where("slug", "==", slug)
+    .limit(1)
+    .get();
 
   if (snapshot.empty) return null;
 
@@ -15,7 +16,7 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
   return {
     id: doc.id,
     ...data,
-    createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-    updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+    createdAt: data?.createdAt?.toDate?.()?.toISOString?.() ?? null,
+    updatedAt: data?.updatedAt?.toDate?.()?.toISOString?.() ?? null,
   } as Tenant;
 }

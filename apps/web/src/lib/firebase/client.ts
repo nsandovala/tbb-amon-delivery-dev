@@ -1,18 +1,9 @@
-import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import {
   getFirestore,
   connectFirestoreEmulator,
   type Firestore,
 } from "firebase/firestore";
-
-/* ──────────────────────────────────────────────
- * Firebase Client SDK — Best practices Vercel + Firebase
- *
- * 1. Lazy init: no side-effects al importar el módulo
- * 2. Singleton: getApps() evita re-init en HMR
- * 3. Emulator guard: globalThis flag evita doble-connect
- * 4. Compatible con Server Components y Client Components
- * ────────────────────────────────────────────── */
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "dev",
@@ -20,27 +11,42 @@ const firebaseConfig = {
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "minerp-sentinel",
 };
 
-// ── Singleton app ──────────────────────────────
-function getApp(): FirebaseApp {
-  return getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-}
+const globalForFirebase = globalThis as typeof globalThis & {
+  __firebase_app__?: FirebaseApp;
+  __firestore_db__?: Firestore;
+  __firestore_emulator_connected__?: boolean;
+};
 
-// ── Emulator guard via globalThis (sobrevive HMR) ──
-const g = globalThis as unknown as { __FIRESTORE_EMULATOR__?: boolean };
-
-function getDb(): Firestore {
-  const firestore = getFirestore(getApp());
-
-  if (
-    process.env.NEXT_PUBLIC_USE_EMULATOR === "true" &&
-    !g.__FIRESTORE_EMULATOR__
-  ) {
-    connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
-    g.__FIRESTORE_EMULATOR__ = true;
+function getFirebaseAppInstance(): FirebaseApp {
+  if (globalForFirebase.__firebase_app__) {
+    return globalForFirebase.__firebase_app__;
   }
 
+  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  globalForFirebase.__firebase_app__ = app;
+  return app;
+}
+
+function getFirestoreInstance(): Firestore {
+  if (globalForFirebase.__firestore_db__) {
+    return globalForFirebase.__firestore_db__;
+  }
+
+  const firestore = getFirestore(getFirebaseAppInstance());
+
+  const useEmulator = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
+  const emulatorHost =
+    process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
+
+  if (useEmulator && !globalForFirebase.__firestore_emulator_connected__) {
+    const [host, port] = emulatorHost.split(":");
+    connectFirestoreEmulator(firestore, host, Number(port));
+    globalForFirebase.__firestore_emulator_connected__ = true;
+    console.log(`[firebase] Firestore emulator connected at ${host}:${port}`);
+  }
+
+  globalForFirebase.__firestore_db__ = firestore;
   return firestore;
 }
 
-// ── Export singleton ────────────────────────────
-export const db = getDb();
+export const db = getFirestoreInstance();
