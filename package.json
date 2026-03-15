@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:emulators": "firebase emulators:start",
+    "seed": "cd packages/shared && npm run seed",
+    "dev:all": "concurrently -n FIREBASE,WEB -c yellow,cyan \"npm run dev:emulators\" \"npm run dev:web\"",
+    "dev:reset": "npm run seed && npm run dev:all"
+  }
+}

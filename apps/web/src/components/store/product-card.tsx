@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Product } from "@/types";
 import { useCartStore } from "@/lib/store/cart-store";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
   const [showAddonModal, setShowAddonModal] = useState(false);
+
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const cartItem = useCartStore((s) =>
@@ -24,15 +25,19 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
   const quantity = cartItem?.quantity || 0;
   const inCart = quantity > 0;
 
-  const likes = product.ui?.likesCount
-    ? product.ui.likesCount >= 1000
-      ? (product.ui.likesCount / 1000).toFixed(1) + "k"
-      : product.ui.likesCount
-    : (Math.random() * (5.0 - 1.0) + 1.0).toFixed(1) + "k";
+  const likes = useMemo(() => {
+    if (product.ui?.likesCount) {
+      return product.ui.likesCount >= 1000
+        ? `${(product.ui.likesCount / 1000).toFixed(1)}k`
+        : String(product.ui.likesCount);
+    }
+    return `${(Math.random() * (5.0 - 1.0) + 1.0).toFixed(1)}k`;
+  }, [product.ui?.likesCount]);
 
-  const rating =
-    product.ui?.rating?.toFixed(1) ||
-    (Math.random() * (5.0 - 4.2) + 4.2).toFixed(1);
+  const rating = useMemo(() => {
+    if (product.ui?.rating) return product.ui.rating.toFixed(1);
+    return (Math.random() * (5.0 - 4.2) + 4.2).toFixed(1);
+  }, [product.ui?.rating]);
 
   const getFallbackImage = (categoryId?: string) => {
     switch (categoryId) {
@@ -53,18 +58,37 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
     product.imageUrl || getFallbackImage(product.categoryId)
   );
 
-  const handleAddClick = () => {
-    const isBurger =
-      product.name.toLowerCase().includes("burger") ||
-      product.name.toLowerCase().includes("mechada") ||
-      product.description?.toLowerCase().includes("burger");
+  const normalizedName = product.name.toLowerCase();
+  const normalizedDescription = product.description?.toLowerCase() || "";
+  const normalizedTags = (product.tags || []).map((tag) => tag.toLowerCase());
 
-    if (isBurger) {
-      setShowAddonModal(true);
-    } else {
+  const isPromo =
+    normalizedTags.includes("promo") ||
+    normalizedTags.includes("combo") ||
+    normalizedName.includes("promo") ||
+    normalizedName.includes("combo") ||
+    normalizedName.includes("2x");
+
+  const isBurgerLike =
+    normalizedName.includes("burger") ||
+    normalizedName.includes("mechada") ||
+    normalizedDescription.includes("burger") ||
+    normalizedDescription.includes("mechada");
+
+  const handleAddClick = () => {
+    if (isPromo) {
       addItem(product);
       toast.success(`${product.name} añadido al carrito`);
+      return;
     }
+
+    if (isBurgerLike) {
+      setShowAddonModal(true);
+      return;
+    }
+
+    addItem(product);
+    toast.success(`${product.name} añadido al carrito`);
   };
 
   const confirmAddon = (withFries: boolean) => {
@@ -91,9 +115,13 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
       setTimeout(() => {
         addItem(friesMock);
         toast.success("🍟 Papas Kaioken añadidas", {
-          style: { border: "1px solid #00FF9C", color: "#00FF9C" },
+          style: {
+            border: "1px solid #00FF9C",
+            color: "#00FF9C",
+            background: "#0B0B0B",
+          },
         });
-      }, 500);
+      }, 350);
     }
   };
 
@@ -126,7 +154,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
 
             <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-3 py-1.5 backdrop-blur-xl">
               <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />
-              <span className="tracking-tight text-[11px] font-bold text-white">
+              <span className="text-[11px] font-bold tracking-tight text-white">
                 {likes}
               </span>
             </div>
@@ -225,7 +253,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
                 ¿La quieres acompañada o huérfana?
               </h3>
 
-              <p className="mx-auto max-w-[28ch] text-sm leading-relaxed text-white/72 sm:text-base">
+              <p className="mx-auto max-w-[28ch] text-sm leading-relaxed text-white/88 sm:text-base">
                 Lleva tus{" "}
                 <span className="font-bold text-white underline decoration-accent decoration-2 underline-offset-8">
                   Papas Kaioken
@@ -239,7 +267,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
               <button
                 onClick={() => confirmAddon(true)}
                 className={cn(
-                  "relative w-full overflow-hidden rounded-2xl py-3.5 sm:py-4",
+                  "relative w-full overflow-hidden rounded-2xl py-3 sm:py-3.5",
                   "text-base sm:text-lg font-black tracking-[0.04em] text-black",
                   "border border-[#7DFFD8]/28",
                   "bg-[linear-gradient(180deg,#19FFAE_0%,#00F59A_100%)]",
@@ -254,7 +282,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
               <button
                 onClick={() => confirmAddon(false)}
                 className={cn(
-                  "relative w-full overflow-hidden rounded-2xl py-3.5 sm:py-4",
+                  "relative w-full overflow-hidden rounded-2xl py-3 sm:py-3.5",
                   "text-sm sm:text-base font-bold text-white transition-all duration-300",
                   "border border-white/10 backdrop-blur-md",
                   "bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))]",
