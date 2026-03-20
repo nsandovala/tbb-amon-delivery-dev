@@ -1,9 +1,10 @@
 {
   "scripts": {
     "dev:web": "cd apps/web && npm run dev",
+    "dev:admin": "cd apps/admin && npm run dev",
     "dev:emulators": "firebase emulators:start",
     "seed": "cd packages/shared && npm run seed",
-    "dev:all": "concurrently -n FIREBASE,WEB -c yellow,cyan \"npm run dev:emulators\" \"npm run dev:web\"",
+    "dev:all": "concurrently -n FIREBASE,WEB,ADMIN -c yellow,cyan,magenta \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\"",
     "dev:reset": "npm run seed && npm run dev:all"
   }
 }

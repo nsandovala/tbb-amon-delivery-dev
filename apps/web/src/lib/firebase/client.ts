@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
-  getFirestore,
   connectFirestoreEmulator,
+  getFirestore,
   type Firestore,
 } from "firebase/firestore";
 
@@ -12,24 +12,24 @@ const firebaseConfig = {
 };
 
 const globalForFirebase = globalThis as typeof globalThis & {
-  __firebase_app__?: FirebaseApp;
-  __firestore_db__?: Firestore;
-  __firestore_emulator_connected__?: boolean;
+  __web_firebase_app__?: FirebaseApp;
+  __web_firestore_db__?: Firestore;
+  __web_firestore_emulator_connected__?: boolean;
 };
 
 function getFirebaseAppInstance(): FirebaseApp {
-  if (globalForFirebase.__firebase_app__) {
-    return globalForFirebase.__firebase_app__;
+  if (globalForFirebase.__web_firebase_app__) {
+    return globalForFirebase.__web_firebase_app__;
   }
 
   const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  globalForFirebase.__firebase_app__ = app;
+  globalForFirebase.__web_firebase_app__ = app;
   return app;
 }
 
 function getFirestoreInstance(): Firestore {
-  if (globalForFirebase.__firestore_db__) {
-    return globalForFirebase.__firestore_db__;
+  if (globalForFirebase.__web_firestore_db__) {
+    return globalForFirebase.__web_firestore_db__;
   }
 
   const firestore = getFirestore(getFirebaseAppInstance());
@@ -38,14 +38,26 @@ function getFirestoreInstance(): Firestore {
   const emulatorHost =
     process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
 
-  if (useEmulator && !globalForFirebase.__firestore_emulator_connected__) {
+  if (
+    typeof window !== "undefined" &&
+    useEmulator &&
+    !globalForFirebase.__web_firestore_emulator_connected__
+  ) {
     const [host, port] = emulatorHost.split(":");
+
+    if (!host || !port) {
+      throw new Error(
+        `[web/firebase] Invalid NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: "${emulatorHost}"`
+      );
+    }
+
     connectFirestoreEmulator(firestore, host, Number(port));
-    globalForFirebase.__firestore_emulator_connected__ = true;
-    console.log(`[firebase] Firestore emulator connected at ${host}:${port}`);
+    globalForFirebase.__web_firestore_emulator_connected__ = true;
+
+    console.log(`[web/firebase] Firestore emulator connected at ${host}:${port}`);
   }
 
-  globalForFirebase.__firestore_db__ = firestore;
+  globalForFirebase.__web_firestore_db__ = firestore;
   return firestore;
 }
 

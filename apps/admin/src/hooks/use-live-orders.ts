@@ -1,35 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query
-} from "firebase/firestore";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../lib/firebase/client";
-
-export interface LiveOrder {
-  id: string;
-  status: string;
-  fulfillmentType: "delivery" | "pickup";
-  customer: {
-    name: string;
-    phone: string;
-    address?: string;
-    notes?: string;
-  };
-  totals: {
-    subtotal: number;
-    delivery: number;
-    total: number;
-  };
-  createdAt?: unknown;
-  updatedAt?: unknown;
-}
+import type { AdminOrder } from "../lib/firebase/queries/orders";
 
 export function useLiveOrders(tenantId: string) {
-  const [orders, setOrders] = useState<LiveOrder[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,9 +16,9 @@ export function useLiveOrders(tenantId: string) {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const nextOrders: LiveOrder[] = snapshot.docs.map((doc) => ({
+        const nextOrders: AdminOrder[] = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...(doc.data() as Omit<LiveOrder, "id">)
+          ...(doc.data() as Omit<AdminOrder, "id">),
         }));
 
         setOrders(nextOrders);
