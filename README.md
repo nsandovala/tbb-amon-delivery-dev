@@ -5,7 +5,7 @@
 
 ## 📋 Descripción
 
-**tbb-amon-delivery-dev** es un proyecto de desarrollo enfocado en la gestión y entrega de servicios de Amon para TBB (The Big Business). Este repositorio contiene la lógica, configuración e integración necesaria para el sistema de delivery.
+**tbb-amon-delivery-dev** es un proyecto de desarrollo enfocado en la gestión y entrega de servicios de Amon para TBB (The Best Burger). Este repositorio contiene la lógica, configuración e integración necesaria para el sistema de delivery.
 
 ## ⚙️ Tecnologías
 
