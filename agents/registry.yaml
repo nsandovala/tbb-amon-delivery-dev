@@ -1,0 +1,37 @@
+version: 1
+default_agent: architect
+
+agents:
+  architect:
+    path: agents/architect
+    scope:
+      - architecture
+      - module-boundaries
+      - integration
+      - roadmap
+
+  frontend:
+    path: agents/frontend
+    scope:
+      - apps/web
+      - apps/admin
+      - ui
+      - dashboard
+      - ux
+
+  backend:
+    path: agents/backend
+    scope:
+      - backend
+      - firestore
+      - api
+      - sync
+      - integration
+
+  qa:
+    path: agents/qa
+    scope:
+      - validation
+      - regression
+      - smoke-tests
+      - edge-cases

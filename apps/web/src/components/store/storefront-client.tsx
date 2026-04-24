@@ -34,7 +34,6 @@ export function StorefrontClient({ categories, products, city }: StorefrontClien
         categories={categories} 
         activeCategoryId={activeCategoryId}
         onSelectCategory={setActiveCategoryId}
-        hoveredCategoryId={hoveredCategoryId}
       />
 
       <section className="px-6 md:px-12 flex-1 py-20 bg-[#0B0B0B]">

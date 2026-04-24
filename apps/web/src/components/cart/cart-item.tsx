@@ -38,8 +38,8 @@ export function CartItem({ item }: CartItemProps) {
   const [imgSrc, setImgSrc] = useState(initialImage);
 
   return (
-    <div className="group flex gap-3 rounded-2xl border border-white/6 bg-white/[0.015] p-3 transition-colors hover:border-white/10 hover:bg-white/[0.02]">
-      <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl border border-white/8 bg-[#0B0B0B]">
+    <div className="group flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.02] p-3 transition-colors hover:border-white/12 hover:bg-white/[0.03]">
+      <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#0B0B0B]">
         <Image
           src={imgSrc}
           alt={item.product.name}
@@ -49,11 +49,13 @@ export function CartItem({ item }: CartItemProps) {
         />
       </div>
 
-      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* Content */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">
+          <p className="line-clamp-2 text-sm font-semibold leading-5 text-white">
             {item.product.name}
           </p>
+
           <p className="mt-1 text-xs text-neutral-400">
             ${item.product.price.toLocaleString("es-CL")} c/u
           </p>
@@ -61,7 +63,7 @@ export function CartItem({ item }: CartItemProps) {
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white transition-colors hover:bg-white/10"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white transition-colors hover:bg-white/10"
               aria-label="Disminuir cantidad"
             >
               <Minus className="h-3.5 w-3.5" />
@@ -73,7 +75,7 @@ export function CartItem({ item }: CartItemProps) {
 
             <button
               onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-accent/20 bg-accent/15 text-accent transition-colors hover:bg-accent hover:text-background"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-accent/20 bg-accent/15 text-accent transition-colors hover:bg-accent hover:text-background"
               aria-label="Aumentar cantidad"
             >
               <Plus className="h-3.5 w-3.5 stroke-[3]" />
@@ -81,7 +83,8 @@ export function CartItem({ item }: CartItemProps) {
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-2">
+        {/* Side */}
+        <div className="flex shrink-0 flex-col items-end gap-2 text-right">
           <button
             onClick={() => removeItem(item.product.id)}
             className={cn(
@@ -93,7 +96,7 @@ export function CartItem({ item }: CartItemProps) {
             <Trash2 className="h-4 w-4" />
           </button>
 
-          <span className="text-sm font-bold text-accent">
+          <span className="whitespace-nowrap text-sm font-bold text-accent">
             ${(item.product.price * item.quantity).toLocaleString("es-CL")}
           </span>
         </div>

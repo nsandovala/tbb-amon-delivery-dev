@@ -3,12 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { useLiveOrders } from "../../hooks/use-live-orders";
-import {
-  updateOrderStatus,
-  type AdminOrder,
-  type OrderStatus,
-} from "../../lib/firebase/queries/orders";
+import { updateOrderStatusApi } from "../../lib/api/orders";
 import { db } from "../../lib/firebase/client";
+import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
 
 const tenantId = "tbb";
 
@@ -53,8 +50,94 @@ function formatFulfillment(type?: string) {
   return "Sin definir";
 }
 
+function formatPaymentMethod(method?: string) {
+  switch (method) {
+    case "cash":
+      return "Efectivo";
+    case "card":
+      return "Tarjeta";
+    case "transfer":
+      return "Transferencia";
+    case "pending":
+      return "Pendiente";
+    default:
+      return method || "Sin definir";
+  }
+}
+
 function formatMoney(value?: number) {
   return `$${(value ?? 0).toLocaleString("es-CL")}`;
+}
+
+function toSafeDate(value?: unknown) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "object" && value !== null) {
+    if (
+      "toDate" in value &&
+      typeof (value as { toDate?: () => Date }).toDate === "function"
+    ) {
+      const parsed = (value as { toDate: () => Date }).toDate();
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if ("seconds" in value && typeof (value as { seconds?: number }).seconds === "number") {
+      const parsed = new Date((value as { seconds: number }).seconds * 1000);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
+
+function formatReadableTime(date: Date | null) {
+  if (!date) return "Sin hora";
+  return date.toLocaleTimeString("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatReadableDate(date: Date | null) {
+  if (!date) return "Sin fecha";
+  return date.toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatElapsedTime(date: Date | null, nowTs: number) {
+  if (!date) return "Sin registro";
+
+  const diffMs = Math.max(nowTs - date.getTime(), 0);
+  const totalMinutes = Math.floor(diffMs / 60000);
+
+  if (totalMinutes < 1) return "Recién ingresado";
+  if (totalMinutes < 60) return `Hace ${totalMinutes} min`;
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+
+  if (totalHours < 24) {
+    return remainingMinutes > 0
+      ? `Hace ${totalHours}h ${remainingMinutes}m`
+      : `Hace ${totalHours}h`;
+  }
+
+  const days = Math.floor(totalHours / 24);
+  const remainingHours = totalHours % 24;
+
+  return remainingHours > 0 ? `Hace ${days}d ${remainingHours}h` : `Hace ${days}d`;
 }
 
 function getItemCount(order: AdminOrder) {
@@ -74,14 +157,19 @@ function OrderCard({
   onSelect,
   onChangeStatus,
   updatingId,
+  nowTs,
 }: {
   order: AdminOrder;
   selected: boolean;
   onSelect: () => void;
   onChangeStatus: (orderId: string, nextStatus: OrderStatus) => Promise<void>;
   updatingId: string | null;
+  nowTs: number;
 }) {
   const itemCount = getItemCount(order);
+  const createdAt = toSafeDate(order.createdAt);
+  const createdAtTime = formatReadableTime(createdAt);
+  const elapsedTime = formatElapsedTime(createdAt, nowTs);
 
   return (
     <button
@@ -103,7 +191,7 @@ function OrderCard({
 
               <span
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${statusStyles(
-                  order.status
+                  order.status ?? ""
                 )}`}
               >
                 {order.status}
@@ -122,6 +210,11 @@ function OrderCard({
                   {order.customer.address}
                 </p>
               ) : null}
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-500">
+                <span>{createdAtTime}</span>
+                <span className="text-neutral-700">•</span>
+                <span>{elapsedTime}</span>
+              </div>
             </div>
           </div>
 
@@ -179,6 +272,7 @@ export default function OrdersPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -200,11 +294,79 @@ export default function OrdersPage() {
     void loadProducts();
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNowTs(Date.now());
+    }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const selectedOrder = useMemo(() => {
     if (!orders.length) return null;
     const found = orders.find((order) => order.id === selectedOrderId);
     return found ?? orders[0];
   }, [orders, selectedOrderId]);
+
+  const {
+    totalVisible,
+    queued,
+    preparing,
+    onTheWay,
+    delivered,
+    cancelled,
+    trackedTotal,
+    hasStatusMismatch,
+  } = useMemo(() => {
+    const metrics = {
+      totalVisible: orders.length,
+      queued: 0,
+      preparing: 0,
+      ready: 0,
+      onTheWay: 0,
+      delivered: 0,
+      cancelled: 0,
+    };
+
+    orders.forEach((order) => {
+      switch (order.status) {
+        case "queued":
+          metrics.queued += 1;
+          break;
+        case "preparing":
+          metrics.preparing += 1;
+          break;
+        case "ready":
+          metrics.ready += 1;
+          break;
+        case "on_the_way":
+          metrics.onTheWay += 1;
+          break;
+        case "delivered":
+          metrics.delivered += 1;
+          break;
+        case "cancelled":
+          metrics.cancelled += 1;
+          break;
+        default:
+          break;
+      }
+    });
+
+    const trackedTotal =
+      metrics.queued +
+      metrics.preparing +
+      metrics.ready +
+      metrics.onTheWay +
+      metrics.delivered +
+      metrics.cancelled;
+
+    return {
+      ...metrics,
+      trackedTotal,
+      hasStatusMismatch: trackedTotal !== metrics.totalVisible,
+    };
+  }, [orders]);
 
   const handleChangeStatus = async (
     orderId: string,
@@ -212,7 +374,7 @@ export default function OrdersPage() {
   ) => {
     try {
       setUpdatingId(orderId);
-      await updateOrderStatus(tenantId, orderId, nextStatus);
+      await updateOrderStatusApi(orderId, nextStatus);
     } catch (error) {
       console.error("Error actualizando estado:", error);
     } finally {
@@ -224,6 +386,8 @@ export default function OrdersPage() {
     if (!productId) return "Producto";
     return productNames[productId] || prettifyProductId(productId);
   };
+
+  const selectedOrderCreatedAt = toSafeDate(selectedOrder?.createdAt);
 
   return (
     <main className="min-h-screen bg-[#0B0B0B] text-white">
@@ -241,30 +405,47 @@ export default function OrdersPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
                 Total visible
               </p>
-              <p className="mt-1 text-2xl font-bold text-white">{orders.length}</p>
+              <p className="mt-1 text-2xl font-bold text-white">{totalVisible}</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
                 En cola
               </p>
-              <p className="mt-1 text-2xl font-bold text-yellow-300">
-                {orders.filter((o) => o.status === "queued").length}
+              <p className="mt-1 text-2xl font-bold text-yellow-300">{queued}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
+                Preparando
               </p>
+              <p className="mt-1 text-2xl font-bold text-orange-300">{preparing}</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
                 En reparto
               </p>
-              <p className="mt-1 text-2xl font-bold text-violet-300">
-                {orders.filter((o) => o.status === "on_the_way").length}
+              <p className="mt-1 text-2xl font-bold text-violet-300">{onTheWay}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
+                Entregados
               </p>
+              <p className="mt-1 text-2xl font-bold text-emerald-300">{delivered}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
+                Cancelados
+              </p>
+              <p className="mt-1 text-2xl font-bold text-red-300">{cancelled}</p>
             </div>
           </div>
         </div>
@@ -280,6 +461,15 @@ export default function OrdersPage() {
         ) : (
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
             <section className="grid gap-4">
+              {hasStatusMismatch ? (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                  Hay una inconsistencia entre el total visible ({totalVisible}) y
+                  los estados operativos contabilizados ({trackedTotal}). `ready`
+                  se incluye en la validación aunque no se muestre en las cards
+                  superiores.
+                </div>
+              ) : null}
+
               {orders.map((order) => (
                 <OrderCard
                   key={order.id}
@@ -288,6 +478,7 @@ export default function OrdersPage() {
                   onSelect={() => setSelectedOrderId(order.id)}
                   onChangeStatus={handleChangeStatus}
                   updatingId={updatingId}
+                  nowTs={nowTs}
                 />
               ))}
             </section>
@@ -346,10 +537,34 @@ export default function OrdersPage() {
                         <span className="text-neutral-400">Estado</span>
                         <span
                           className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${statusStyles(
-                            selectedOrder.status
+                            selectedOrder.status ?? ""
                           )}`}
                         >
                           {selectedOrder.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Pago</span>
+                        <span className="text-white">
+                          {formatPaymentMethod(selectedOrder.paymentMethod)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Fecha</span>
+                        <span className="text-white">
+                          {formatReadableDate(selectedOrderCreatedAt)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Hora</span>
+                        <span className="text-white">
+                          {formatReadableTime(selectedOrderCreatedAt)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Antigüedad</span>
+                        <span className="text-white">
+                          {formatElapsedTime(selectedOrderCreatedAt, nowTs)}
                         </span>
                       </div>
                     </div>

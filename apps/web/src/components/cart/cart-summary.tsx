@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useCartStore } from "@/lib/store/cart-store";
-import { createOrder } from "@/lib/firebase/mutations/orders";
+import { createOrderApi } from "@/lib/api/orders";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -68,15 +68,11 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
       const orderItems = items.map((i) => ({
         productId: i.product.id,
         qty: i.quantity,
-        unitPrice: i.product.price,
       }));
 
-      const orderId = await createOrder({
+      const { orderId } = await createOrderApi({
         tenantId,
         items: orderItems,
-        subtotal,
-        delivery,
-        total,
         fulfillmentType,
         customer: {
           name: customerName.trim(),

@@ -1,22 +1,45 @@
-import { adminDb } from "../admin";
+import {
+  collection,
+  getDocs,
+  limit,
+  query,
+  where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
 import type { Tenant } from "@/types";
+import { db } from "../client";
+
+function serializeTimestamp(value: unknown): string | null {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().toISOString();
+  }
+
+  return null;
+}
+
+function mapTenant(snapshotDoc: QueryDocumentSnapshot<DocumentData>): Tenant {
+  const data = snapshotDoc.data() as Omit<Tenant, "id">;
+
+  return {
+    id: snapshotDoc.id,
+    ...data,
+    createdAt: serializeTimestamp(data.createdAt),
+    updatedAt: serializeTimestamp(data.updatedAt),
+  };
+}
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  const snapshot = await adminDb
-    .collection("tenants")
-    .where("slug", "==", slug)
-    .limit(1)
-    .get();
+  const tenantsRef = collection(db, "tenants");
+  const tenantsQuery = query(tenantsRef, where("slug", "==", slug), limit(1));
+  const snapshot = await getDocs(tenantsQuery);
 
   if (snapshot.empty) return null;
 
-  const doc = snapshot.docs[0];
-  const data = doc.data();
-
-  return {
-    id: doc.id,
-    ...data,
-    createdAt: data?.createdAt?.toDate?.()?.toISOString?.() ?? null,
-    updatedAt: data?.updatedAt?.toDate?.()?.toISOString?.() ?? null,
-  } as Tenant;
+  return mapTenant(snapshot.docs[0]);
 }

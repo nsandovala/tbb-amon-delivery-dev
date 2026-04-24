@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(do *)",
+      "Bash(then *)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(npx *)"
+    ]
+  },
+  "$version": 3
+}

@@ -1,0 +1,22 @@
+# env files
+.env
+.env.local
+.env.*.local
+apps/**/.env
+apps/**/.env.local
+
+# firebase admin / secrets
+*firebase-adminsdk*.json
+apps/functions/config/serviceAccountKey.json
+credentials*.json
+
+# logs
+firebase-debug.log
+firestore-debug.log
+next-debug.log
+
+# build
+node_modules
+.next
+dist
+build

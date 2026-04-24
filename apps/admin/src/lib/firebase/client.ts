@@ -54,9 +54,7 @@ function getFirestoreInstance(): Firestore {
     connectFirestoreEmulator(firestore, host, Number(port));
     globalForFirebase.__admin_firestore_emulator_connected__ = true;
 
-    console.log(
-      `[admin/firebase] Firestore emulator connected at ${host}:${port}`
-    );
+    console.log(`[admin/firebase] Firestore emulator connected at ${host}:${port}`);
   }
 
   globalForFirebase.__admin_firestore_db__ = firestore;

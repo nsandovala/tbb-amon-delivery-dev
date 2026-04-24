@@ -1,0 +1,52 @@
+sprint: backend-1
+goal: >
+  Move AMON Delivery to backend-first writes without breaking current storefront, POS, and orders panel.
+
+source_of_truth:
+  firestore_project: minierp-sentinel
+  firestore_root: tenants/{tenantId}
+  pilot_tenant: tbb
+
+rules:
+  - no new firebase project
+  - backend-first
+  - no mock flows where real data exists
+  - sqlite bot remains fallback until bridge is stable
+
+current_status:
+  storefront: working
+  pos: working
+  orders_panel: working
+  daily_metrics: working
+  bot_sqlite: working
+  bot_firestore_bridge: pending
+  backend_api: pending
+
+next_actions:
+  - create backend skeleton
+  - implement POST /api/orders
+  - implement PATCH /api/orders/:id/status
+  - implement POST /api/pos/sale
+  - prepare bot bridge contract
+
+context_references:
+  - project: amon-delivery
+    description: AMON Delivery project playbooks/repo-rules.md
+  - context: context/current-sprint.md
+  - context: context/architecture.md
+  - context: context/decisions.md
+  - context: contracts/api-contracts.md
+  - context: contracts/firestore-collections.md
+  - context: contracts/order-status.md
+  - context: contracts/order.schema.json
+  - agents: agents/registry.yaml
+  - agents: agents/routing-rules.yaml
+  - agents: agents/sprint-memory.yaml
+  - agents: agents/backend.yaml
+  - agents: agents/frontend.yaml
+  - agents: agents/qa.yaml
+  - agents: agents/architect.yaml
+  - playbooks: playbooks/repo-rules.md
+  - playbooks: playbooks/backend-first.md
+  - playbooks: playbooks/debugging-checklist.md
+  - playbooks: playbooks/release-checklist.md

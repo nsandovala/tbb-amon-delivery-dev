@@ -1,13 +1,11 @@
 import {
   collection,
-  doc,
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
-  serverTimestamp,
   type Unsubscribe,
 } from "firebase/firestore";
+import { updateOrderStatusApi } from "@/lib/api/orders";
 import { db } from "../client";
 
 export type OrderStatus =
@@ -79,14 +77,9 @@ export function subscribeToOrders(
 }
 
 export async function updateOrderStatus(
-  tenantId: string,
+  _tenantId: string,
   orderId: string,
   nextStatus: OrderStatus
 ) {
-  const orderRef = doc(db, `tenants/${tenantId}/orders`, orderId);
-
-  await updateDoc(orderRef, {
-    status: nextStatus,
-    updatedAt: serverTimestamp(),
-  });
+  await updateOrderStatusApi(orderId, nextStatus);
 }

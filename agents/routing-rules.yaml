@@ -1,0 +1,36 @@
+rules:
+  - when:
+      contains:
+        - firestore
+        - api
+        - sync
+        - backend
+        - order contract
+    use: backend
+
+  - when:
+      contains:
+        - layout
+        - ui
+        - component
+        - tailwind
+        - page.tsx
+    use: frontend
+
+  - when:
+      contains:
+        - structure
+        - multi-tenant
+        - architecture
+        - integration
+        - repo
+    use: architect
+
+  - when:
+      contains:
+        - validate
+        - regression
+        - test
+        - edge case
+        - smoke
+    use: qa

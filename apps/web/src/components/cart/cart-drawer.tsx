@@ -20,57 +20,68 @@ export function CartDrawer({ tenantId }: CartDrawerProps) {
       {/* Overlay */}
       <div
         className={cn(
-          "fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] transition-opacity duration-300",
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none hidden"
+          "fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm transition-opacity duration-300",
+          isOpen ? "opacity-100" : "pointer-events-none hidden opacity-0"
         )}
         onClick={closeCart}
       />
 
       {/* Drawer */}
-      <div
+      <aside
         className={cn(
-          "fixed z-[70] flex flex-col bg-card border-white/10 transition-transform duration-300 ease-in-out",
-          "md:right-0 md:top-0 md:bottom-0 md:w-[400px] md:border-l",
+          "fixed z-[70] flex h-full min-h-0 flex-col border-white/10 bg-[#0b0b0c] shadow-2xl transition-transform duration-300 ease-in-out",
+          "md:right-0 md:top-0 md:bottom-0 md:w-[420px] md:border-l",
           "max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:h-[85vh] max-md:rounded-t-3xl max-md:border-t",
-          isOpen 
-            ? "translate-x-0 max-md:translate-y-0" 
-            : "md:translate-x-full max-md:translate-y-full pointer-events-none hidden"
+          isOpen
+            ? "translate-x-0 max-md:translate-y-0"
+            : "pointer-events-none md:translate-x-full max-md:translate-y-full hidden"
         )}
+        aria-hidden={!isOpen}
       >
         {/* Header */}
-        <div className="flex justify-between items-center p-5 md:p-6 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <ShoppingBag className="w-5 h-5 text-accent" />
-            <h2 className="text-xl font-bold text-white m-0">Tu pedido</h2>
-          </div>
-          <button
-            onClick={closeCart}
-            className="text-neutral-400 hover:text-white transition-colors p-1"
-            aria-label="Cerrar carrito"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        {/* Items */}
-        <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-4">
-          {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-neutral-500 gap-4">
-              <ShoppingBag className="w-12 h-12 opacity-20" />
-              <p className="text-center">Tu carrito está vacío</p>
+        <div className="shrink-0 border-b border-white/10 px-5 py-5 md:px-6 md:py-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <ShoppingBag className="h-5 w-5 shrink-0 text-accent" />
+              <h2 className="truncate text-xl font-bold text-white">
+                Tu pedido
+              </h2>
             </div>
-          ) : (
-            items.map((item) => (
-              <CartItem key={item.product.id} item={item} />
-            ))
-          )}
+
+            <button
+              onClick={closeCart}
+              className="rounded-lg p-1 text-neutral-400 transition-colors hover:text-white"
+              aria-label="Cerrar carrito"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
         </div>
 
-        {/* Summary */}
-        <div className="p-5 md:p-6 bg-card border-t border-white/5">
-          <CartSummary tenantId={tenantId} />
+        {/* Body */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* Items */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-6 md:py-6">
+            {items.length === 0 ? (
+              <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-4 text-neutral-500">
+                <ShoppingBag className="h-12 w-12 opacity-20" />
+                <p className="text-center">Tu carrito está vacío</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {items.map((item) => (
+                  <CartItem key={item.product.id} item={item} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Summary */}
+          <div className="shrink-0 border-t border-white/10 bg-[#0b0b0c] px-5 py-5 md:px-6 md:py-6">
+            <CartSummary tenantId={tenantId} />
+          </div>
         </div>
-      </div>
+      </aside>
     </>
   );
 }

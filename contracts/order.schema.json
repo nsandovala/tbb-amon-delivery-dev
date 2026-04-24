@@ -1,0 +1,82 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Order",
+    "type": "object",
+    "required": [
+      "tenantId",
+      "status",
+      "paymentStatus",
+      "paymentMethod",
+      "channel",
+      "fulfillmentType",
+      "items",
+      "totals",
+      "customer"
+    ],
+    "properties": {
+      "tenantId": { "type": "string" },
+      "status": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "preparing",
+          "ready",
+          "on_the_way",
+          "delivered",
+          "cancelled"
+        ]
+      },
+      "paymentStatus": {
+        "type": "string",
+        "enum": ["pending", "paid", "failed", "refunded"]
+      },
+      "paymentMethod": {
+        "type": "string",
+        "enum": ["pending", "cash", "transfer", "card"]
+      },
+      "channel": {
+        "type": "string",
+        "enum": ["web", "admin_pos", "whatsapp", "own"]
+      },
+      "source": { "type": ["string", "null"] },
+      "fulfillmentType": {
+        "type": "string",
+        "enum": ["delivery", "pickup"]
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["productId", "productName", "qty", "unitPrice"],
+          "properties": {
+            "productId": { "type": "string" },
+            "productName": { "type": "string" },
+            "qty": { "type": "integer", "minimum": 1 },
+            "unitPrice": { "type": "number", "minimum": 0 },
+            "imageUrl": { "type": ["string", "null"] },
+            "categoryId": { "type": ["string", "null"] }
+          }
+        }
+      },
+      "totals": {
+        "type": "object",
+        "required": ["subtotal", "delivery", "total"],
+        "properties": {
+          "subtotal": { "type": "number", "minimum": 0 },
+          "delivery": { "type": "number", "minimum": 0 },
+          "total": { "type": "number", "minimum": 0 }
+        }
+      },
+      "customer": {
+        "type": "object",
+        "required": ["name", "phone"],
+        "properties": {
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "address": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      },
+      "botMeta": { "type": ["object", "null"] }
+    }
+  }
