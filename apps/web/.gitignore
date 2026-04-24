@@ -1,0 +1,18 @@
+# secrets
+.secrets/
+**/serviceAccountKey.json
+**/*service-account*.json
+**/*firebase-adminsdk*.json
+
+# env
+.env
+.env.local
+.env.*.local
+
+# debug logs
+**/firebase-debug.log
+**/firestore-debug.log
+**/next-debug.log
+
+# build/cache
+**/*.tsbuildinfo
