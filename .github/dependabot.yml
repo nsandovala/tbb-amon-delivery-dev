@@ -1,6 +1,7 @@
-version: 2
+version: 2.1
 
 updates:
+  # Root workspace dependencies
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -8,11 +9,29 @@ updates:
       day: "monday"
       time: "08:00"
       timezone: "America/Santiago"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "security"
+    open-pull-requests-limit: 2
+    groups:
+      npm-root-safe-updates:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-functions"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
+  # Web app dependencies
   - package-ecosystem: "npm"
     directory: "/apps/web"
     schedule:
@@ -20,11 +39,25 @@ updates:
       day: "monday"
       time: "08:10"
       timezone: "America/Santiago"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "web"
+    open-pull-requests-limit: 2
+    groups:
+      web-safe-updates:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
+  # Admin app dependencies
   - package-ecosystem: "npm"
     directory: "/apps/admin"
     schedule:
@@ -32,11 +65,25 @@ updates:
       day: "monday"
       time: "08:20"
       timezone: "America/Santiago"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "admin"
+    open-pull-requests-limit: 2
+    groups:
+      admin-safe-updates:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
+  # Firebase Functions
   - package-ecosystem: "npm"
     directory: "/apps/functions"
     schedule:
@@ -44,11 +91,23 @@ updates:
       day: "monday"
       time: "08:30"
       timezone: "America/Santiago"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "functions"
+    open-pull-requests-limit: 1
+    groups:
+      functions-safe-updates:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "firebase-functions"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
+  # Shared package
   - package-ecosystem: "npm"
     directory: "/packages/shared"
     schedule:
@@ -56,11 +115,23 @@ updates:
       day: "monday"
       time: "08:40"
       timezone: "America/Santiago"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "shared"
+    open-pull-requests-limit: 1
+    groups:
+      shared-safe-updates:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
+  # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -68,6 +139,14 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "America/Santiago"
-    labels:
-      - "dependencies"
-      - "github-actions"
+    open-pull-requests-limit: 1
+    groups:
+      github-actions-safe-updates:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "actions/checkout"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "actions/setup-node"
+        update-types: ["version-update:semver-major"]
