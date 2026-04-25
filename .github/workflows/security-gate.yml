@@ -22,7 +22,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.local$|(^|/)\.env\.[^.]+$'; then
+          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.local$|(^|/)\.env\.[^.]+\.local$|(^|/)\.env\.(production|development|staging|test)$'; then
             echo "::error::.env files must not be tracked. Use .env.example with placeholders."
             exit 1
           fi
@@ -52,10 +52,10 @@ jobs:
             [ -f "$file" ] || continue
 
             case "$file" in
-              *package-lock.json|*.png|*.jpg|*.jpeg|*.webp|*.gif|*.svg)
-                continue
-                ;;
-            esac
+            .github/workflows/security-gate.yml|*package-lock.json|*.png|*.jpg|*.jpeg|*.webp|*.gif|*.svg)
+              continue
+                    ;;
+                   esac  
 
             if grep -nE "$PATTERN" "$file"; then
               echo "::error::Potential secret detected in $file"
