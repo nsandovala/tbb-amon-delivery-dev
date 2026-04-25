@@ -1,0 +1,29 @@
+# Default owner
+* @nsandovala
+
+# Critical repo governance
+.github/ @nsandovala
+.github/workflows/ @nsandovala
+.github/dependabot.yml @nsandovala
+.github/CODEOWNERS @nsandovala
+
+# Security-sensitive files
+.env.example @nsandovala
+.gitignore @nsandovala
+firebase.json @nsandovala
+.firebaserc @nsandovala
+
+# Agent governance
+AGENT.md @nsandovala
+agents/ @nsandovala
+playbooks/ @nsandovala
+context/ @nsandovala
+contracts/ @nsandovala
+
+# Apps
+apps/web/ @nsandovala
+apps/admin/ @nsandovala
+apps/functions/ @nsandovala
+
+# Shared package
+packages/shared/ @nsandovala
