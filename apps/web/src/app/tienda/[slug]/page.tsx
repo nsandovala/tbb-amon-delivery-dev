@@ -1,21 +1,93 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
 import { getTenantBySlug } from "@/lib/firebase/queries/tenants";
 import { getTenantCategories } from "@/lib/firebase/queries/categories";
 import { getTenantProducts } from "@/lib/firebase/queries/products";
 import { StoreHeader } from "@/components/store/store-header";
-import { ProductGrid } from "@/components/store/product-grid";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { HeroSection } from "@/components/store/hero-section";
-import { CategoryChips } from "@/components/store/category-chips";
 import { StorefrontClient } from "@/components/store/storefront-client";
+import type { Category, Product, Tenant } from "@/types";
 
 interface StorePageProps {
   params: Promise<{ slug: string }>;
 }
 
-export default async function StorePage({ params }: StorePageProps) {
-  const { slug } = await params;
+export default function StorePage({ params }: StorePageProps) {
+  const { slug } = use(params);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const tenant = await getTenantBySlug(slug);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStorefront() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const nextTenant = await getTenantBySlug(slug);
+        if (cancelled) return;
+
+        if (!nextTenant) {
+          setTenant(null);
+          setCategories([]);
+          setProducts([]);
+          return;
+        }
+
+        const [nextCategories, nextProducts] = await Promise.all([
+          getTenantCategories(nextTenant.id),
+          getTenantProducts(nextTenant.id),
+        ]);
+
+        if (cancelled) return;
+
+        setTenant(nextTenant);
+        setCategories(nextCategories);
+        setProducts(nextProducts);
+      } catch (loadError) {
+        if (cancelled) return;
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : "No pudimos cargar la tienda.";
+        setError(message);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadStorefront();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8 text-center flex-col gap-4">
+        <h1 className="text-2xl font-bold text-white">Cargando tienda</h1>
+        <p className="text-neutral-400">Estamos trayendo el cat&aacute;logo de {slug}.</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8 text-center flex-col gap-4">
+        <h1 className="text-2xl font-bold text-white">Algo sali&oacute; mal</h1>
+        <p className="text-neutral-400">{error}</p>
+      </div>
+    );
+  }
 
   if (!tenant) {
     return (
@@ -25,11 +97,6 @@ export default async function StorePage({ params }: StorePageProps) {
       </div>
     );
   }
-
-  const [categories, products] = await Promise.all([
-    getTenantCategories(tenant.id),
-    getTenantProducts(tenant.id),
-  ]);
 
   return (
     <div className="min-h-screen bg-[#0B0B0B] relative flex flex-col pb-24 overflow-x-hidden">

@@ -23,10 +23,12 @@ export const updateOrderStatus = onRequest(
         return;
       }
 
-      // Extract orderId from path: /orders/:id/status
-      const segments = req.path.split("/").filter(Boolean);
-      // Path could be /orders/:id/status or just /orders/:id
-      const orderId = segments[0];
+      // Support current frontend client (?orderId=...) and path-style invocations.
+      const pathSegments = req.path.split("/").filter(Boolean);
+      const orderIdFromPath = pathSegments[0];
+      const orderIdFromQuery =
+        typeof req.query.orderId === "string" ? req.query.orderId : undefined;
+      const orderId = orderIdFromQuery || orderIdFromPath;
       if (!orderId) {
         res.status(400).json({ ok: false, error: { code: "MISSING_ID", message: "Order ID required" } } satisfies ApiResponse);
         return;

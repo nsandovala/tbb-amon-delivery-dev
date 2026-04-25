@@ -105,15 +105,17 @@ useEffect(() => {
 }, [toast]);
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/products`);
-    const q = query(ref, where("isActive", "==", true), orderBy("name", "asc"));
+    const q = query(ref, where("isActive", "==", true));
 
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const nextProducts: PosProduct[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<PosProduct, "id">),
-        }));
+        const nextProducts: PosProduct[] = snapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...(doc.data() as Omit<PosProduct, "id">),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
 
         setProducts(nextProducts);
         setLoadingProducts(false);
@@ -727,4 +729,3 @@ return (
   </main>
 );
 }
-

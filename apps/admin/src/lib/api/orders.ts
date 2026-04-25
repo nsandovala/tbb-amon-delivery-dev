@@ -1,7 +1,8 @@
 //import { db } from "../firebase/client";
 
 const FUNCTIONS_BASE =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ?? "http://localhost:5001/minerp-sentinel/amon-functions";
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??
+  "http://127.0.0.1:5001/minerp-sentinel/us-central1";
 
 interface ApiError {
   ok: false;
