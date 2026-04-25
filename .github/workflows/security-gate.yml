@@ -1,0 +1,64 @@
+name: Security Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  security-gate:
+    name: security-gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block committed env files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.local$|(^|/)\.env\.[^.]+$'; then
+            echo "::error::.env files must not be tracked. Use .env.example with placeholders."
+            exit 1
+          fi
+
+      - name: Scan high-risk changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA="$(git rev-parse HEAD~1)"
+          fi
+
+          CHANGED_FILES="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changed files to scan."
+            exit 0
+          fi
+
+          PATTERN='postgres(ql)?://[^[:space:]"'"'"']+|napi_[A-Za-z0-9]{20,}|npg_[A-Za-z0-9]{8,}|-----BEGIN (RSA|OPENSSH|EC|PRIVATE) KEY-----|FIREBASE_PRIVATE_KEY|PRIVATE_KEY='
+
+          echo "$CHANGED_FILES" | while read -r file; do
+            [ -f "$file" ] || continue
+
+            case "$file" in
+              *package-lock.json|*.png|*.jpg|*.jpeg|*.webp|*.gif|*.svg)
+                continue
+                ;;
+            esac
+
+            if grep -nE "$PATTERN" "$file"; then
+              echo "::error::Potential secret detected in $file"
+              exit 1
+            fi
+          done  
