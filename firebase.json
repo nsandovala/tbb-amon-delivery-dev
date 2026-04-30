@@ -5,6 +5,7 @@
   "functions": {
     "source": "apps/functions",
     "codebase": "amon-functions",
+    "runtime": "nodejs20",
     "predeploy": [
       "npm --prefix apps/functions run build"
     ]

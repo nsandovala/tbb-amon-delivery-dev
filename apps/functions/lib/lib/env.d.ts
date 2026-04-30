@@ -1,6 +1,6 @@
 /**
  * Environment variables required at runtime.
- * Fails fast if any mandatory variable is missing.
+ * Resolves project id from emulator/runtime-provided vars first.
  */
 export declare const env: {
     readonly projectId: string;

@@ -1,19 +1,25 @@
 "use strict";
 /**
  * Environment variables required at runtime.
- * Fails fast if any mandatory variable is missing.
+ * Resolves project id from emulator/runtime-provided vars first.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = void 0;
-function requireEnv(name) {
-    const value = process.env[name]?.trim();
-    if (!value) {
-        throw new Error(`Missing required env: ${name}`);
+function resolveProjectId() {
+    const candidates = [
+        process.env.GCLOUD_PROJECT,
+        process.env.GOOGLE_CLOUD_PROJECT,
+        process.env.PROJECT_ID,
+    ];
+    for (const candidate of candidates) {
+        const value = candidate?.trim();
+        if (value)
+            return value;
     }
-    return value;
+    throw new Error("Missing project id. Set PROJECT_ID or rely on GCLOUD_PROJECT/GOOGLE_CLOUD_PROJECT.");
 }
 exports.env = {
-    projectId: requireEnv("FIREBASE_PROJECT_ID"),
+    projectId: resolveProjectId(),
     nodeEnv: process.env.NODE_ENV || "development",
     isEmulator: process.env.FIRESTORE_EMULATOR_HOST !== undefined,
     emulatorHost: process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8080",
