@@ -1,11 +1,12 @@
 import Image from "next/image";
+import { ParticleField } from "./particle-field";
 
 export function HeroSection() {
   return (
     <section className="relative w-full py-32 md:py-48 px-6 md:px-12 flex flex-col items-center justify-center text-center overflow-hidden min-h-[600px]">
       {/* Premium Apple-Style Food Background */}
       <div className="absolute inset-0 z-0">
-        <Image 
+        <Image
           src="/images/stubs/burger-real.jpg"
           alt="Premium Burger"
           fill
@@ -16,6 +17,9 @@ export function HeroSection() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B]/90 via-[#0B0B0B]/40 to-[#0B0B0B]" />
         <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
       </div>
+
+      {/* Subtle interactive particles */}
+      <ParticleField />
 
       <div className="relative z-10 max-w-5xl">
         <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 px-5 py-2 rounded-full mb-12 backdrop-blur-2xl">

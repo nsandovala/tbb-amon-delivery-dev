@@ -1,146 +1,230 @@
-# TBB AMON Delivery Dev
+# TBB AMON Delivery
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=next.js&logoColor=white)](https://nextjs.org/)
 
-Backend-first multi-tenant ordering and operations platform for **AMON Delivery**.  
-Tenant piloto actual: **TBB — The Best Burger (Receta de la Abuela)**.
-
-Esta repo valida un flujo operativo real para comercio gastronómico sobre Firebase, con foco en:
-
-- **Storefront** (`apps/web`)
-- **Admin / POS / Pedidos** (`apps/admin`)
-- **Backend Functions API** (`apps/functions`)
-- **Contratos, schemas y seeds compartidos** (`packages/shared`)
+> Backend-first multi-tenant ordering and operations platform for **AMON Delivery**.  
+> Tenant piloto: **TBB — The Best Burger (Receta de la Abuela)**.
 
 ---
 
-## Estado actual
+## Descripción
 
-### Operativo hoy
-- storefront por tenant: `apps/web`
-- panel admin / POS / pedidos: `apps/admin`
-- seeds compartidos para tenant `tbb`
-- emuladores Firebase configurados
-- base backend-first iniciada
-- contratos, contexto y playbooks base
+Plataforma de gestión de pedidos y operaciones para comercio gastronómico, construida sobre Firebase con arquitectura **backend-first**. El sistema abarca desde el storefront para clientes finales hasta un panel de administración con POS integrado.
 
-### En progreso
-- mover escrituras críticas desde frontend a backend Functions
-- endurecer reglas de Firestore después del flujo e2e
-- consolidar contratos compartidos
-- puente bot / WhatsApp → Firestore orders
+## Características
+
+- **Storefront** (`apps/web`) — Tienda online para clientes finales (Next.js)
+- **Admin / POS** (`apps/admin`) — Panel de administración, gestión de pedidos y punto de venta (Next.js)
+- **Backend API** (`apps/functions`) — API REST y lógica de negocio con Firebase Cloud Functions
+- **Shared Contracts** (`packages/shared`) — Esquemas, tipos, seeds y utilidades compartidas
+
+---
+
+## Estado del Proyecto
+
+### Funcionalidades Operativas
+
+| Módulo | Estado |
+|--------|--------|
+| Storefront por tenant | Completado |
+| Panel Admin / POS / Pedidos | Completado |
+| Seeds para tenant `tbb` | Completado |
+| Emuladores Firebase | Configurados |
+| Arquitectura backend-first | Implementada |
+| Contratos y playbooks | Documentados |
+
+### En Desarrollo
+
+- Migración de escrituras críticas desde frontend a Cloud Functions
+- Fortalecimiento de reglas de seguridad de Firestore
+- Consolidación de contratos compartidos
+- Integración con bot de WhatsApp para gestión de pedidos
+
+---
+
+## Arquitectura
+
+```
+apps/
+  web/          # Storefront cliente final (Next.js)
+  admin/        # POS + pedidos + operaciones (Next.js)
+  functions/    # Backend HTTP / Firebase Cloud Functions
+
+packages/
+  shared/       # Constantes, tipos, schemas, seeds, utilidades
+```
+
+### Principios de Diseño
+
+| Principio | Descripción |
+|-----------|-------------|
+| **Firestore manda** | Firestore es la fuente de verdad. Zustand solo gestiona estado de UI/carrito. |
+| **Backend-first** | Validación, reglas de negocio, cálculo y persistencia residen en el backend. |
+| **No mocks innecesarios** | Si existe emulador, seed o colección real, no se crean mocks paralelos. |
+| **Cambios incrementales** | Modificaciones pequeñas, reversibles y auditables. |
+| **Single Firebase** | Desarrollo sobre `minerp-sentinel`, sin duplicar proyectos. |
+
+---
+
+## Flujo de Pedidos
+
+```
+storefront / POS / bot
+  → Backend HTTP / Cloud Functions
+  → Validación de payload
+  → Escritura en Firestore
+  → Lectura en tiempo real (admin)
+  → Transición de estados
+```
+
+### Estados del Pedido
+
+| Estado | Descripción |
+|--------|-------------|
+| `queued` | Pedido recibido, en cola |
+| `preparing` | En preparación |
+| `ready` | Listo para retiro/envío |
+| `on_the_way` | En camino |
+| `delivered` | Entregado |
+| `cancelled` | Cancelado |
+
+---
+
+## Tenant Piloto: TBB
+
+| Propiedad | Valor |
+|-----------|-------|
+| `tenantId` | `tbb` |
+| `slug` | `tbb` |
+| Moneda | CLP |
+| Ciudad base | Valparaíso |
+| Capacidades | pickup, delivery, assistant, addons, reviews |
 
 ---
 
 ## Quick Start
 
+### Prerrequisitos
+
+- Node.js >= 18
+- npm >= 9
+- Firebase CLI instalado globalmente
+
+### Instalación
+
 ```bash
-# instalar dependencias
+# Instalar dependencias
 npm install
+```
 
-# seed del tenant piloto en emulador
-npm run seed
+### Desarrollo
 
-# levantar emuladores + web + admin
+```bash
+# Levantar emuladores + web + admin
 npm run dev:all
 
-# solo emuladores
+# Solo emuladores Firebase
 npm run dev:emulators
 
-Arquitectura rápida
-apps/
-  web/          # Storefront cliente final (Next.js)
-  admin/        # POS + pedidos + operaciones (Next.js)
-  functions/    # Backend HTTP / Firebase Functions
+# Solo storefront
+npm run dev:web
 
-packages/
-  shared/       # Constantes, tipos, schemas, seeds, utilidades
+# Solo panel admin
+npm run dev:admin
 
-  Principios clave
-  | Principio                            | Qué significa                                                           |
-| ------------------------------------ | ----------------------------------------------------------------------- |
-| **Firestore manda**                  | Firestore es estado operativo real. Zustand solo UI/cart state.         |
-| **Backend-first**                    | Validación, reglas de negocio, cálculo y persistencia viven en backend. |
-| **No mocks si ya existe flujo real** | Si existe emulador, seed o colección real, no se inventa mock paralelo. |
-| **Cambios incrementales**            | Cambios pequeños, reversibles y auditables.                             |
-| **Un solo Firebase**                 | Se trabaja sobre `minierp-sentinel`, sin duplicar proyectos por ahora.  |
+# Seed completo + stack
+npm run dev:reset
+```
 
-Flujo crítico
+### Seed del Tenant
 
-storefront / POS / bot
-→ backend HTTP / Functions
-→ validación
-→ escritura en Firestore
-→ lectura live en admin
-→ transición de estados
+```bash
+# Insertar datos de prueba del tenant piloto
+npm run seed
+```
 
-Estados operativos
-queued
-preparing
-ready
-on_the_way
-delivered
-cancelled
+### Inicio Manual (Paso a Paso)
 
-Tenant piloto: TBB
-tenantId: tbb
-slug: tbb
-moneda: CLP
-ciudad base: Valparaíso
-capacidades activas: pickup, delivery, assistant, addons, reviews
+```bash
+# 1. Emuladores Firebase
+firebase emulators:start
 
-Emuladores Firebase
+# 2. Shared package
+cd packages/shared && npm run typecheck && npm run build && npm run seed
 
-| Emulator  | Puerto |
-| --------- | ------ |
+# 3. Cloud Functions
+cd apps/functions && npx tsc --noEmit && npm run build
+
+# 4. Storefront
+cd apps/web && npm run dev
+
+# 5. Admin Panel
+cd apps/admin && npm run dev
+```
+
+---
+
+## Emuladores Firebase
+
+| Emulador | Puerto |
+|----------|--------|
 | Firestore | `8080` |
-| Auth      | `9099` |
-| UI        | `4000` |
+| Auth | `9099` |
+| UI Console | `4000` |
 
-Scripts útiles
+---
 
-| Comando                 | Descripción                    |
-| ----------------------- | ------------------------------ |
-| `npm run dev:web`       | levanta web                    |
-| `npm run dev:admin`     | levanta admin                  |
-| `npm run dev:emulators` | levanta emuladores             |
-| `npm run seed`          | inserta seed del tenant piloto |
-| `npm run dev:all`       | emuladores + web + admin       |
-| `npm run dev:reset`     | seed + stack completo          |
+## Scripts Disponibles
 
-Mapa de documentación
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev:web` | Inicia el storefront |
+| `npm run dev:admin` | Inicia el panel admin |
+| `npm run dev:emulators` | Inicia emuladores Firebase |
+| `npm run dev:all` | Inicia emuladores + web + admin |
+| `npm run dev:reset` | Ejecuta seed + stack completo |
+| `npm run seed` | Inserta seed del tenant piloto |
 
-| Tema                  | Archivo                              |
-| --------------------- | ------------------------------------ |
-| Project overview      | `context/project-overview.md`        |
-| Architecture          | `context/architecture.md`            |
-| Decisions log         | `context/decisions.md`               |
-| Current sprint        | `context/current-sprint.md`          |
-| API contracts         | `contracts/api-contracts.md`         |
-| Firestore collections | `contracts/firestore-collections.md` |
-| Order status machine  | `contracts/order-status.md`          |
-| Order JSON schema     | `contracts/order.schema.json`        |
-| Repo rules            | `playbooks/repo-rules.md`            |
-| Backend-first         | `playbooks/backend-first.md`         |
-| Debugging checklist   | `playbooks/debugging-checklist.md`   |
-| Release checklist     | `playbooks/release-checklist.md`     |
-| Sprint log            | `roadmap/phase-log.md`               |
-| Backend sprint        | `roadmap/sprint-backend-1.md`        |
+---
 
-Regla operativa importante
+## Reglas Operativas
 
-Las operaciones críticas no deben escribirse directo desde frontend.
+> **Importante:** Las operaciones críticas **no** deben escribirse directamente desde el frontend.
 
-Eso incluye:
+Esto incluye:
 
-creación de pedidos
-ventas POS
-cambio de estado de pedidos
+- Creación de pedidos
+- Ventas POS
+- Cambios de estado de pedidos
 
-El frontend debe enviar payload mínimo al backend.
-El backend valida, enriquece, calcula, persiste y responde.
+**Flujo correcto:** El frontend envía un payload mínimo al backend, el cual valida, enriquece, calcula, persiste y responde.
 
-Licencia
+---
 
-MIT
+## Documentación
+
+| Tema | Archivo |
+|------|---------|
+| Project Overview | `context/project-overview.md` |
+| Arquitectura | `context/architecture.md` |
+| Decisiones | `context/decisions.md` |
+| Sprint Actual | `context/current-sprint.md` |
+| API Contracts | `contracts/api-contracts.md` |
+| Firestore Collections | `contracts/firestore-collections.md` |
+| Order Status Machine | `contracts/order-status.md` |
+| Order JSON Schema | `contracts/order.schema.json` |
+| Repo Rules | `playbooks/repo-rules.md` |
+| Backend-first | `playbooks/backend-first.md` |
+| Debugging Checklist | `playbooks/debugging-checklist.md` |
+| Release Checklist | `playbooks/release-checklist.md` |
+| Sprint Log | `roadmap/phase-log.md` |
+| Backend Sprint | `roadmap/sprint-backend-1.md` |
+
+---
+
+## Licencia
+
+Este proyecto está bajo la licencia MIT. Ver [LICENSE](LICENSE) para más detalles.

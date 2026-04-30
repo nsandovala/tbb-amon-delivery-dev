@@ -37,7 +37,7 @@ Variables compartidas para desarrollo local y scripts de seed.
 
 ### Debe contener
 ```env
-FIREBASE_PROJECT_ID=minierp-sentinel
+FIREBASE_PROJECT_ID=minerp-sentinel
 SEED_TARGET=emulator
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099

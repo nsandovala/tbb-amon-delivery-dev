@@ -11,6 +11,10 @@
     "dev:emulators": "firebase emulators:start",
     "seed": "cd packages/shared && npm run seed",
     "dev:all": "concurrently -n FIREBASE,WEB,ADMIN -c yellow,cyan,magenta \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\"",
-    "dev:reset": "npm run seed && npm run dev:all"
+    "dev:reset": "npm run seed && npm run dev:all",
+    "dev:stack": "bash scripts/dev-stack.sh"
+  },
+  "devDependencies": {
+    "wait-on": "^9.0.5"
   }
 }

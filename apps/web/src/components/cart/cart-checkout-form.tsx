@@ -18,11 +18,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface CartSummaryProps {
+interface CartCheckoutFormProps {
   tenantId: string;
 }
 
-export function CartSummary({ tenantId }: CartSummaryProps) {
+export function CartCheckoutForm({ tenantId }: CartCheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -48,8 +48,6 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
 
   const delivery = fulfillmentType === "delivery" ? 1500 : 0;
   const total = subtotal + delivery;
-
-  if (count === 0) return null;
 
   const normalizedPhone = customerPhone.replace(/\s+/g, "").trim();
 
@@ -115,7 +113,7 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
     "border-red-500/20 focus:border-red-500/40 focus:bg-white/[0.05] focus:shadow-[0_0_0_4px_rgba(239,68,68,0.04)]";
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {/* Section: Customer Info */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
@@ -257,7 +255,6 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
 
       {/* Section: Order Summary */}
       <div className="relative overflow-hidden rounded-2xl border border-white/[0.05] bg-white/[0.02]">
-        {/* Decorative top line */}
         <div className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
         <div className="flex items-center gap-2 px-5 pt-4">
@@ -294,7 +291,6 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
           </div>
         </div>
 
-        {/* Divider */}
         <div className="mx-5 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
         <div className="flex items-center justify-between px-5 py-4">
@@ -336,22 +332,11 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
         )}
       </button>
 
-      {/* Security / Trust hint */}
+      {/* Trust hint */}
       <p className="text-center text-[10px] font-medium leading-relaxed text-neutral-600">
         Al confirmar, aceptas que te contactaremos por WhatsApp para coordinar{" "}
         {fulfillmentType === "delivery" ? "la entrega" : "el retiro"}.
       </p>
-
-      {/* Clear cart — secondary action */}
-      <div className="flex justify-center">
-        <button
-          onClick={clearCart}
-          disabled={isSubmitting}
-          className="text-[11px] font-medium text-neutral-600 transition-colors hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Vaciar carrito
-        </button>
-      </div>
     </div>
   );
 }

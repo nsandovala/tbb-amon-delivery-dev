@@ -4,10 +4,12 @@ import { use, useEffect, useState } from "react";
 import { getTenantBySlug } from "@/lib/firebase/queries/tenants";
 import { getTenantCategories } from "@/lib/firebase/queries/categories";
 import { getTenantProducts } from "@/lib/firebase/queries/products";
+import { featuredStores } from "@/lib/data/featured-stores";
 import { StoreHeader } from "@/components/store/store-header";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { HeroSection } from "@/components/store/hero-section";
 import { StorefrontClient } from "@/components/store/storefront-client";
+import { ComingSoonStore } from "@/components/store/coming-soon-store";
 import type { Category, Product, Tenant } from "@/types";
 
 interface StorePageProps {
@@ -22,7 +24,18 @@ export default function StorePage({ params }: StorePageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Check if this is a "coming soon" simulated store
+  const soonStore = featuredStores.find(
+    (s) => s.slug === slug && s.status === "soon"
+  );
+
   useEffect(() => {
+    // Skip Firebase loading for simulated "coming soon" stores
+    if (soonStore) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadStorefront() {
@@ -69,7 +82,12 @@ export default function StorePage({ params }: StorePageProps) {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, soonStore]);
+
+  // Render coming-soon page for simulated stores
+  if (soonStore) {
+    return <ComingSoonStore store={soonStore} />;
+  }
 
   if (loading) {
     return (

@@ -1,7 +1,7 @@
 # Architecture
 
 ## Source of Truth
-Firestore (`minierp-sentinel`) is the operational source of truth.
+Firestore (`minerp-sentinel`) is the operational source of truth.
 
 ## Tenant Model
 All business data lives under:

@@ -1,0 +1,67 @@
+version: 1
+
+audits:
+  - id: audit-2026-04-29-001
+    date: 2026-04-29
+    area: storefront-runtime
+    status: open
+    summary: "Storefront tenant/catalog flow unstable during emulator/manual validation"
+    symptoms:
+      - "Tienda no encontrada"
+      - "Expected first argument to collection() to be a CollectionReference, a DocumentReference or Firestore"
+      - "storefront catalog not rendering correctly"
+    root_cause_confirmed: false
+    suspected_causes:
+      - "invalid db/ref passed into collection()"
+      - "tenant query path mismatch"
+      - "seed path vs storefront read path drift"
+    files_under_review:
+      - "apps/web/src/lib/firebase/client.ts"
+      - "apps/web/src/lib/firebase/queries/tenants.ts"
+      - "apps/web/src/lib/firebase/queries/categories.ts"
+      - "apps/web/src/lib/firebase/queries/products.ts"
+      - "apps/web/src/app/tienda/[slug]/page.tsx"
+      - "packages/shared/src/seed.ts"
+    prevention_notes:
+      - "verify seed path before modifying UI"
+      - "verify db initialization before building collection refs"
+
+  - id: audit-2026-04-29-002
+    date: 2026-04-29
+    area: architecture-critical-writes
+    status: partially_fixed
+    summary: "Critical writes were previously implemented from frontend instead of backend/functions"
+    symptoms:
+      - "POS interactions without real backend effect"
+      - "storefront order flow inconsistent"
+      - "admin actions depended on frontend-side writes"
+    root_cause_confirmed: true
+    confirmed_root_cause:
+      - "critical write path bypassed backend validation and functions wiring"
+    files_affected:
+      - "apps/web/src/lib/firebase/mutations/orders.ts"
+      - "apps/admin/src/lib/firebase/mutations/orders.ts"
+      - "apps/web/src/lib/api/orders.ts"
+      - "apps/admin/src/lib/api/orders.ts"
+      - "apps/functions/src/routes/orders.ts"
+      - "apps/functions/src/routes/pos.ts"
+    prevention_notes:
+      - "critical writes must route through backend/functions only"
+      - "manual UI success is not proof of operational persistence"
+
+  - id: audit-2026-04-29-003
+    date: 2026-04-29
+    area: repo-security
+    status: fixed
+    summary: "Service account handling and ignore rules were reviewed"
+    root_cause_confirmed: true
+    confirmed_root_cause:
+      - "service account placement and ignore discipline needed tightening"
+    actions_taken:
+      - "service account moved outside repo"
+      - "gitignore verified"
+      - "git history hygiene reviewed"
+    prevention_notes:
+      - "never keep service account JSON inside tracked repo tree"
+      - "verify with git ls-files and git check-ignore before push" 
+      

@@ -1,5 +1,14 @@
 # Backend Skills
 
+# Backend Skills
+
+- detectar divergencia entre seed path y query path
+- validar wiring de Firebase emulator / Functions / Firestore
+- consolidar schemas en shared
+- mover writes críticos a backend functions
+- auditar imports prohibidos
+- proponer fix mínimo y verificable
+
 ## Core Skills
 
 - modelar datos operativos en Firestore

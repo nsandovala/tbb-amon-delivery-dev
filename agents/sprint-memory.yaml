@@ -3,7 +3,7 @@ goal: >
   Move AMON Delivery to backend-first writes without breaking current storefront, POS, and orders panel.
 
 source_of_truth:
-  firestore_project: minierp-sentinel
+  firestore_project: minerp-sentinel
   firestore_root: tenants/{tenantId}
   pilot_tenant: tbb
 

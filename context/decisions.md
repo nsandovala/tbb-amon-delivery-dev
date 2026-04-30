@@ -1,7 +1,7 @@
 # Decisions Log
 
 ## D-001
-Use only one Firebase project: `minierp-sentinel`
+Use only one Firebase project: `minerp-sentinel`
 Reason:
 - avoid duplicate billing
 - reduce operational complexity
