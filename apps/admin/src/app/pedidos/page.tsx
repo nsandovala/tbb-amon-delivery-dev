@@ -25,6 +25,25 @@ function getOrderDisplayLabel(order: AdminOrder) {
   return "Pedido";
 }
 
+function statusLabel(status: string) {
+  switch (status) {
+    case "queued":
+      return "En cola";
+    case "preparing":
+      return "Preparando";
+    case "ready":
+      return "Listo";
+    case "on_the_way":
+      return "En camino";
+    case "delivered":
+      return "Entregado";
+    case "cancelled":
+      return "Cancelado";
+    default:
+      return status;
+  }
+}
+
 function statusStyles(status: string) {
   switch (status) {
     case "queued":
@@ -41,6 +60,17 @@ function statusStyles(status: string) {
       return "bg-red-500/12 text-red-300 border-red-500/20";
     default:
       return "bg-white/5 text-neutral-300 border-white/10";
+  }
+}
+
+function formatChannel(channel?: string) {
+  switch (channel) {
+    case "admin_pos":
+      return "POS";
+    case "own":
+      return "Web";
+    default:
+      return channel || "Sin definir";
   }
 }
 
@@ -194,8 +224,27 @@ function OrderCard({
                   order.status ?? ""
                 )}`}
               >
-                {order.status}
+                {statusLabel(order.status ?? "")}
               </span>
+
+              {/* Placeholder para badge de riesgo futuro */}
+              {(() => {
+                const risk = (order as unknown as Record<string, string | undefined>).riskLevel;
+                if (!risk) return null;
+                return (
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${
+                      risk === "high"
+                        ? "bg-red-500/12 text-red-300 border-red-500/20"
+                        : risk === "medium"
+                          ? "bg-amber-500/12 text-amber-300 border-amber-500/20"
+                          : "bg-blue-500/12 text-blue-300 border-blue-500/20"
+                    }`}
+                  >
+                    Riesgo {risk === "high" ? "alto" : risk === "medium" ? "medio" : "bajo"}
+                  </span>
+                );
+              })()}
             </div>
 
             <div className="space-y-1">
@@ -256,7 +305,7 @@ function OrderCard({
                     disabled ? "pointer-events-none opacity-60" : "",
                   ].join(" ")}
                 >
-                  {status}
+                  {statusLabel(status)}
                 </span>
               );
             })}
@@ -273,6 +322,10 @@ export default function OrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
   const [nowTs, setNowTs] = useState(() => Date.now());
+  const [statusFeedback, setStatusFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -295,6 +348,12 @@ export default function OrdersPage() {
   }, []);
 
   useEffect(() => {
+    if (!statusFeedback) return;
+    const timer = setTimeout(() => setStatusFeedback(null), 3000);
+    return () => clearTimeout(timer);
+  }, [statusFeedback]);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setNowTs(Date.now());
     }, 60000);
@@ -312,9 +371,11 @@ export default function OrdersPage() {
     totalVisible,
     queued,
     preparing,
+    ready,
     onTheWay,
     delivered,
     cancelled,
+    totalVentasCLP,
     trackedTotal,
     hasStatusMismatch,
   } = useMemo(() => {
@@ -326,6 +387,7 @@ export default function OrdersPage() {
       onTheWay: 0,
       delivered: 0,
       cancelled: 0,
+      totalVentasCLP: 0,
     };
 
     orders.forEach((order) => {
@@ -344,6 +406,7 @@ export default function OrdersPage() {
           break;
         case "delivered":
           metrics.delivered += 1;
+          metrics.totalVentasCLP += order.totals?.total ?? 0;
           break;
         case "cancelled":
           metrics.cancelled += 1;
@@ -375,8 +438,16 @@ export default function OrdersPage() {
     try {
       setUpdatingId(orderId);
       await updateOrderStatusApi(orderId, nextStatus);
+      setStatusFeedback({
+        type: "success",
+        message: `Pedido #${orderId.slice(0, 6).toUpperCase()} → ${statusLabel(nextStatus)}`,
+      });
     } catch (error) {
       console.error("Error actualizando estado:", error);
+      setStatusFeedback({
+        type: "error",
+        message: `Error: ${error instanceof Error ? error.message : "Transición inválida"}`,
+      });
     } finally {
       setUpdatingId(null);
     }
@@ -405,12 +476,21 @@ export default function OrdersPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
                 Total visible
               </p>
               <p className="mt-1 text-2xl font-bold text-white">{totalVisible}</p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-emerald-400/70">
+                Ventas hoy
+              </p>
+              <p className="mt-1 text-lg font-bold text-emerald-400">
+                {formatMoney(totalVentasCLP)}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
@@ -429,7 +509,14 @@ export default function OrdersPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                En reparto
+                Listo
+              </p>
+              <p className="mt-1 text-2xl font-bold text-sky-300">{ready}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
+                En camino
               </p>
               <p className="mt-1 text-2xl font-bold text-violet-300">{onTheWay}</p>
             </div>
@@ -459,6 +546,18 @@ export default function OrdersPage() {
             No hay pedidos aún.
           </div>
         ) : (
+          <div className="space-y-4">
+            {statusFeedback && (
+              <div
+                className={`rounded-2xl border px-5 py-3 text-sm font-medium transition-all ${
+                  statusFeedback.type === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                    : "border-red-500/30 bg-red-500/10 text-red-300"
+                }`}
+              >
+                {statusFeedback.message}
+              </div>
+            )}
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
             <section className="grid gap-4">
               {hasStatusMismatch ? (
@@ -525,7 +624,7 @@ export default function OrdersPage() {
                     <div className="mt-3 space-y-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Canal</span>
-                        <span className="text-white">{selectedOrder.channel || "own"}</span>
+                        <span className="text-white">{formatChannel(selectedOrder.channel)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Entrega</span>
@@ -540,7 +639,7 @@ export default function OrdersPage() {
                             selectedOrder.status ?? ""
                           )}`}
                         >
-                          {selectedOrder.status}
+                          {statusLabel(selectedOrder.status ?? "")}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -624,6 +723,7 @@ export default function OrdersPage() {
                 </div>
               ) : null}
             </aside>
+          </div>
           </div>
         )}
       </div>

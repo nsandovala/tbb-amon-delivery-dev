@@ -18,7 +18,7 @@ export default function Home() {
       <footer className="relative z-10 border-t border-white/5 px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-neutral-500">
-            &copy; {new Date().getFullYear()} AMON Delivery. Todos los derechos reservados.
+            &copy; {new Date().getFullYear()} AMON Shop. Todos los derechos reservados.
           </p>
           <div className="flex items-center gap-4">
             <span className="text-xs text-neutral-600">Powered by</span>

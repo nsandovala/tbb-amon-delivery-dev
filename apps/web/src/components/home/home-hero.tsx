@@ -35,7 +35,7 @@ export function HomeHero() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(0,255,156,0.5)]" />
           </span>
           <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-neutral-200">
-            Multi-tenant &middot; Operativo
+            Geolocalizaci&oacute;n activa &middot; Tiendas cercanas
           </span>
         </div>
 
@@ -43,19 +43,18 @@ export function HomeHero() {
         <h1 className="mb-4 text-5xl font-bold tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl">
           AMON{" "}
           <span className="bg-gradient-to-r from-accent to-emerald-400 bg-clip-text text-transparent">
-            Delivery
+            Shop
           </span>
         </h1>
 
         {/* Subtitle */}
         <p className="mb-3 text-lg font-medium text-neutral-200 sm:text-xl">
-          Plataforma de delivery multi-tenant
+          Vende con retiro, delivery o env&iacute;os nacionales. Tu negocio, tu reglas.
         </p>
 
         {/* Description */}
         <p className="mb-10 max-w-xl text-base leading-relaxed text-neutral-400 sm:text-lg">
-          Un hub comercial moderno para tu negocio. Gestiona pedidos, operaciones
-          y experiencia de cliente desde un solo lugar.
+          Infraestructura comercial para emprendedores. Activa tu tienda en minutos.
         </p>
 
         {/* CTA Buttons */}
@@ -64,7 +63,7 @@ export function HomeHero() {
             href="#stores"
             className="group inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-8 py-3.5 text-sm font-semibold text-black transition-all duration-200 hover:bg-accent-hover hover:shadow-[0_0_25px_rgba(0,255,156,0.3)] active:scale-[0.98]"
           >
-            Explorar tiendas
+            Crear mi tienda
             <svg
               className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5"
               fill="none"
@@ -81,10 +80,10 @@ export function HomeHero() {
           </Link>
 
           <Link
-            href="/pos"
+            href="#stores"
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-8 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:border-accent/30 hover:bg-white/10 hover:text-accent active:scale-[0.98]"
           >
-            Ir al panel
+            Explorar tiendas cercanas
             <svg
               className="h-4 w-4"
               fill="none"

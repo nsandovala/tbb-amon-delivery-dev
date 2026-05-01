@@ -1,6 +1,6 @@
 import { generateOrderId, createOrder, getOrder, updateOrderStatus } from "../repositories/firestore-orders.repo";
 import { getDb } from "../lib/firebase-admin";
-import type { CreateOrderInput, UpdateOrderStatusInput } from "@amon/shared";
+import type { CreateOrderInput, UpdateOrderStatusInput } from "../lib/order-contracts";
 import { logger } from "../lib/logger";
 
 const DEFAULT_DELIVERY_FEE = 1500;

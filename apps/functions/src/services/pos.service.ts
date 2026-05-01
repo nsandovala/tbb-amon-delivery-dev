@@ -1,6 +1,6 @@
 import { generateOrderId, createOrder } from "../repositories/firestore-orders.repo";
 import { getDb } from "../lib/firebase-admin";
-import type { CreatePosSaleInput } from "@amon/shared";
+import type { CreatePosSaleInput } from "../lib/order-contracts";
 import { logger } from "../lib/logger";
 
 const DEFAULT_DELIVERY_FEE = 0;
