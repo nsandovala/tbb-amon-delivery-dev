@@ -13,6 +13,18 @@ interface ApiError {
   };
 }
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public status: number,
+    public details?: unknown
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 async function apiFetch<T>(
   url: string,
   options: RequestInit = {}
@@ -29,7 +41,12 @@ async function apiFetch<T>(
 
   if (!res.ok || !data.ok) {
     const msg = data.error?.message ?? `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new ApiRequestError(
+      msg,
+      data.error?.code ?? "HTTP_ERROR",
+      res.status,
+      data.error?.details
+    );
   }
 
   return (data as { ok: true; data: T }).data as T;
@@ -68,9 +85,11 @@ interface CreatePosSalePayload {
   customer: {
     name: string;
     phone: string;
+    email?: string;
     address?: string;
     notes?: string;
   };
+  fulfillmentType?: "delivery" | "pickup";
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
 }
 

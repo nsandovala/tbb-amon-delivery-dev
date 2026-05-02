@@ -1,12 +1,12 @@
-# Sprint POS + Pedidos
+   # Sprint POS + Pedidos
 
-## Objetivo
+   ## Objetivo
 
-Cerrar el loop operativo real de **POS** y **Pedidos en vivo** en modo producción, sin mocks, sin romper la arquitectura actual y manteniendo **Firestore como fuente de verdad**.
+   Cerrar el loop operativo real de **POS** y **Pedidos en vivo** en modo producción, sin mocks, sin romper la arquitectura actual y manteniendo **Firestore como fuente de verdad**.
 
-Este sprint responde al feedback funcional y visual levantado en tienda, carrito, POS y operación, incluyendo mejoras de claridad visual, orden del flujo de compra, medios de pago, estados operativos y métricas visibles. :contentReference[oaicite:0]{index=0}
+   Este sprint responde al feedback funcional y visual levantado en tienda, carrito, POS y operación, incluyendo mejoras de claridad visual, orden del flujo de compra, medios de pago, estados operativos y métricas visibles. :contentReference[oaicite:0]{index=0}
 
----
+   ---
 
 ## Alcance del sprint
 
@@ -251,9 +251,9 @@ Este sprint se considera cerrado cuando:
 ### Objetivo
 Tomar la base operativa ya estable y evolucionar el frente comercial hacia un modelo más claro, multi-tienda y vendible, alineado con:
 - tiendas destacadas
-- pickup / own delivery / AMON delivery / hybrid
+- pickup / own delivery / AMON Shop / hybrid
 - contacto directo
 - geolocalización
 - horario
 - onboarding comercial de nuevas tiendas
-- futura capa Trust Layer / formalización / antifraude / niveles :contentReference[oaicite:17]{index=17}
+- futura capa Trust Layer / formalización / antifraude / niveles :contentReference[oaicite:17]{index=17} 

@@ -5,7 +5,8 @@ const firestore_orders_repo_1 = require("../repositories/firestore-orders.repo")
 const firebase_admin_1 = require("../lib/firebase-admin");
 const logger_1 = require("../lib/logger");
 const DEFAULT_DELIVERY_FEE = 0;
-async function calculateTotals(tenantId, items) {
+const DELIVERY_FEE = 1500;
+async function calculateTotals(tenantId, items, fulfillmentType) {
     const snaps = await Promise.all(items.map(item => (0, firebase_admin_1.getDb)()
         .collection("tenants")
         .doc(tenantId)
@@ -33,7 +34,7 @@ async function calculateTotals(tenantId, items) {
             categoryId: data?.categoryId || null,
         });
     }
-    const delivery = DEFAULT_DELIVERY_FEE;
+    const delivery = fulfillmentType === "delivery" ? DELIVERY_FEE : DEFAULT_DELIVERY_FEE;
     const total = subtotal + delivery;
     return {
         items: processedItems,
@@ -48,18 +49,19 @@ async function calculateTotals(tenantId, items) {
  */
 async function handleCreatePosSale(tenantId, input) {
     const orderId = (0, firestore_orders_repo_1.generateOrderId)(tenantId);
+    const fulfillmentType = input.fulfillmentType ?? "pickup";
     // Calculate totals server-side from DB prices
-    const { items: processedItems, subtotal, delivery, total } = await calculateTotals(tenantId, input.items);
+    const { items: processedItems, subtotal, delivery, total } = await calculateTotals(tenantId, input.items, fulfillmentType);
     await (0, firestore_orders_repo_1.createOrder)(tenantId, orderId, {
         tenantId,
         items: processedItems,
         customer: input.customer,
-        fulfillmentType: "pickup",
+        fulfillmentType,
         paymentMethod: input.paymentMethod ?? "pending",
         channel: "admin_pos",
         totals: { subtotal, delivery, total },
     });
-    logger_1.logger.info("POS sale recorded", { tenantId, orderId, subtotal, total });
+    logger_1.logger.info("POS sale recorded", { tenantId, orderId, subtotal, total, fulfillmentType });
     return { orderId };
 }
 //# sourceMappingURL=pos.service.js.map

@@ -10,7 +10,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../../lib/firebase/client";
-import { createPosSaleApi } from "../../lib/api/orders";
+import { createPosSaleApi, ApiRequestError } from "../../lib/api/orders";
 import {
   Minus,
   Plus,
@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   User,
   Phone,
+  Mail,
   MapPin,
   Store,
   Bike,
@@ -75,6 +76,7 @@ export default function PosPage() {
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">(
     "pickup"
   );
@@ -262,6 +264,7 @@ const averageTicketToday = useMemo(() => {
     setCart([]);
     setCustomerName("");
     setCustomerPhone("");
+    setCustomerEmail("");
     setAddress("");
     setNotes("");
     setFulfillmentType("pickup");
@@ -285,23 +288,31 @@ const averageTicketToday = useMemo(() => {
         customer: {
           name: customerName.trim(),
           phone: customerPhone.trim(),
+          email: customerEmail.trim() || undefined,
           address: fulfillmentType === "delivery" ? address.trim() : "",
           notes: notes.trim(),
         },
+        fulfillmentType,
         paymentMethod,
       });
 
       clearPos();
-     setToast({
-  type: "success",
-  message: `Pedido creado #${orderId.slice(0, 6).toUpperCase()}`,
-});
+      setToast({
+        type: "success",
+        message: `Pedido creado #${orderId.slice(0, 6).toUpperCase()}`,
+      });
     } catch (error) {
       console.error("Error creando pedido POS:", error);
+      let errorMsg = "No pudimos crear el pedido desde POS.";
+      if (error instanceof ApiRequestError) {
+        errorMsg = `[${error.code}] ${error.message}`;
+      } else if (error instanceof Error) {
+        errorMsg = error.message;
+      }
       setToast({
-  type: "error",
-  message: "No pudimos crear el pedido desde POS.",
-});
+        type: "error",
+        message: errorMsg,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -559,6 +570,17 @@ return (
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 placeholder="WhatsApp (+569...)"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+              />
+            </div>
+
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+              <input
+                type="email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                placeholder="Email (opcional)"
                 className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
               />
             </div>

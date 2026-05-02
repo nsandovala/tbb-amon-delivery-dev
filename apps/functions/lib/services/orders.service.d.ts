@@ -1,4 +1,4 @@
-import type { CreateOrderInput, UpdateOrderStatusInput } from "@amon/shared";
+import type { CreateOrderInput, UpdateOrderStatusInput } from "../lib/order-contracts";
 export declare function handleCreateOrder(tenantId: string, input: CreateOrderInput & {
     deliveryFee?: number;
 }): Promise<{

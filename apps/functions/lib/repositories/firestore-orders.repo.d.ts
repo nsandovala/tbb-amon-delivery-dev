@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import type { CreateOrderInput, OrderStatus } from "@amon/shared";
+import type { CreateOrderInput, OrderStatus } from "../lib/order-contracts";
 export type OrderDoc = admin.firestore.DocumentSnapshot;
 /**
  * Create an order document. Caller provides the orderId.

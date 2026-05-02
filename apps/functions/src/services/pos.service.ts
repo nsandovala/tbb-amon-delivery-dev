@@ -4,6 +4,7 @@ import type { CreatePosSaleInput } from "../lib/order-contracts";
 import { logger } from "../lib/logger";
 
 const DEFAULT_DELIVERY_FEE = 0;
+const DELIVERY_FEE = 1500;
 
 type ProcessedItem = {
   productId: string;
@@ -16,7 +17,8 @@ type ProcessedItem = {
 
 async function calculateTotals(
   tenantId: string,
-  items: { productId: string; qty: number }[]
+  items: { productId: string; qty: number }[],
+  fulfillmentType: "delivery" | "pickup"
 ): Promise<{
   items: ProcessedItem[];
   subtotal: number;
@@ -65,7 +67,7 @@ async function calculateTotals(
     });
   }
 
-  const delivery = DEFAULT_DELIVERY_FEE;
+  const delivery = fulfillmentType === "delivery" ? DELIVERY_FEE : DEFAULT_DELIVERY_FEE;
   const total = subtotal + delivery;
 
   return {
@@ -85,24 +87,26 @@ export async function handleCreatePosSale(
   input: CreatePosSaleInput
 ): Promise<{ orderId: string }> {
   const orderId = generateOrderId(tenantId);
+  const fulfillmentType = input.fulfillmentType ?? "pickup";
 
   // Calculate totals server-side from DB prices
   const { items: processedItems, subtotal, delivery, total } = await calculateTotals(
     tenantId,
-    input.items
+    input.items,
+    fulfillmentType
   );
 
   await createOrder(tenantId, orderId, {
     tenantId,
     items: processedItems,
     customer: input.customer,
-    fulfillmentType: "pickup",
+    fulfillmentType,
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "admin_pos",
     totals: { subtotal, delivery, total },
   });
 
-  logger.info("POS sale recorded", { tenantId, orderId, subtotal, total });
+  logger.info("POS sale recorded", { tenantId, orderId, subtotal, total, fulfillmentType });
 
   return { orderId };
 }

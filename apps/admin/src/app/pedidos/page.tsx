@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { useLiveOrders } from "../../hooks/use-live-orders";
-import { updateOrderStatusApi } from "../../lib/api/orders";
+import { ApiRequestError, updateOrderStatusApi } from "../../lib/api/orders";
 import { db } from "../../lib/firebase/client";
 import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
 
@@ -19,11 +19,6 @@ const STATUS_OPTIONS: OrderStatus[] = [
 ];
 
 type ProductNameMap = Record<string, string>;
-function getOrderDisplayLabel(order: AdminOrder) {
-  if (order.channel === "admin_pos") return "Pedido POS";
-  if (order.channel === "own") return "Pedido Web";
-  return "Pedido";
-}
 
 function statusLabel(status: string) {
   switch (status) {
@@ -65,12 +60,20 @@ function statusStyles(status: string) {
 
 function formatChannel(channel?: string) {
   switch (channel) {
+    case "web":
+      return "Pedido Web";
     case "admin_pos":
       return "POS";
-    case "own":
-      return "Web";
+    case "whatsapp":
+      return "WhatsApp";
+    case "marketplace":
+      return "Marketplace";
     default:
-      return channel || "Sin definir";
+      return channel
+        ? channel
+            .replace(/[_-]+/g, " ")
+            .replace(/\b\w/g, (char) => char.toUpperCase())
+        : "Sin definir";
   }
 }
 
@@ -181,19 +184,54 @@ function prettifyProductId(productId?: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function isSameLocalDay(date: Date | null, now: Date) {
+  if (!date) return false;
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function formatStatusError(error: unknown, nextStatus: OrderStatus) {
+  if (error instanceof ApiRequestError) {
+    if (error.code === "CONFLICT") {
+      const match = error.message.match(/from "([^"]+)" to "([^"]+)"/i);
+      if (match) {
+        const [, fromStatus, toStatus] = match;
+        return `Transición inválida: ${statusLabel(fromStatus)} → ${statusLabel(toStatus)}.`;
+      }
+
+      return `Transición inválida hacia ${statusLabel(nextStatus)}.`;
+    }
+
+    if (error.code === "NOT_FOUND") {
+      return "No se encontró el pedido al intentar actualizarlo.";
+    }
+
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return `No se pudo cambiar el pedido a ${statusLabel(nextStatus)}.`;
+}
+
 function OrderCard({
   order,
   selected,
   onSelect,
   onChangeStatus,
-  updatingId,
+  isUpdating,
   nowTs,
 }: {
   order: AdminOrder;
   selected: boolean;
   onSelect: () => void;
   onChangeStatus: (orderId: string, nextStatus: OrderStatus) => Promise<void>;
-  updatingId: string | null;
+  isUpdating: boolean;
   nowTs: number;
 }) {
   const itemCount = getItemCount(order);
@@ -202,8 +240,16 @@ function OrderCard({
   const elapsedTime = formatElapsedTime(createdAt, nowTs);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
       className={[
         "w-full rounded-2xl border p-5 text-left transition-all",
         selected
@@ -280,45 +326,53 @@ function OrderCard({
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
           <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-500">
             Cambiar estado
           </p>
 
+          {isUpdating ? (
+            <p className="mb-3 text-xs font-medium text-emerald-300">
+              Actualizando pedido...
+            </p>
+          ) : null}
+
           <div className="flex flex-wrap gap-2">
             {STATUS_OPTIONS.map((status) => {
               const active = order.status === status;
-              const disabled = updatingId === order.id;
+              const disabled = isUpdating || active;
 
               return (
-                <span
+                <button
+                  type="button"
                   key={status}
+                  disabled={disabled}
                   onClick={(event) => {
                     event.stopPropagation();
                     void onChangeStatus(order.id, status);
                   }}
                   className={[
-                    "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-all",
+                    "rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-all",
                     active
                       ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
                       : "border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/20 hover:bg-white/[0.05] hover:text-white",
-                    disabled ? "pointer-events-none opacity-60" : "",
+                    disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                   ].join(" ")}
                 >
                   {statusLabel(status)}
-                </span>
+                </button>
               );
             })}
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
 export default function OrdersPage() {
   const { orders, loading } = useLiveOrders(tenantId);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingById, setUpdatingById] = useState<Record<string, boolean>>({});
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
   const [nowTs, setNowTs] = useState(() => Date.now());
@@ -375,10 +429,10 @@ export default function OrdersPage() {
     onTheWay,
     delivered,
     cancelled,
-    totalVentasCLP,
-    trackedTotal,
-    hasStatusMismatch,
+    totalVentasOperativasCLP,
+    totalVentasCompletadasCLP,
   } = useMemo(() => {
+    const now = new Date(nowTs);
     const metrics = {
       totalVisible: orders.length,
       queued: 0,
@@ -387,10 +441,15 @@ export default function OrdersPage() {
       onTheWay: 0,
       delivered: 0,
       cancelled: 0,
-      totalVentasCLP: 0,
+      totalVentasOperativasCLP: 0,
+      totalVentasCompletadasCLP: 0,
     };
 
     orders.forEach((order) => {
+      const createdAt = toSafeDate(order.createdAt);
+      const isToday = isSameLocalDay(createdAt, now);
+      const orderTotal = order.totals?.total ?? 0;
+
       switch (order.status) {
         case "queued":
           metrics.queued += 1;
@@ -406,7 +465,6 @@ export default function OrdersPage() {
           break;
         case "delivered":
           metrics.delivered += 1;
-          metrics.totalVentasCLP += order.totals?.total ?? 0;
           break;
         case "cancelled":
           metrics.cancelled += 1;
@@ -414,29 +472,29 @@ export default function OrdersPage() {
         default:
           break;
       }
+
+      if (!isToday) {
+        return;
+      }
+
+      if (order.status !== "cancelled") {
+        metrics.totalVentasOperativasCLP += orderTotal;
+      }
+
+      if (order.status === "delivered") {
+        metrics.totalVentasCompletadasCLP += orderTotal;
+      }
     });
 
-    const trackedTotal =
-      metrics.queued +
-      metrics.preparing +
-      metrics.ready +
-      metrics.onTheWay +
-      metrics.delivered +
-      metrics.cancelled;
-
-    return {
-      ...metrics,
-      trackedTotal,
-      hasStatusMismatch: trackedTotal !== metrics.totalVisible,
-    };
-  }, [orders]);
+    return metrics;
+  }, [orders, nowTs]);
 
   const handleChangeStatus = async (
     orderId: string,
     nextStatus: OrderStatus
   ) => {
     try {
-      setUpdatingId(orderId);
+      setUpdatingById((current) => ({ ...current, [orderId]: true }));
       await updateOrderStatusApi(orderId, nextStatus);
       setStatusFeedback({
         type: "success",
@@ -446,10 +504,14 @@ export default function OrdersPage() {
       console.error("Error actualizando estado:", error);
       setStatusFeedback({
         type: "error",
-        message: `Error: ${error instanceof Error ? error.message : "Transición inválida"}`,
+        message: formatStatusError(error, nextStatus),
       });
     } finally {
-      setUpdatingId(null);
+      setUpdatingById((current) => {
+        const next = { ...current };
+        delete next[orderId];
+        return next;
+      });
     }
   };
 
@@ -476,7 +538,7 @@ export default function OrdersPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-9">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
                 Total visible
@@ -486,10 +548,25 @@ export default function OrdersPage() {
 
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-emerald-400/70">
-                Ventas hoy
+                Ventas operativas hoy
               </p>
               <p className="mt-1 text-lg font-bold text-emerald-400">
-                {formatMoney(totalVentasCLP)}
+                {formatMoney(totalVentasOperativasCLP)}
+              </p>
+              <p className="mt-1 text-xs text-emerald-200/70">
+                No cancelados
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.06] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-cyan-300/70">
+                Ventas completadas
+              </p>
+              <p className="mt-1 text-lg font-bold text-cyan-300">
+                {formatMoney(totalVentasCompletadasCLP)}
+              </p>
+              <p className="mt-1 text-xs text-cyan-100/70">
+                Solo delivered
               </p>
             </div>
 
@@ -560,15 +637,6 @@ export default function OrdersPage() {
             )}
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
             <section className="grid gap-4">
-              {hasStatusMismatch ? (
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                  Hay una inconsistencia entre el total visible ({totalVisible}) y
-                  los estados operativos contabilizados ({trackedTotal}). `ready`
-                  se incluye en la validación aunque no se muestre en las cards
-                  superiores.
-                </div>
-              ) : null}
-
               {orders.map((order) => (
                 <OrderCard
                   key={order.id}
@@ -576,7 +644,7 @@ export default function OrdersPage() {
                   selected={selectedOrder?.id === order.id}
                   onSelect={() => setSelectedOrderId(order.id)}
                   onChangeStatus={handleChangeStatus}
-                  updatingId={updatingId}
+                  isUpdating={Boolean(updatingById[order.id])}
                   nowTs={nowTs}
                 />
               ))}

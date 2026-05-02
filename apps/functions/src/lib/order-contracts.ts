@@ -65,6 +65,7 @@ export const orderTotalsSchema = z.object({
 export const orderCustomerSchema = z.object({
   name: z.string().min(1, "Customer name is required"),
   phone: z.string().min(1, "Customer phone is required"),
+  email: z.string().email().optional(),
   address: z.string().optional().default(""),
   notes: z.string().optional().default(""),
 });
@@ -110,6 +111,7 @@ export const createPosSaleInputSchema = z.object({
     })
   ).min(1, "POS sale must have at least one item"),
   customer: orderCustomerSchema,
+  fulfillmentType: fulfillmentTypeSchema.optional().default("pickup"),
   paymentMethod: paymentMethodSchema.optional().default("pending"),
 });
 

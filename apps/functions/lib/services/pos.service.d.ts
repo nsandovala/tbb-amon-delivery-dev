@@ -1,4 +1,4 @@
-import type { CreatePosSaleInput } from "@amon/shared";
+import type { CreatePosSaleInput } from "../lib/order-contracts";
 /**
  * POS sale creates an order with channel="admin_pos".
  * Totals are calculated server-side from DB product prices.
