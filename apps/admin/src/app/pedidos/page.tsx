@@ -19,10 +19,32 @@ const STATUS_OPTIONS: OrderStatus[] = [
 ];
 
 type ProductNameMap = Record<string, string>;
+
+function formatStatusLabel(status?: string) {
+  switch (status) {
+    case "queued":
+      return "En cola";
+    case "preparing":
+      return "Preparando";
+    case "ready":
+      return "Listo";
+    case "on_the_way":
+      return "En reparto";
+    case "delivered":
+      return "Entregado";
+    case "cancelled":
+      return "Cancelado";
+    default:
+      return "Sin definir";
+  }
+}
+
 function getOrderDisplayLabel(order: AdminOrder) {
   if (order.channel === "admin_pos") return "Pedido POS";
-  if (order.channel === "own") return "Pedido Web";
-  return "Pedido";
+  if (order.channel === "web") return "Pedido Web";
+  if (order.channel === "whatsapp") return "Pedido WhatsApp";
+  if (order.channel === "marketplace") return "Marketplace";
+  return "Canal sin definir";
 }
 
 function statusStyles(status: string) {
@@ -63,6 +85,10 @@ function formatPaymentMethod(method?: string) {
     default:
       return method || "Sin definir";
   }
+}
+
+function formatChannelLabel(channel?: string) {
+  return getOrderDisplayLabel({ channel } as AdminOrder);
 }
 
 function formatMoney(value?: number) {
@@ -170,6 +196,7 @@ function OrderCard({
   const createdAt = toSafeDate(order.createdAt);
   const createdAtTime = formatReadableTime(createdAt);
   const elapsedTime = formatElapsedTime(createdAt, nowTs);
+  const isUpdating = updatingId === order.id;
 
   return (
     <button
@@ -194,7 +221,7 @@ function OrderCard({
                   order.status ?? ""
                 )}`}
               >
-                {order.status}
+                {formatStatusLabel(order.status)}
               </span>
             </div>
 
@@ -205,6 +232,9 @@ function OrderCard({
               <p className="text-sm text-neutral-400">
                 {order.customer?.phone || "Sin teléfono"}
               </p>
+              {order.customer?.email ? (
+                <p className="text-xs text-neutral-500">{order.customer.email}</p>
+              ) : null}
               {order.customer?.address ? (
                 <p className="line-clamp-2 text-xs text-neutral-500">
                   {order.customer.address}
@@ -220,13 +250,13 @@ function OrderCard({
 
           <div className="text-right">
             <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-              {formatFulfillment(order.fulfillmentType)}
+              {formatChannelLabel(order.channel)} • {formatFulfillment(order.fulfillmentType)}
             </p>
             <p className="mt-1 text-2xl font-bold text-emerald-400">
               {formatMoney(order.totals?.total)}
             </p>
             <p className="mt-1 text-sm text-neutral-400">
-              {itemCount} {itemCount === 1 ? "item" : "items"}
+              {formatPaymentMethod(order.paymentMethod)} • {itemCount} {itemCount === 1 ? "item" : "items"}
             </p>
           </div>
         </div>
@@ -239,28 +269,36 @@ function OrderCard({
           <div className="flex flex-wrap gap-2">
             {STATUS_OPTIONS.map((status) => {
               const active = order.status === status;
-              const disabled = updatingId === order.id;
+              const disabled = isUpdating;
 
               return (
-                <span
+                <button
+                  type="button"
                   key={status}
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (active || disabled) return;
                     void onChangeStatus(order.id, status);
                   }}
+                  disabled={disabled || active}
                   className={[
-                    "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-all",
+                    "rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-all",
                     active
                       ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
                       : "border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/20 hover:bg-white/[0.05] hover:text-white",
-                    disabled ? "pointer-events-none opacity-60" : "",
+                    disabled ? "cursor-not-allowed opacity-60" : "",
                   ].join(" ")}
                 >
-                  {status}
-                </span>
+                  {formatStatusLabel(status)}
+                </button>
               );
             })}
           </div>
+          {isUpdating ? (
+            <p className="mt-3 text-xs text-cyan-300">
+              Actualizando estado en backend y esperando reflejo live en Firestore...
+            </p>
+          ) : null}
         </div>
       </div>
     </button>
@@ -273,6 +311,14 @@ export default function OrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
   const [nowTs, setNowTs] = useState(() => Date.now());
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    orderId: string;
+    status: OrderStatus;
+  } | null>(null);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -302,6 +348,32 @@ export default function OrdersPage() {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (!feedback) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setFeedback(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [feedback]);
+
+  useEffect(() => {
+    if (!pendingStatusChange) return;
+
+    const targetOrder = orders.find((order) => order.id === pendingStatusChange.orderId);
+    if (!targetOrder || targetOrder.status !== pendingStatusChange.status) return;
+
+    setFeedback({
+      type: "success",
+      message: `Pedido #${pendingStatusChange.orderId.slice(0, 6).toUpperCase()} actualizado a ${formatStatusLabel(
+        pendingStatusChange.status
+      )}.`,
+    });
+    setPendingStatusChange(null);
+    setUpdatingId(null);
+  }, [orders, pendingStatusChange]);
+
   const selectedOrder = useMemo(() => {
     if (!orders.length) return null;
     const found = orders.find((order) => order.id === selectedOrderId);
@@ -312,11 +384,10 @@ export default function OrdersPage() {
     totalVisible,
     queued,
     preparing,
+    ready,
     onTheWay,
     delivered,
     cancelled,
-    trackedTotal,
-    hasStatusMismatch,
   } = useMemo(() => {
     const metrics = {
       totalVisible: orders.length,
@@ -353,18 +424,8 @@ export default function OrdersPage() {
       }
     });
 
-    const trackedTotal =
-      metrics.queued +
-      metrics.preparing +
-      metrics.ready +
-      metrics.onTheWay +
-      metrics.delivered +
-      metrics.cancelled;
-
     return {
       ...metrics,
-      trackedTotal,
-      hasStatusMismatch: trackedTotal !== metrics.totalVisible,
     };
   }, [orders]);
 
@@ -372,12 +433,22 @@ export default function OrdersPage() {
     orderId: string,
     nextStatus: OrderStatus
   ) => {
+    if (updatingId) return;
+
     try {
       setUpdatingId(orderId);
+      setPendingStatusChange({ orderId, status: nextStatus });
       await updateOrderStatusApi(orderId, nextStatus);
     } catch (error) {
       console.error("Error actualizando estado:", error);
-    } finally {
+      setPendingStatusChange(null);
+      setFeedback({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "No pudimos actualizar el estado del pedido.",
+      });
       setUpdatingId(null);
     }
   };
@@ -429,6 +500,13 @@ export default function OrdersPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
+                Listos
+              </p>
+              <p className="mt-1 text-2xl font-bold text-sky-300">{ready}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
                 En reparto
               </p>
               <p className="mt-1 text-2xl font-bold text-violet-300">{onTheWay}</p>
@@ -436,19 +514,25 @@ export default function OrdersPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                Entregados
+                Moneda
               </p>
-              <p className="mt-1 text-2xl font-bold text-emerald-300">{delivered}</p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                Cancelados
-              </p>
-              <p className="mt-1 text-2xl font-bold text-red-300">{cancelled}</p>
+              <p className="mt-1 text-2xl font-bold text-white">CLP</p>
             </div>
           </div>
         </div>
+
+        {feedback ? (
+          <div
+            className={[
+              "mb-6 rounded-2xl border px-4 py-3 text-sm",
+              feedback.type === "success"
+                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                : "border-red-400/20 bg-red-400/10 text-red-100",
+            ].join(" ")}
+          >
+            {feedback.message}
+          </div>
+        ) : null}
 
         {loading ? (
           <div className="rounded-2xl border border-white/10 bg-[#101010] p-6 text-neutral-400">
@@ -461,15 +545,6 @@ export default function OrdersPage() {
         ) : (
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
             <section className="grid gap-4">
-              {hasStatusMismatch ? (
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                  Hay una inconsistencia entre el total visible ({totalVisible}) y
-                  los estados operativos contabilizados ({trackedTotal}). `ready`
-                  se incluye en la validación aunque no se muestre en las cards
-                  superiores.
-                </div>
-              ) : null}
-
               {orders.map((order) => (
                 <OrderCard
                   key={order.id}
@@ -508,6 +583,11 @@ export default function OrdersPage() {
                     <p className="mt-1 text-sm text-neutral-400">
                       {selectedOrder.customer?.phone || "Sin teléfono"}
                     </p>
+                    {selectedOrder.customer?.email ? (
+                      <p className="mt-1 text-sm text-neutral-400">
+                        {selectedOrder.customer.email}
+                      </p>
+                    ) : null}
                     <p className="mt-3 text-sm text-neutral-400">
                       {selectedOrder.customer?.address || "Sin dirección"}
                     </p>
@@ -525,7 +605,7 @@ export default function OrdersPage() {
                     <div className="mt-3 space-y-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Canal</span>
-                        <span className="text-white">{selectedOrder.channel || "own"}</span>
+                        <span className="text-white">{formatChannelLabel(selectedOrder.channel)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Entrega</span>
@@ -540,13 +620,19 @@ export default function OrdersPage() {
                             selectedOrder.status ?? ""
                           )}`}
                         >
-                          {selectedOrder.status}
+                          {formatStatusLabel(selectedOrder.status)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Pago</span>
                         <span className="text-white">
                           {formatPaymentMethod(selectedOrder.paymentMethod)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Monto CLP</span>
+                        <span className="text-white">
+                          {formatMoney(selectedOrder.totals?.total)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -598,7 +684,7 @@ export default function OrdersPage() {
 
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-                      Totales
+                      Totales CLP
                     </p>
                     <div className="mt-3 space-y-2 text-sm">
                       <div className="flex items-center justify-between">
