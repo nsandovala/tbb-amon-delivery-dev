@@ -16,8 +16,10 @@ import {
   Plus,
   Search,
   ShoppingCart,
+  Loader2,
   User,
   Phone,
+  Mail,
   MapPin,
   Store,
   Bike,
@@ -42,8 +44,11 @@ type PosCartItem = {
 
 type PosOrder = {
   id: string;
+  status?: string;
+  channel?: string;
   total?: number;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
+  fulfillmentType?: "delivery" | "pickup";
   createdAt?: unknown;
   totals?: {
     total?: number;
@@ -75,34 +80,40 @@ export default function PosPage() {
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">(
     "pickup"
   );
 
   const [toast, setToast] = useState<{
-  type: "success" | "error";
-  message: string;
-} | null>(null);
+    type: "success" | "error";
+    message: string;
+    detail?: string;
+  } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<
-  "cash" | "transfer" | "card" | "pending"
+    "cash" | "transfer" | "card" | "pending"
   >("pending");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [todayOrders, setTodayOrders] = useState<PosOrder[]>([]);
+  const [pendingLiveOrderId, setPendingLiveOrderId] = useState<string | null>(null);
+  const [verifiedLiveOrderId, setVerifiedLiveOrderId] = useState<string | null>(null);
   const startOfDay = useMemo(() => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Timestamp.fromDate(now);
-}, []);
-useEffect(() => {
-  if (!toast) return;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return Timestamp.fromDate(now);
+  }, []);
+  const normalizedPhone = customerPhone.replace(/\s+/g, "").trim();
 
- const timer = setTimeout(() => {
-  setToast(null);
-}, 4000);
+  useEffect(() => {
+    if (!toast) return;
 
-  return () => clearTimeout(timer);
-}, [toast]);
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 4500);
+
+    return () => clearTimeout(timer);
+  }, [toast]);
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/products`);
     const q = query(ref, where("isActive", "==", true));
@@ -130,30 +141,45 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-  const ref = collection(db, `tenants/${tenantId}/orders`);
-  const q = query(
-    ref,
-    where("createdAt", ">=", startOfDay),
-    orderBy("createdAt", "desc")
-  );
+    const ref = collection(db, `tenants/${tenantId}/orders`);
+    const q = query(
+      ref,
+      where("createdAt", ">=", startOfDay),
+      orderBy("createdAt", "desc")
+    );
 
-  const unsub = onSnapshot(
-    q,
-    (snapshot) => {
-      const nextOrders: PosOrder[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<PosOrder, "id">),
-      }));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const nextOrders: PosOrder[] = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<PosOrder, "id">),
+        }));
 
-      setTodayOrders(nextOrders);
-    },
-    (error) => {
-      console.error("Error cargando órdenes del día:", error);
-    }
-  );
+        setTodayOrders(nextOrders);
+      },
+      (error) => {
+        console.error("Error cargando órdenes del día:", error);
+      }
+    );
 
-  return () => unsub();
-}, [startOfDay]);
+    return () => unsub();
+  }, [startOfDay]);
+
+  useEffect(() => {
+    if (!pendingLiveOrderId) return;
+
+    const persistedOrder = todayOrders.find((order) => order.id === pendingLiveOrderId);
+    if (!persistedOrder) return;
+
+    setVerifiedLiveOrderId(pendingLiveOrderId);
+    setPendingLiveOrderId(null);
+    setToast({
+      type: "success",
+      message: `Venta #${pendingLiveOrderId.slice(0, 6).toUpperCase()} visible en /pedidos`,
+      detail: "La venta ya quedó persistida en Firestore y reflejada en el stream operativo.",
+    });
+  }, [pendingLiveOrderId, todayOrders]);
 
   const categories = useMemo(() => {
     const unique = new Map<string, string>();
@@ -206,7 +232,7 @@ useEffect(() => {
   const isFormValid =
     cart.length > 0 &&
     customerName.trim().length >= 2 &&
-    customerPhone.trim().length >= 8 &&
+    normalizedPhone.length >= 8 &&
     (fulfillmentType === "pickup" || address.trim().length >= 6);
 
   function addToCart(product: PosProduct) {
@@ -262,6 +288,7 @@ const averageTicketToday = useMemo(() => {
     setCart([]);
     setCustomerName("");
     setCustomerPhone("");
+    setCustomerEmail("");
     setAddress("");
     setNotes("");
     setFulfillmentType("pickup");
@@ -269,10 +296,12 @@ const averageTicketToday = useMemo(() => {
   }
 
   async function handleCreateOrder() {
-    if (!isFormValid) return;
+    if (!isFormValid || isSubmitting) return;
 
     try {
       setIsSubmitting(true);
+      setPendingLiveOrderId(null);
+      setVerifiedLiveOrderId(null);
 
       const orderItems = cart.map((item) => ({
         productId: item.product.id,
@@ -284,24 +313,29 @@ const averageTicketToday = useMemo(() => {
         items: orderItems,
         customer: {
           name: customerName.trim(),
-          phone: customerPhone.trim(),
+          phone: normalizedPhone,
+          email: customerEmail.trim() || undefined,
           address: fulfillmentType === "delivery" ? address.trim() : "",
           notes: notes.trim(),
         },
+        fulfillmentType,
         paymentMethod,
       });
 
+      setPendingLiveOrderId(orderId);
       clearPos();
-     setToast({
-  type: "success",
-  message: `Pedido creado #${orderId.slice(0, 6).toUpperCase()}`,
-});
+      setToast({
+        type: "success",
+        message: `Venta creada #${orderId.slice(0, 6).toUpperCase()}`,
+        detail: "Esperando confirmación live en /pedidos...",
+      });
     } catch (error) {
       console.error("Error creando pedido POS:", error);
       setToast({
-  type: "error",
-  message: "No pudimos crear el pedido desde POS.",
-});
+        type: "error",
+        message: "No pudimos crear el pedido desde POS.",
+        detail: error instanceof Error ? error.message : "Revisa Functions y Firestore.",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -563,6 +597,18 @@ return (
               />
             </div>
 
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+              <input
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                placeholder="Email (opcional)"
+                inputMode="email"
+                autoComplete="email"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setFulfillmentType("delivery")}
@@ -689,39 +735,62 @@ return (
               onClick={() => void handleCreateOrder()}
               disabled={!isFormValid || isSubmitting}
               className={[
-                "rounded-2xl py-4 text-sm font-black uppercase tracking-[0.12em] transition-all",
+                "flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-black uppercase tracking-[0.12em] transition-all",
                 !isFormValid || isSubmitting
                   ? "cursor-not-allowed bg-white/8 text-neutral-500"
                   : "bg-emerald-400 text-black shadow-[0_0_18px_rgba(0,255,156,0.22)] hover:bg-emerald-300",
               ].join(" ")}
             >
-              {isSubmitting ? "Creando pedido..." : "Confirmar venta"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creando pedido...
+                </>
+              ) : (
+                "Confirmar venta"
+              )}
             </button>
 
             <button
               onClick={clearPos}
+              disabled={isSubmitting}
               className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-sm font-semibold text-neutral-300 transition-all hover:border-white/20 hover:text-white"
             >
               Limpiar POS
             </button>
 
+            {pendingLiveOrderId ? (
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                Esperando que la venta #{pendingLiveOrderId.slice(0, 6).toUpperCase()} aparezca en /pedidos.
+              </div>
+            ) : null}
+
+            {verifiedLiveOrderId ? (
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                Venta #{verifiedLiveOrderId.slice(0, 6).toUpperCase()} confirmada en Firestore y visible para operación.
+              </div>
+            ) : null}
+
             {toast ? (
-  <div className="pointer-events-none fixed top-6 right-6 z-[100]">
-    <div
-      className={[
-        "min-w-[260px] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-sm",
-        toast.type === "success"
-          ? "border-emerald-400/20 bg-[#07150f]/95 text-emerald-200"
-          : "border-red-400/20 bg-[#1a0b0b]/95 text-red-200",
-      ].join(" ")}
-    >
-      <p className="text-sm font-semibold">
-        {toast.type === "success" ? "Venta registrada" : "Error operativo"}
-      </p>
-      <p className="mt-1 text-sm opacity-90">{toast.message}</p>
-    </div>
-  </div>
-) : null}
+              <div className="pointer-events-none fixed right-6 top-6 z-[100]">
+                <div
+                  className={[
+                    "min-w-[280px] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-sm",
+                    toast.type === "success"
+                      ? "border-emerald-400/20 bg-[#07150f]/95 text-emerald-200"
+                      : "border-red-400/20 bg-[#1a0b0b]/95 text-red-200",
+                  ].join(" ")}
+                >
+                  <p className="text-sm font-semibold">
+                    {toast.type === "success" ? "Venta registrada" : "Error operativo"}
+                  </p>
+                  <p className="mt-1 text-sm opacity-90">{toast.message}</p>
+                  {toast.detail ? (
+                    <p className="mt-1 text-xs opacity-75">{toast.detail}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </aside>
       </div>
