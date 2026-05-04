@@ -82,7 +82,7 @@ async function calculateTotals(
  */
 export async function handleCreatePosSale(
   tenantId: string,
-  input: CreatePosSaleInput
+  input: CreatePosSaleInput & { fulfillmentType?: "delivery" | "pickup" }
 ): Promise<{ orderId: string }> {
   const orderId = generateOrderId(tenantId);
 
@@ -96,7 +96,7 @@ export async function handleCreatePosSale(
     tenantId,
     items: processedItems,
     customer: input.customer,
-    fulfillmentType: "pickup",
+    fulfillmentType: input.fulfillmentType ?? "pickup",
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "admin_pos",
     totals: { subtotal, delivery, total },

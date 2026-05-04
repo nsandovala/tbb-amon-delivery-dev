@@ -4,6 +4,15 @@ import { ORDER_CHANNELS } from "../constants/channels.js";
 import { PAYMENT_METHODS } from "../constants/payment-methods.js";
 import { FULFILLMENT_TYPES } from "../constants/fulfillment-types.js";
 
+const optionalEmailSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : undefined;
+  },
+  z.string().email("Email must be valid").optional()
+);
+
 /**
  * Payment method enum from shared constants
  */
@@ -61,6 +70,7 @@ export const orderTotalsSchema = z.object({
 export const orderCustomerSchema = z.object({
   name: z.string().min(1, "Customer name is required"),
   phone: z.string().min(1, "Customer phone is required"),
+  email: optionalEmailSchema,
   address: z.string().optional().default(""),
   notes: z.string().optional().default(""),
 });
@@ -114,6 +124,7 @@ export const createPosSaleInputSchema = z.object({
     qty: z.number().int().positive(),
   })).min(1, "POS sale must have at least one item"),
   customer: orderCustomerSchema,
+  fulfillmentType: fulfillmentTypeSchema.optional().default("pickup"),
   paymentMethod: paymentMethodSchema.optional().default("pending"),
 });
 
