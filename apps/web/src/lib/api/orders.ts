@@ -39,6 +39,7 @@ interface CreateOrderPayload {
   customer: {
     name: string;
     phone: string;
+    email?: string;
     address?: string;
     notes?: string;
   };

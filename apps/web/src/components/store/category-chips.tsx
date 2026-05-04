@@ -14,22 +14,13 @@ export function CategoryChips({
   activeCategoryId,
   onSelectCategory,
 }: CategoryChipsProps) {
-  const fallbackChips = [
-    { id: "", name: "Menú" },
-    { id: "aumenta-tu-ki", name: "Aumenta tu ki" },
-    { id: "multiverso-burger", name: "Multiverso Burger" },
-    { id: "multiverso-mechada", name: "Multiverso Mechada" },
-    { id: "papas-kaioken", name: "Papas Kaioken" },
-    { id: "bebidas-og", name: "Bebidas Oficiales" },
-  ];
-
   const chips =
     categories && categories.length > 0
       ? [
           { id: "", name: "Menú" },
           ...categories.map((c) => ({ id: c.id, name: c.name })),
         ]
-      : fallbackChips;
+      : [{ id: "", name: "Menú" }];
 
   return (
     <div className="sticky top-[72px] z-40 border-y border-white/5 bg-[#0B0B0B]/88 backdrop-blur-xl">

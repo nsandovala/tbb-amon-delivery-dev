@@ -9,10 +9,12 @@ import {
   MapPin,
   Phone,
   User,
+  Mail,
   MessageSquare,
   Bike,
   Store,
   CheckCircle2,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,9 +26,13 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">(
     "delivery"
   );
+  const [paymentMethod, setPaymentMethod] = useState<
+    "pending" | "cash" | "card" | "transfer"
+  >("pending");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -57,6 +63,8 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
     (fulfillmentType === "pickup" || address.trim().length >= 8);
 
   const handleCheckout = async () => {
+    if (isSubmitting) return;
+
     if (!isFormValid) {
       toast.error("Completa los datos del pedido antes de continuar.");
       return;
@@ -77,9 +85,11 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
         customer: {
           name: customerName.trim(),
           phone: normalizedPhone,
+          email: customerEmail.trim() || undefined,
           address: fulfillmentType === "delivery" ? address.trim() : "",
           notes: notes.trim(),
         },
+        paymentMethod,
       });
 
       clearCart();
@@ -94,8 +104,10 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
 
       setCustomerName("");
       setCustomerPhone("");
+      setCustomerEmail("");
       setAddress("");
       setNotes("");
+      setPaymentMethod("pending");
       setFulfillmentType("delivery");
     } catch (err) {
       console.error(err);
@@ -152,6 +164,18 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
                 ? "border-red-500/30 focus:border-red-500/50"
                 : "border-white/10 focus:border-accent/40"
             )}
+          />
+        </div>
+
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+          <input
+            value={customerEmail}
+            onChange={(e) => setCustomerEmail(e.target.value)}
+            placeholder="Email (opcional)"
+            inputMode="email"
+            autoComplete="email"
+            className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-11 pr-4 text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-accent/40"
           />
         </div>
 
@@ -217,6 +241,43 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
             className="w-full resize-none rounded-xl border border-white/10 bg-white/5 py-3 pl-11 pr-4 text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-accent/40"
           />
         </div>
+
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">
+            Método de pago
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: "pending", label: "Pendiente" },
+              { id: "cash", label: "Efectivo" },
+              { id: "card", label: "Tarjeta" },
+              { id: "transfer", label: "Transferencia" },
+            ].map((option) => {
+              const active = paymentMethod === option.id;
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() =>
+                    setPaymentMethod(
+                      option.id as "pending" | "cash" | "card" | "transfer"
+                    )
+                  }
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
+                    active
+                      ? "border-accent/40 bg-accent/10 text-accent shadow-[0_0_16px_rgba(0,255,156,0.12)]"
+                      : "border-white/10 bg-white/5 text-neutral-300 hover:border-white/20 hover:text-white"
+                  )}
+                >
+                  <Wallet className="h-4 w-4" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
@@ -229,6 +290,18 @@ export function CartSummary({ tenantId }: CartSummaryProps) {
           <span>{fulfillmentType === "delivery" ? "Delivery" : "Retiro"}</span>
           <span>
             {delivery === 0 ? "Gratis" : `$${delivery.toLocaleString("es-CL")}`}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between text-sm text-neutral-400">
+          <span>Pago</span>
+          <span>
+            {{
+              pending: "Pendiente",
+              cash: "Efectivo",
+              card: "Tarjeta",
+              transfer: "Transferencia",
+            }[paymentMethod]}
           </span>
         </div>
 
