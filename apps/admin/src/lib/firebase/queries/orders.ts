@@ -10,6 +10,7 @@ export interface AdminOrderItem {
 export interface AdminOrderCustomer {
   name?: string;
   phone?: string;
+  email?: string;
   address?: string;
   notes?: string;
 }

@@ -96,6 +96,28 @@ export type Product = {
   updatedAt?: unknown
 }
 
+export interface Modifier {
+  id: string;
+  name: string;
+  priceDelta: number;
+  isActive: boolean;
+  description?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface ModifierGroup {
+  id: string;
+  name: string;
+  selectionType: "single" | "multiple";
+  minSelect: number;
+  maxSelect: number;
+  isActive: boolean;
+  modifierIds: string[];
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { Category, Product } from "@/types";
-import { cn } from "@/lib/utils";
 import { CategoryChips } from "./category-chips";
 import { ProductGrid } from "./product-grid";
 
@@ -12,16 +11,10 @@ interface StorefrontClientProps {
   city?: string;
 }
 
-const NEURO_PHRASES = [
-  "Los favoritos del multiverso gastronómico",
-  "Activa tu hambre en modo Kaioken",
-  "Recetas legendarias desde Playa Ancha"
-];
-
 export function StorefrontClient({ categories, products, city }: StorefrontClientProps) {
   const [activeCategoryId, setActiveCategoryId] = useState("");
   const [hoveredCategoryId, setHoveredCategoryId] = useState<string | null>(null);
-  const [phrase] = useState(() => NEURO_PHRASES[Math.floor(Math.random() * NEURO_PHRASES.length)]);
+  const phrase = city ? `Favoritos reales de ${city}` : "Carta operativa en tiempo real";
 
   const filteredProducts = activeCategoryId 
     ? products.filter(p => p.categoryId === activeCategoryId)

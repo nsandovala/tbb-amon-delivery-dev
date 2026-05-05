@@ -41,6 +41,7 @@ interface CreateOrderPayload {
   customer: {
     name: string;
     phone: string;
+    email?: string;
     address?: string;
     notes?: string;
   };
@@ -68,9 +69,11 @@ interface CreatePosSalePayload {
   customer: {
     name: string;
     phone: string;
+    email?: string;
     address?: string;
     notes?: string;
   };
+  fulfillmentType?: "delivery" | "pickup";
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
 }
 

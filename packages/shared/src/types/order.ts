@@ -1,12 +1,12 @@
 export type OrderStatus =
   | "queued"
-  | "accepted"
   | "preparing"
   | "ready"
+  | "on_the_way"
   | "delivered"
   | "cancelled";
 
-export type OrderChannel = "web" | "whatsapp" | "manual" | "marketplace";
+export type OrderChannel = "web" | "whatsapp" | "admin_pos" | "marketplace";
 
 export type OrderItemModifier = {
   modifierId: string;
@@ -34,6 +34,8 @@ export type Order = {
   customer: {
     name?: string;
     phone?: string;
+    email?: string;
+    address?: string;
     notes?: string;
   };
 
