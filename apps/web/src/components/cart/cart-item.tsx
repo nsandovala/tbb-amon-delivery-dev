@@ -16,13 +16,20 @@ export function CartItem({ item }: CartItemProps) {
   const removeItem = useCartStore((s) => s.removeItem);
 
   const getFallbackImage = (categoryId?: string) => {
+    const normalizedCategoryId = categoryId?.toLowerCase() ?? "";
+
+    if (
+      normalizedCategoryId.includes("papas") ||
+      normalizedCategoryId.includes("fries")
+    ) {
+      return "/images/stubs/fries.png";
+    }
+
     switch (categoryId) {
       case "multiverso-burger":
         return "/images/stubs/burger-real.jpg";
       case "multiverso-mechada":
         return "/images/stubs/mechada-real.jpg";
-      case "papas-kaioken":
-        return "/images/stubs/fries.png";
       case "bebidas-og":
         return "/images/stubs/drink.png";
       default:
