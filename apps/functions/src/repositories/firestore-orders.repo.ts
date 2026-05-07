@@ -2,8 +2,8 @@ import admin from "firebase-admin";
 import { getDb } from "../lib/firebase-admin";
 import { NotFoundError, ConflictError } from "../lib/errors";
 import { logger } from "../lib/logger";
-import type { CreateOrderInput, OrderStatus } from "@amon/shared";
-import { ILLEGAL_TRANSITIONS } from "@amon/shared";
+import type { CreateOrderInput, OrderStatus } from "../schemas/order.shared";
+import { ILLEGAL_TRANSITIONS } from "../schemas/order.shared";
 
 const ORDERS_COLLECTION = "orders";
 

@@ -8,12 +8,15 @@
     "deploy": "firebase deploy --only functions"
   },
   "dependencies": {
+    "@amon/shared": "*",
     "firebase-admin": "^10.1.0",
     "firebase-functions": "^4.9.0",
-    "@amon/shared": "*",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": "20"
   }
 }
