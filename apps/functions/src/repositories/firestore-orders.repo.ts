@@ -31,6 +31,8 @@ export async function createOrder(
     totals: { subtotal: number; delivery: number; total: number };
     paymentMethod: string;
     channel: string;
+    customerId?: string;
+    customerPhoneNormalized?: string;
   }
 ): Promise<void> {
   const now = admin.firestore.FieldValue.serverTimestamp();
@@ -46,6 +48,10 @@ export async function createOrder(
     items: input.items,
     totals: input.totals,
     fulfillmentType: input.fulfillmentType,
+    ...(input.customerId ? { customerId: input.customerId } : {}),
+    ...(input.customerPhoneNormalized
+      ? { customerPhoneNormalized: input.customerPhoneNormalized }
+      : {}),
     createdAt: now,
     updatedAt: now,
   });
