@@ -123,6 +123,8 @@ export declare const orderSchema: z.ZodObject<{
         address?: string | undefined;
         notes?: string | undefined;
     }>;
+    customerId: z.ZodOptional<z.ZodString>;
+    customerPhoneNormalized: z.ZodOptional<z.ZodString>;
     createdAt: z.ZodOptional<z.ZodUnknown>;
     updatedAt: z.ZodOptional<z.ZodUnknown>;
 }, "strip", z.ZodTypeAny, {
@@ -153,6 +155,8 @@ export declare const orderSchema: z.ZodObject<{
         notes: string;
         email?: string | undefined;
     };
+    customerId?: string | undefined;
+    customerPhoneNormalized?: string | undefined;
     createdAt?: unknown;
     updatedAt?: unknown;
 }, {
@@ -183,6 +187,8 @@ export declare const orderSchema: z.ZodObject<{
         notes?: string | undefined;
     };
     modifiers?: unknown[] | undefined;
+    customerId?: string | undefined;
+    customerPhoneNormalized?: string | undefined;
     createdAt?: unknown;
     updatedAt?: unknown;
 }>;

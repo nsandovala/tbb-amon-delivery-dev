@@ -13,6 +13,8 @@ export declare function createOrder(tenantId: string, orderId: string, input: Cr
     };
     paymentMethod: string;
     channel: string;
+    customerId?: string;
+    customerPhoneNormalized?: string;
 }): Promise<void>;
 /**
  * Generate a simple auto-id via Firestore.

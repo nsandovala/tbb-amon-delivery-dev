@@ -89,6 +89,8 @@ export const orderSchema = z.object({
   modifiers: z.array(z.unknown()).default([]),
   totals: orderTotalsSchema,
   customer: orderCustomerSchema,
+  customerId: z.string().min(1).optional(),
+  customerPhoneNormalized: z.string().min(1).optional(),
   createdAt: z.unknown().optional(),
   updatedAt: z.unknown().optional(),
 });

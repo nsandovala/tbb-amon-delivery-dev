@@ -2,6 +2,7 @@ import { generateOrderId, createOrder, getOrder, updateOrderStatus } from "../re
 import { getDb } from "../lib/firebase-admin";
 import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
+import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 
 const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
@@ -102,6 +103,9 @@ export async function handleCreateOrder(
     fee
   );
 
+  // Normalize phone for customer identity
+  const normalizedPhone = normalizeChileanPhone(input.customer.phone);
+
   await createOrder(tenantId, orderId, {
     tenantId,
     items: processedItems,
@@ -110,9 +114,19 @@ export async function handleCreateOrder(
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "web",
     totals: { subtotal, delivery, total },
+    ...(normalizedPhone ? { customerId: normalizedPhone, customerPhoneNormalized: normalizedPhone } : {}),
   });
 
-  logger.info("Order created via service", { tenantId, orderId, subtotal, delivery, total });
+  // Upsert customer (non-blocking — order is already persisted)
+  await upsertCustomerFromOrder({
+    tenantId,
+    customer: input.customer,
+    orderTotal: total,
+    paymentMethod: input.paymentMethod ?? "pending",
+    fulfillmentType: input.fulfillmentType,
+  });
+
+  logger.info("Order created via service", { tenantId, orderId, subtotal, delivery, total, customerId: normalizedPhone });
 
   return { orderId };
 }

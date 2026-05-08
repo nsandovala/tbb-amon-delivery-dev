@@ -81,6 +81,8 @@ exports.orderSchema = zod_1.z.object({
     modifiers: zod_1.z.array(zod_1.z.unknown()).default([]),
     totals: exports.orderTotalsSchema,
     customer: exports.orderCustomerSchema,
+    customerId: zod_1.z.string().min(1).optional(),
+    customerPhoneNormalized: zod_1.z.string().min(1).optional(),
     createdAt: zod_1.z.unknown().optional(),
     updatedAt: zod_1.z.unknown().optional(),
 });

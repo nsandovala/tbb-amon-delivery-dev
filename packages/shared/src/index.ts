@@ -45,3 +45,7 @@ export type {
   UpdateOrderStatusInput,
   CreatePosSaleInput,
 } from "./schemas/order.schema.js";
+
+export type {
+  Customer,
+} from "./types/customer.js";

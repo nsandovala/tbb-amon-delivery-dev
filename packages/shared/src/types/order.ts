@@ -39,6 +39,10 @@ export type Order = {
     notes?: string;
   };
 
+  /** MVP customer identity — normalized phone used as doc ID */
+  customerId?: string;
+  customerPhoneNormalized?: string;
+
   items: OrderItem[];
 
   totals: {

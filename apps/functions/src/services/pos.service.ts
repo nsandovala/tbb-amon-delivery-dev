@@ -2,6 +2,7 @@ import { generateOrderId, createOrder } from "../repositories/firestore-orders.r
 import { getDb } from "../lib/firebase-admin";
 import type { CreatePosSaleInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
+import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 
 const DELIVERY_FEE = 1500;
 
@@ -100,6 +101,9 @@ export async function handleCreatePosSale(
     resolvedFulfillment
   );
 
+  // Normalize phone for customer identity
+  const normalizedPhone = normalizeChileanPhone(input.customer.phone);
+
   await createOrder(tenantId, orderId, {
     tenantId,
     items: processedItems,
@@ -108,9 +112,20 @@ export async function handleCreatePosSale(
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "admin_pos",
     totals: { subtotal, delivery, total },
+    ...(normalizedPhone ? { customerId: normalizedPhone, customerPhoneNormalized: normalizedPhone } : {}),
   });
 
-  logger.info("POS sale recorded", { tenantId, orderId, subtotal, total });
+  // Upsert customer (non-blocking — order is already persisted)
+  await upsertCustomerFromOrder({
+    tenantId,
+    customer: input.customer,
+    orderTotal: total,
+    paymentMethod: input.paymentMethod ?? "pending",
+    fulfillmentType: resolvedFulfillment,
+  });
+
+  logger.info("POS sale recorded", { tenantId, orderId, subtotal, total, customerId: normalizedPhone });
 
   return { orderId };
 }
+

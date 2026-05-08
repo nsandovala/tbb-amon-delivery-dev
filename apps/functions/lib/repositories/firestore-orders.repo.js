@@ -39,6 +39,10 @@ async function createOrder(tenantId, orderId, input) {
         items: input.items,
         totals: input.totals,
         fulfillmentType: input.fulfillmentType,
+        ...(input.customerId ? { customerId: input.customerId } : {}),
+        ...(input.customerPhoneNormalized
+            ? { customerPhoneNormalized: input.customerPhoneNormalized }
+            : {}),
         createdAt: now,
         updatedAt: now,
     });
