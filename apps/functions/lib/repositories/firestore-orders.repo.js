@@ -11,7 +11,7 @@ const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const firebase_admin_2 = require("../lib/firebase-admin");
 const errors_1 = require("../lib/errors");
 const logger_1 = require("../lib/logger");
-const shared_1 = require("@amon/shared");
+const order_shared_1 = require("../schemas/order.shared");
 const ORDERS_COLLECTION = "orders";
 /**
  * Tenant-scoped reference: tenants/{tenantId}/orders
@@ -84,7 +84,7 @@ async function updateOrderStatus(tenantId, orderId, newStatus) {
     });
 }
 function isIllegalTransition(from, to) {
-    const blocked = shared_1.ILLEGAL_TRANSITIONS[from];
+    const blocked = order_shared_1.ILLEGAL_TRANSITIONS[from];
     if (!blocked)
         return false;
     return blocked.includes(to);

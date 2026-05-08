@@ -6,8 +6,12 @@ exports.handleGetOrder = handleGetOrder;
 const firestore_orders_repo_1 = require("../repositories/firestore-orders.repo");
 const firebase_admin_1 = require("../lib/firebase-admin");
 const logger_1 = require("../lib/logger");
-const DEFAULT_DELIVERY_FEE = 1500;
+const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
+/** Single source of truth for delivery fee based on fulfillment type */
+function resolveDeliveryFee(fulfillmentType) {
+    return fulfillmentType === "delivery" ? DELIVERY_FEE : 0;
+}
 async function calculateTotals(tenantId, items, deliveryFee) {
     const snaps = await Promise.all(items.map(item => (0, firebase_admin_1.getDb)()
         .collection("tenants")
@@ -38,7 +42,7 @@ async function calculateTotals(tenantId, items, deliveryFee) {
     }
     const safeDeliveryFee = typeof deliveryFee === "number" && deliveryFee >= 0 && deliveryFee <= MAX_DELIVERY_FEE
         ? deliveryFee
-        : DEFAULT_DELIVERY_FEE;
+        : 0;
     const total = subtotal + safeDeliveryFee;
     return {
         items: processedItems,
@@ -49,8 +53,10 @@ async function calculateTotals(tenantId, items, deliveryFee) {
 }
 async function handleCreateOrder(tenantId, input) {
     const orderId = (0, firestore_orders_repo_1.generateOrderId)(tenantId);
+    // Derive delivery fee from fulfillmentType (single source of truth)
+    const fee = resolveDeliveryFee(input.fulfillmentType);
     // Calculate totals server-side from DB prices
-    const { items: processedItems, subtotal, delivery, total } = await calculateTotals(tenantId, input.items, input.deliveryFee ?? DEFAULT_DELIVERY_FEE);
+    const { items: processedItems, subtotal, delivery, total } = await calculateTotals(tenantId, input.items, fee);
     await (0, firestore_orders_repo_1.createOrder)(tenantId, orderId, {
         tenantId,
         items: processedItems,

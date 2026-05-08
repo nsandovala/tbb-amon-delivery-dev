@@ -1,1 +1,1 @@
-export { createOrderInputSchema as createOrderSchema, type CreateOrderInput, orderItemSchema, orderCustomerSchema, } from "@amon/shared";
+export { createOrderSchema, type CreateOrderInput, orderItemSchema, orderCustomerSchema, } from "./order.shared";

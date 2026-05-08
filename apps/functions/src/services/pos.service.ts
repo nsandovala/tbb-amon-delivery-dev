@@ -3,7 +3,12 @@ import { getDb } from "../lib/firebase-admin";
 import type { CreatePosSaleInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 
-const DEFAULT_DELIVERY_FEE = 0;
+const DELIVERY_FEE = 1500;
+
+/** Single source of truth for delivery fee based on fulfillment type */
+function resolveDeliveryFee(fulfillmentType: "delivery" | "pickup"): number {
+  return fulfillmentType === "delivery" ? DELIVERY_FEE : 0;
+}
 
 type ProcessedItem = {
   productId: string;
@@ -16,7 +21,8 @@ type ProcessedItem = {
 
 async function calculateTotals(
   tenantId: string,
-  items: { productId: string; qty: number }[]
+  items: { productId: string; qty: number }[],
+  fulfillmentType: "delivery" | "pickup"
 ): Promise<{
   items: ProcessedItem[];
   subtotal: number;
@@ -65,7 +71,7 @@ async function calculateTotals(
     });
   }
 
-  const delivery = DEFAULT_DELIVERY_FEE;
+  const delivery = resolveDeliveryFee(fulfillmentType);
   const total = subtotal + delivery;
 
   return {
@@ -87,9 +93,11 @@ export async function handleCreatePosSale(
   const orderId = generateOrderId(tenantId);
 
   // Calculate totals server-side from DB prices
+  const resolvedFulfillment = input.fulfillmentType ?? "pickup";
   const { items: processedItems, subtotal, delivery, total } = await calculateTotals(
     tenantId,
-    input.items
+    input.items,
+    resolvedFulfillment
   );
 
   await createOrder(tenantId, orderId, {

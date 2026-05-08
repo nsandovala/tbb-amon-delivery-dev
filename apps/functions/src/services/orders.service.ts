@@ -3,8 +3,13 @@ import { getDb } from "../lib/firebase-admin";
 import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 
-const DEFAULT_DELIVERY_FEE = 1500;
+const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
+
+/** Single source of truth for delivery fee based on fulfillment type */
+function resolveDeliveryFee(fulfillmentType: "delivery" | "pickup"): number {
+  return fulfillmentType === "delivery" ? DELIVERY_FEE : 0;
+}
 
 type ProcessedItem = {
   productId: string;
@@ -70,7 +75,7 @@ async function calculateTotals(
   const safeDeliveryFee =
     typeof deliveryFee === "number" && deliveryFee >= 0 && deliveryFee <= MAX_DELIVERY_FEE
       ? deliveryFee
-      : DEFAULT_DELIVERY_FEE;
+      : 0;
   const total = subtotal + safeDeliveryFee;
 
   return {
@@ -83,15 +88,18 @@ async function calculateTotals(
 
 export async function handleCreateOrder(
   tenantId: string,
-  input: CreateOrderInput & { deliveryFee?: number }
+  input: CreateOrderInput
 ): Promise<{ orderId: string }> {
   const orderId = generateOrderId(tenantId);
+
+  // Derive delivery fee from fulfillmentType (single source of truth)
+  const fee = resolveDeliveryFee(input.fulfillmentType);
 
   // Calculate totals server-side from DB prices
   const { items: processedItems, subtotal, delivery, total } = await calculateTotals(
     tenantId,
     input.items,
-    input.deliveryFee ?? DEFAULT_DELIVERY_FEE
+    fee
   );
 
   await createOrder(tenantId, orderId, {
