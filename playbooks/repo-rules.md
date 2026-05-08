@@ -78,3 +78,17 @@ Si hay conflicto entre velocidad y consistencia:
 2. preservar Firestore como verdad
 3. reducir complejidad
 4. optimizar ergonomia de desarrollo
+
+## Reglas AMON Shop — Customers y Orders
+
+- No usar nombre/teléfono como búsqueda pública de pedidos.
+- `customerId` debe derivarse de teléfono normalizado.
+- `customerPhoneNormalized` debe persistirse en orders.
+- No introducir Firebase Auth para cliente final sin fase aprobada.
+- No introducir SumUp.
+- Flow será integración futura, no actual.
+- Delivery fee se deriva exclusivamente de `fulfillmentType`:
+  - `delivery: 1500`
+  - `pickup: 0`
+- No confiar en cálculos decorativos de frontend para persistencia final.
+- Backend es fuente de verdad para `totals`.
