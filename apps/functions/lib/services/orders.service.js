@@ -58,8 +58,11 @@ async function handleCreateOrder(tenantId, input) {
     const fee = resolveDeliveryFee(input.fulfillmentType);
     // Calculate totals server-side from DB prices
     const { items: processedItems, subtotal, delivery, total } = await calculateTotals(tenantId, input.items, fee);
-    // Normalize phone for customer identity
+    // Normalize phone for customer identity — reject if invalid
     const normalizedPhone = (0, customers_service_1.normalizeChileanPhone)(input.customer.phone);
+    if (!normalizedPhone) {
+        throw new Error("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
+    }
     await (0, firestore_orders_repo_1.createOrder)(tenantId, orderId, {
         tenantId,
         items: processedItems,
@@ -68,7 +71,8 @@ async function handleCreateOrder(tenantId, input) {
         paymentMethod: input.paymentMethod ?? "pending",
         channel: "web",
         totals: { subtotal, delivery, total },
-        ...(normalizedPhone ? { customerId: normalizedPhone, customerPhoneNormalized: normalizedPhone } : {}),
+        customerId: normalizedPhone,
+        customerPhoneNormalized: normalizedPhone,
     });
     // Upsert customer (non-blocking — order is already persisted)
     await (0, customers_service_1.upsertCustomerFromOrder)({

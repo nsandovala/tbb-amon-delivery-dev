@@ -4,28 +4,18 @@ import { useMemo, useState } from "react";
 import { useCartStore } from "@/lib/store/cart-store";
 import { CartItem } from "./cart-item";
 import { CartSummary } from "./cart-summary";
-import { X, ShoppingBag, ChevronRight, ChevronLeft, Flame } from "lucide-react";
+import { X, ShoppingBag, ChevronRight, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CartDrawerProps {
   tenantId: string;
 }
 
-/** Category IDs that qualify for Papas Kaioken upsell */
-const UPSELL_TRIGGER_CATEGORIES = [
-  "multiverso-burger",
-  "multiverso-mechada",
-  "aumenta-tu-ki",
-];
-
-const PAPAS_CATEGORY = "papas-kaioken";
-const PAPAS_PRODUCT_ID = "papas-kaioken";
 
 export function CartDrawer({ tenantId }: CartDrawerProps) {
   const isOpen = useCartStore((s) => s.isOpen);
   const closeCart = useCartStore((s) => s.closeCart);
   const items = useCartStore((s) => s.items);
-  const addItem = useCartStore((s) => s.addItem);
 
   const [step, setStep] = useState<"cart" | "checkout">("cart");
 
@@ -41,37 +31,6 @@ export function CartDrawer({ tenantId }: CartDrawerProps) {
     () => items.reduce((acc, i) => acc + i.product.price * i.quantity, 0),
     [items]
   );
-
-  // Upsell logic: show papas suggestion when burger/mechada in cart, no papas
-  const upsell = useMemo(() => {
-    const hasTrigger = items.some((i) =>
-      UPSELL_TRIGGER_CATEGORIES.includes(i.product.categoryId ?? "")
-    );
-    const hasPapas = items.some(
-      (i) =>
-        i.product.id === PAPAS_PRODUCT_ID ||
-        i.product.categoryId === PAPAS_CATEGORY
-    );
-    return hasTrigger && !hasPapas;
-  }, [items]);
-
-  // Find the papas product from the cart items' product shape so we can add it
-  // We build a minimal Product object from known seed data
-  const handleAddPapas = () => {
-    addItem({
-      id: PAPAS_PRODUCT_ID,
-      tenantId: "tbb",
-      categoryId: PAPAS_CATEGORY,
-      name: "Papas Kaioken",
-      slug: "papas-kaioken",
-      description:
-        "Papas crujientes activadas en modo Kaioken. Doradas por fuera, suaves por dentro.",
-      price: 1500,
-      tags: ["addon", "papas"],
-      isActive: true,
-      isFeatured: false,
-    });
-  };
 
   return (
     <>
@@ -150,35 +109,6 @@ export function CartDrawer({ tenantId }: CartDrawerProps) {
                     {items.map((item) => (
                       <CartItem key={item.product.id} item={item} />
                     ))}
-
-                    {/* Papas Kaioken Upsell */}
-                    {upsell && (
-                      <button
-                        onClick={handleAddPapas}
-                        className={cn(
-                          "group/upsell flex w-full items-center gap-3 rounded-2xl border p-3",
-                          "border-amber-500/20 bg-amber-500/[0.04]",
-                          "transition-all duration-200",
-                          "hover:border-amber-400/30 hover:bg-amber-500/[0.08]",
-                          "active:scale-[0.98]"
-                        )}
-                      >
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10">
-                          <Flame className="h-5 w-5 text-amber-400" />
-                        </div>
-                        <div className="min-w-0 flex-1 text-left">
-                          <p className="text-sm font-semibold text-white">
-                            ¿Papas Kaioken?
-                          </p>
-                          <p className="text-xs text-neutral-400">
-                            Agrega papas crujientes • $1.500
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors group-hover/upsell:bg-amber-500/20">
-                          Agregar
-                        </span>
-                      </button>
-                    )}
                   </div>
                 )}
               </div>

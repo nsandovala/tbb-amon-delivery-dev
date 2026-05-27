@@ -251,20 +251,24 @@ export default function PosPage() {
     });
   }
 
+  const successfulTodayOrders = useMemo(
+    () => todayOrders.filter((o) => o.status !== "cancelled"),
+    [todayOrders]
+  );
+
   const totalSalesToday = useMemo(() => {
-  return todayOrders.reduce((acc, order) => {
-    if (order.status === "cancelled") return acc;
-    const value = order.totals?.total ?? order.total ?? 0;
-    return acc + value;
-  }, 0);
-}, [todayOrders]);
+    return successfulTodayOrders.reduce((acc, order) => {
+      const value = order.totals?.total ?? order.total ?? 0;
+      return acc + value;
+    }, 0);
+  }, [successfulTodayOrders]);
 
-const ordersTodayCount = todayOrders.length;
+  const ordersTodayCount = successfulTodayOrders.length;
 
-const averageTicketToday = useMemo(() => {
-  if (ordersTodayCount === 0) return 0;
-  return totalSalesToday / ordersTodayCount;
-}, [totalSalesToday, ordersTodayCount]);
+  const averageTicketToday = useMemo(() => {
+    if (ordersTodayCount === 0) return 0;
+    return totalSalesToday / ordersTodayCount;
+  }, [totalSalesToday, ordersTodayCount]);
 
   function updateQuantity(productId: string, nextQty: number) {
     if (nextQty <= 0) {
