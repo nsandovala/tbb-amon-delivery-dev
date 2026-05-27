@@ -1,6 +1,54 @@
 # Phase Log
 
 ## Fase actual
+Preparación marcha blanca controlada — Backend audit + fixes mínimos
+
+## 2026-05-27 — Preparación marcha blanca controlada
+
+### Módulo
+Auditoría backend-first y correcciones mínimas para operación real de TBB.
+
+### Archivos modificados
+- `apps/admin/src/app/pos/page.tsx` — deshabilita `card` como método de pago (Próximamente); excluye `cancelled` de `totalSalesToday`.
+- `apps/web/src/lib/firebase/queries/orders.ts` — completa tipo `AdminOrderCustomer` con `email?`.
+- Eliminado `apps/web/src/hooks/use-cart.ts` (archivo muerto, 0 bytes).
+
+### Decisión
+El repo está listo para marcha blanca controlada. No se introducen cambios estructurales ni UI grandes. Solo fixes funcionales mínimos que evitan errores operativos.
+
+### Validaciones ejecutadas
+```bash
+npm --prefix packages/shared run typecheck        # OK
+npm --prefix apps/functions run build             # OK
+./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit    # OK
+./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit  # OK
+```
+
+### Riesgos reales corregidos
+1. POS permitía `card` como método de pago activo → ahora deshabilitado como "Próximamente", coherente con storefront.
+2. `totalSalesToday` en POS sumaba órdenes `cancelled` → ahora excluidas.
+3. Tipo `AdminOrderCustomer` incompleto (`email` faltante) → corregido.
+4. Archivo muerto `use-cart.ts` → eliminado.
+
+### Riesgos abiertos aceptados
+- `startOfDay` congelado en POS (reiniciar POS diariamente).
+- Seed orders usan schema viejo (`deliveryFee` vs `delivery`) — solo afecta re-seed.
+- HEO Chatbot decorativo/no funcional.
+- Firestore rules abiertas.
+- Cross-sell Papas Kaioken inexistente.
+- Cart drawer UX comprimido en mobile.
+
+### Contratos afectados
+- `docs/operations/marcha-blanca-checklist.md` — creado.
+- `playbooks/repo-rules.md` — actualizado con reglas de marcha blanca.
+- `docs/architecture/customer-order-contract.md` — actualizado con validaciones.
+
+### Siguiente fase recomendada
+Live Order Tracking sin login mediante `trackingToken` seguro.
+
+---
+
+## Fase anterior
 Home público AMON Shop — Frontend
 
 ## 2026-05-27 — Home público AMON Shop
@@ -142,14 +190,20 @@ npm --prefix apps/functions run build
 - `packages/shared/lib` contiene build output, no fuente editable
 - la fuente de edición real está en `packages/shared/src`
 
-## Hallazgos abiertos
-- `apps/web` todavía tiene errores de typecheck
-- queda al menos un write directo legacy en web por auditar/remover
-- queries de catálogo/tenant en web tienen imports rotos (`../admin`)
-- falta cerrar la migración completa del storefront al patrón backend-first
+## Hallazgos abiertos (resueltos en fase marcha blanca)
+- ✅ `apps/web` typecheck limpio.
+- ✅ No quedan writes directos legacy en flujos críticos.
+- ✅ Migración backend-first del storefront cerrada.
+
+## Hallazgos abiertos actuales
+- `startOfDay` congelado en POS (riesgo operativo bajo si reinicia diario).
+- Seed orders usan schema viejo (`deliveryFee` vs `delivery`) — solo afecta re-seed.
+- Cross-sell Papas Kaioken inexistente.
+- Cart drawer UX comprimido en mobile.
+- Firestore rules abiertas.
 
 ## Próximo objetivo inmediato
-Dejar `apps/web` en verde y eliminar cualquier write directo restante a Firestore.
+Live Order Tracking sin login mediante `trackingToken` seguro.
 
 ## Nota operativa
 No endurecer Firestore Rules hasta que:

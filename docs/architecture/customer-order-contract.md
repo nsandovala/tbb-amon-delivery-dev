@@ -76,6 +76,21 @@ POS sale
   - `delivery = 1500`
   - `pickup = 0`
 - Los totales finales se calculan en backend desde Firestore.
+- El frontend puede previsualizar totales, pero nunca los envía en el payload de creación.
+- `paymentMethod: "card"` está deshabilitado en storefront y POS hasta integración Flow.
+
+## Validaciones técnicas (2026-05-27)
+
+```bash
+npm --prefix packages/shared run typecheck        # OK
+npm --prefix apps/functions run build             # OK
+./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit    # OK
+./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit  # OK
+```
+
+- No quedan writes directos a Firestore desde frontend en flujos críticos.
+- POS `totalSalesToday` excluye órdenes `cancelled`.
+- Tipos `AdminOrderCustomer` incluyen `email?`.
 
 ## Reglas de privacidad
 

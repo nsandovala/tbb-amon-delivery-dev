@@ -63,6 +63,10 @@ Cerrar el flujo crítico real de pedidos y ventas con backend operativo, elimina
 - [x] MVP de customers por teléfono implementado
 - [x] persistencia de `customerId` y `customerPhoneNormalized` en orders
 - [x] contratos compartidos actualizados
+- [x] typecheck limpio en `shared`, `functions`, `web`, `admin`
+- [x] no quedan writes críticos directos en frontend
+- [x] POS `card` deshabilitado como "Próximamente"
+- [x] `totalSalesToday` excluye órdenes `cancelled`
 
 ## Resultado final
 
@@ -72,25 +76,14 @@ La fase cierra con backend operativo como fuente de verdad para creación de ped
 - crear ventas reales desde POS;
 - ver pedidos en vivo desde admin;
 - acumular historial básico de customers en Firestore sin introducir login de cliente;
-- mantener contratos compartidos alineados con la persistencia real.
+- mantener contratos compartidos alineados con la persistencia real;
+- operar sin writes directos desde frontend en flujos críticos.
 
-El árbol actual sigue pendiente de commit final porque existen cambios sin commitear en código fuente y artefactos generados.
+El árbol fue limpiado de writes legacy y validado para marcha blanca controlada.
 
-## No incluido en esta fase
+## Riesgos post-cierre
 
-- login de cliente final
-- Firebase Auth para customers
-- búsqueda pública de pedidos por nombre o teléfono
-- tracking público con token
-- integración SumUp
-- integración Flow
-- home AMON Shop restaurada
-- reporting/BI avanzado
-- limpieza final de artefactos de build para el commit operativo
-
-## Riesgos
-
-- deriva de contratos entre capas
-- lecturas legacy usando imports rotos
-- payloads frontend con lógica de negocio antigua
-- artefactos compilados confundidos con fuente
+- deriva de contratos entre capas (mitigado: audits periódicos)
+- lecturas legacy usando imports rotos (resuelto)
+- payloads frontend con lógica de negocio antigua (resuelto: backend recalcula todo)
+- artefactos compilados confundidos con fuente (documentado)
