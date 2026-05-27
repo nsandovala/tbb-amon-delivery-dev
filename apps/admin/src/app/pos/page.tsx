@@ -253,6 +253,7 @@ export default function PosPage() {
 
   const totalSalesToday = useMemo(() => {
   return todayOrders.reduce((acc, order) => {
+    if (order.status === "cancelled") return acc;
     const value = order.totals?.total ?? order.total ?? 0;
     return acc + value;
   }, 0);
@@ -644,17 +645,19 @@ return (
 
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: "cash", label: "Efectivo" },
-                  { id: "transfer", label: "Transferencia" },
-                  { id: "card", label: "Tarjeta" },
-                  { id: "pending", label: "Pendiente" },
+                  { id: "cash", label: "Efectivo", enabled: true },
+                  { id: "transfer", label: "Transferencia", enabled: true },
+                  { id: "card", label: "Tarjeta", enabled: false, disabledLabel: "Próximamente" },
+                  { id: "pending", label: "Pendiente", enabled: true },
                 ].map((option) => {
                   const active = paymentMethod === option.id;
+                  const disabled = !option.enabled;
 
                   return (
                     <button
                       key={option.id}
                       type="button"
+                      disabled={disabled}
                       onClick={() =>
                         setPaymentMethod(
                           option.id as "cash" | "transfer" | "card" | "pending"
@@ -662,12 +665,21 @@ return (
                       }
                       className={[
                         "rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
-                        active
-                          ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                          : "border-white/10 bg-white/[0.03] text-neutral-300",
+                        disabled
+                          ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-neutral-600"
+                          : active
+                            ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                            : "border-white/10 bg-white/[0.03] text-neutral-300",
                       ].join(" ")}
                     >
-                      {option.label}
+                      {disabled && option.disabledLabel ? (
+                        <span className="flex flex-col items-center leading-none">
+                          <span className="text-[10px] text-neutral-600">{option.label}</span>
+                          <span className="text-[9px] italic text-neutral-600">{option.disabledLabel}</span>
+                        </span>
+                      ) : (
+                        option.label
+                      )}
                     </button>
                   );
                 })}

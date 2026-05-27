@@ -10,7 +10,14 @@
     "dev:admin": "cd apps/admin && npm run dev",
     "dev:emulators": "firebase emulators:start",
     "seed": "cd packages/shared && npm run seed",
-    "dev:all": "concurrently -n FIREBASE,WEB,ADMIN -c yellow,cyan,magenta \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\"",
-    "dev:reset": "npm run seed && npm run dev:all"
+    "dev:all": "npm run dev:stack",
+    "dev:reset": "npm run dev:stack:reset",
+    "dev:stack": "concurrently -n FIREBASE,WEB,ADMIN -c yellow,cyan,magenta \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\"",
+    "dev:stack:reset": "concurrently -n FIREBASE,WEB,ADMIN,SEED -c yellow,cyan,magenta,green \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\" \"npm run dev:seed:wait\"",
+    "dev:seed:wait": "wait-on tcp:127.0.0.1:8080 && npm run seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "wait-on": "^9.0.5"
   }
 }

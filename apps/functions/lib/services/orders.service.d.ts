@@ -1,7 +1,5 @@
-import type { CreateOrderInput, UpdateOrderStatusInput } from "@amon/shared";
-export declare function handleCreateOrder(tenantId: string, input: CreateOrderInput & {
-    deliveryFee?: number;
-}): Promise<{
+import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
+export declare function handleCreateOrder(tenantId: string, input: CreateOrderInput): Promise<{
     orderId: string;
 }>;
 export declare function handleUpdateOrderStatus(tenantId: string, orderId: string, input: UpdateOrderStatusInput): Promise<void>;

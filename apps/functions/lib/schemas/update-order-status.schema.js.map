@@ -1,1 +1,1 @@
-{"version":3,"file":"update-order-status.schema.js","sourceRoot":"","sources":["../../src/schemas/update-order-status.schema.ts"],"names":[],"mappings":";;;AAAA,yDAAyD;AACzD,+DAA+D;AAC/D,uCAGsB;AAFpB,iHAAA,4BAA4B,OAA2B;AAIzD,kCAAkC;AAClC,uCAIsB;AAHpB,wGAAA,cAAc,OAAkB;AAChC,6GAAA,mBAAmB,OAAA"}
+{"version":3,"file":"update-order-status.schema.js","sourceRoot":"","sources":["../../src/schemas/update-order-status.schema.ts"],"names":[],"mappings":";;;AAAA,+CAGwB;AAFtB,uHAAA,uBAAuB,OAAA;AAIzB,+CAIwB;AAHtB,8GAAA,cAAc,OAAkB;AAChC,mHAAA,mBAAmB,OAAA"}

@@ -78,3 +78,32 @@ Si hay conflicto entre velocidad y consistencia:
 2. preservar Firestore como verdad
 3. reducir complejidad
 4. optimizar ergonomia de desarrollo
+
+## Reglas AMON Shop — Customers y Orders
+
+- No usar nombre/teléfono como búsqueda pública de pedidos.
+- `customerId` debe derivarse de teléfono normalizado.
+- `customerPhoneNormalized` debe persistirse en orders.
+- No introducir Firebase Auth para cliente final sin fase aprobada.
+- No introducir SumUp.
+- Flow será integración futura, no actual.
+- Delivery fee se deriva exclusivamente de `fulfillmentType`:
+  - `delivery: 1500`
+  - `pickup: 0`
+- No confiar en cálculos decorativos de frontend para persistencia final.
+- Backend es fuente de verdad para `totals`.
+
+## Reglas de marcha blanca (TBB)
+
+- El método de pago `card` debe permanecer deshabilitado en storefront y POS hasta integración Flow.
+- Las órdenes `cancelled` no deben sumar a métricas de ventas ni ticket promedio.
+- El POS debe reiniciarse al menos una vez al día para evitar congelamiento de `startOfDay`.
+- No re-seedar en entorno de producción; el seed es solo para bootstrap local/emulador.
+- No agregar writes directos a Firestore desde frontend después de esta fase.
+- Todo cambio funcional debe pasar:
+  ```bash
+  npm --prefix packages/shared run typecheck
+  npm --prefix apps/functions run build
+  ./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit
+  ./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit
+  ```

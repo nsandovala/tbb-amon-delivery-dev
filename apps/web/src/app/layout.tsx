@@ -4,8 +4,8 @@ import { HeoChatbot } from "@/components/ui/heo-chatbot";
 import "./global.css";
 
 export const metadata: Metadata = {
-  title: "TBB AMON Delivery",
-  description: "Plataforma de delivery multi-tenant",
+  title: "AMON Shop",
+  description: "Sistema inteligente de pedidos y operación para negocios locales.",
 };
 
 export default function RootLayout({

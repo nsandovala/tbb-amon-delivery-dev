@@ -25,14 +25,27 @@ async function apiFetch<T>(
     },
   });
 
-  const data = await res.json() as { ok: boolean; data?: T; error?: ApiError["error"] };
+  const raw = await res.text();
+  let data: { ok: boolean; data?: T; error?: ApiError["error"] } | undefined;
 
-  if (!res.ok || !data.ok) {
-    const msg = data.error?.message ?? `HTTP ${res.status}`;
+  if (raw) {
+    try {
+      data = JSON.parse(raw) as { ok: boolean; data?: T; error?: ApiError["error"] };
+    } catch {
+      data = undefined;
+    }
+  }
+
+  if (!res.ok || !data?.ok) {
+    const msg =
+      data?.error?.message ??
+      (process.env.NODE_ENV === "development"
+        ? `HTTP ${res.status} ${res.statusText} for ${url}${raw ? ` :: ${raw.slice(0, 300)}` : ""}`
+        : `HTTP ${res.status}`);
     throw new Error(msg);
   }
 
-  return (data as { ok: true; data: T }).data as T;
+  return (data as { ok: true; data: T }).data;
 }
 
 interface CreateOrderPayload {

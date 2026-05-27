@@ -1,10 +1,16 @@
 import { generateOrderId, createOrder, getOrder, updateOrderStatus } from "../repositories/firestore-orders.repo";
 import { getDb } from "../lib/firebase-admin";
-import type { CreateOrderInput, UpdateOrderStatusInput } from "@amon/shared";
+import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
+import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 
-const DEFAULT_DELIVERY_FEE = 1500;
+const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
+
+/** Single source of truth for delivery fee based on fulfillment type */
+function resolveDeliveryFee(fulfillmentType: "delivery" | "pickup"): number {
+  return fulfillmentType === "delivery" ? DELIVERY_FEE : 0;
+}
 
 type ProcessedItem = {
   productId: string;
@@ -70,7 +76,7 @@ async function calculateTotals(
   const safeDeliveryFee =
     typeof deliveryFee === "number" && deliveryFee >= 0 && deliveryFee <= MAX_DELIVERY_FEE
       ? deliveryFee
-      : DEFAULT_DELIVERY_FEE;
+      : 0;
   const total = subtotal + safeDeliveryFee;
 
   return {
@@ -83,16 +89,22 @@ async function calculateTotals(
 
 export async function handleCreateOrder(
   tenantId: string,
-  input: CreateOrderInput & { deliveryFee?: number }
+  input: CreateOrderInput
 ): Promise<{ orderId: string }> {
   const orderId = generateOrderId(tenantId);
+
+  // Derive delivery fee from fulfillmentType (single source of truth)
+  const fee = resolveDeliveryFee(input.fulfillmentType);
 
   // Calculate totals server-side from DB prices
   const { items: processedItems, subtotal, delivery, total } = await calculateTotals(
     tenantId,
     input.items,
-    input.deliveryFee ?? DEFAULT_DELIVERY_FEE
+    fee
   );
+
+  // Normalize phone for customer identity
+  const normalizedPhone = normalizeChileanPhone(input.customer.phone);
 
   await createOrder(tenantId, orderId, {
     tenantId,
@@ -102,9 +114,19 @@ export async function handleCreateOrder(
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "web",
     totals: { subtotal, delivery, total },
+    ...(normalizedPhone ? { customerId: normalizedPhone, customerPhoneNormalized: normalizedPhone } : {}),
   });
 
-  logger.info("Order created via service", { tenantId, orderId, subtotal, delivery, total });
+  // Upsert customer (non-blocking — order is already persisted)
+  await upsertCustomerFromOrder({
+    tenantId,
+    customer: input.customer,
+    orderTotal: total,
+    paymentMethod: input.paymentMethod ?? "pending",
+    fulfillmentType: input.fulfillmentType,
+  });
+
+  logger.info("Order created via service", { tenantId, orderId, subtotal, delivery, total, customerId: normalizedPhone });
 
   return { orderId };
 }

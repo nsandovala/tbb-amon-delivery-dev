@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import type { CreateOrderInput, OrderStatus } from "@amon/shared";
+import type { CreateOrderInput, OrderStatus } from "../schemas/order.shared";
 export type OrderDoc = admin.firestore.DocumentSnapshot;
 /**
  * Create an order document. Caller provides the orderId.
@@ -13,6 +13,8 @@ export declare function createOrder(tenantId: string, orderId: string, input: Cr
     };
     paymentMethod: string;
     channel: string;
+    customerId?: string;
+    customerPhoneNormalized?: string;
 }): Promise<void>;
 /**
  * Generate a simple auto-id via Firestore.

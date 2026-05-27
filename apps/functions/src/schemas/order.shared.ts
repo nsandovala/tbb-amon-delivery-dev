@@ -1,8 +1,43 @@
 import { z } from "zod";
-import { ORDER_STATUSES } from "../constants/order-status.js";
-import { ORDER_CHANNELS } from "../constants/channels.js";
-import { PAYMENT_METHODS } from "../constants/payment-methods.js";
-import { FULFILLMENT_TYPES } from "../constants/fulfillment-types.js";
+
+export const ORDER_STATUSES = [
+  "queued",
+  "preparing",
+  "ready",
+  "on_the_way",
+  "delivered",
+  "cancelled",
+] as const;
+
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ILLEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  delivered: ["queued", "preparing", "ready", "on_the_way"],
+  cancelled: ["queued", "preparing", "ready", "on_the_way", "delivered"],
+  queued: [],
+  preparing: [],
+  ready: [],
+  on_the_way: [],
+};
+
+const ORDER_CHANNELS = [
+  "web",
+  "whatsapp",
+  "admin_pos",
+  "marketplace",
+] as const;
+
+const PAYMENT_METHODS = [
+  "pending",
+  "cash",
+  "card",
+  "transfer",
+] as const;
+
+const FULFILLMENT_TYPES = [
+  "delivery",
+  "pickup",
+] as const;
 
 const optionalEmailSchema = z.preprocess(
   (value) => {
@@ -13,39 +48,17 @@ const optionalEmailSchema = z.preprocess(
   z.string().email("Email must be valid").optional()
 );
 
-/**
- * Payment method enum from shared constants
- */
 export const paymentMethodSchema = z.enum(PAYMENT_METHODS);
-
-/**
- * Payment status enum
- */
 export const paymentStatusSchema = z.enum([
   "pending",
   "paid",
   "failed",
   "refunded",
 ] as const);
-
-/**
- * Fulfillment type enum from shared constants
- */
 export const fulfillmentTypeSchema = z.enum(FULFILLMENT_TYPES);
-
-/**
- * Order status enum from shared constants
- */
 export const orderStatusSchema = z.enum(ORDER_STATUSES);
-
-/**
- * Order channel enum from shared constants
- */
 export const orderChannelSchema = z.enum(ORDER_CHANNELS);
 
-/**
- * Order item schema - represents a line item in an order
- */
 export const orderItemSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
   productName: z.string().min(1, "Product name is required"),
@@ -55,18 +68,12 @@ export const orderItemSchema = z.object({
   categoryId: z.string().nullable().optional(),
 });
 
-/**
- * Order totals schema
- */
 export const orderTotalsSchema = z.object({
   subtotal: z.number().nonnegative("Subtotal must be non-negative"),
   delivery: z.number().nonnegative("Delivery fee must be non-negative"),
   total: z.number().nonnegative("Total must be non-negative"),
 });
 
-/**
- * Order customer schema
- */
 export const orderCustomerSchema = z.object({
   name: z.string().min(1, "Customer name is required"),
   phone: z.string().min(1, "Customer phone is required"),
@@ -75,9 +82,6 @@ export const orderCustomerSchema = z.object({
   notes: z.string().optional().default(""),
 });
 
-/**
- * Complete order schema for creation/validation
- */
 export const orderSchema = z.object({
   tenantId: z.string().min(1, "Tenant ID is required"),
   status: orderStatusSchema,
@@ -95,10 +99,7 @@ export const orderSchema = z.object({
   updatedAt: z.unknown().optional(),
 });
 
-/**
- * Schema for creating an order - client sends minimal data, server calculates totals
- */
-export const createOrderInputSchema = z.object({
+export const createOrderSchema = z.object({
   tenantId: z.string().min(1).optional(),
   items: z.array(z.object({
     productId: z.string().min(1),
@@ -109,17 +110,11 @@ export const createOrderInputSchema = z.object({
   paymentMethod: paymentMethodSchema.optional().default("pending"),
 });
 
-/**
- * Schema for updating order status
- */
-export const updateOrderStatusInputSchema = z.object({
+export const updateOrderStatusSchema = z.object({
   status: orderStatusSchema,
 });
 
-/**
- * Schema for POS sale creation
- */
-export const createPosSaleInputSchema = z.object({
+export const createPosSaleSchema = z.object({
   tenantId: z.string().min(1).optional(),
   items: z.array(z.object({
     productId: z.string().min(1),
@@ -130,10 +125,6 @@ export const createPosSaleInputSchema = z.object({
   paymentMethod: paymentMethodSchema.optional().default("pending"),
 });
 
-export type Order = z.infer<typeof orderSchema>;
-export type OrderItem = z.infer<typeof orderItemSchema>;
-export type OrderTotals = z.infer<typeof orderTotalsSchema>;
-export type OrderCustomer = z.infer<typeof orderCustomerSchema>;
-export type CreateOrderInput = z.infer<typeof createOrderInputSchema>;
-export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusInputSchema>;
-export type CreatePosSaleInput = z.infer<typeof createPosSaleInputSchema>;
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+export type CreatePosSaleInput = z.infer<typeof createPosSaleSchema>;
