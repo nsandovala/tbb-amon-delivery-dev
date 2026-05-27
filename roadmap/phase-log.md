@@ -1,6 +1,48 @@
 # Phase Log
 
 ## Fase actual
+Home público AMON Shop — Frontend
+
+## 2026-05-27 — Home público AMON Shop
+
+### Módulo
+Home público (`/`) — frontend only.
+
+### Archivos modificados
+- `apps/web/src/app/page.tsx` — reconstruido como AMON Shop Home premium
+- `apps/web/src/app/layout.tsx` — metadata actualizada a AMON Shop
+
+### Decisión
+AMON Shop es la marca y plataforma principal.
+AMON Delivery queda como módulo logístico opcional, no como nombre de marca.
+
+### Rutas relevantes
+- `/` — Home público AMON Shop
+- `/tienda/tbb` — tienda piloto The Best Burger
+- `/pos` — panel operativo
+- `/pedidos` — vista live de pedidos
+
+### Contenido
+- Hero con título AMON Shop, bajada de producto y microcopy geek.
+- CTAs: Explorar tiendas (anchor #stores) y Ir al panel (/pos).
+- Card principal: The Best Burger (Valparaíso, activa, con badges y link a /tienda/tbb).
+- Cards secundarias: Sushi Zen y Forno Nero como Próximamente.
+- Footer con referencia a /pedidos.
+
+### Estética preservada
+- Fondo oscuro `#0B0B0B`, verde AMON `#00FF9C`, cards `#141414`.
+- Sin dependencias nuevas. Sin blanco puro. Responsive mobile/desktop.
+
+### Contratos afectados
+Ninguno. Cambio puramente frontend/UI. No toca backend, Firestore, schemas ni orders/customers.
+
+### Siguiente fase recomendada
+Live Order Tracking sin login mediante `trackingToken` seguro
+(ver `roadmap/sprint-live-order-tracking.md` y `docs/architecture/live-order-tracking-contract.md`).
+
+---
+
+## Fase anterior
 Backend-first stabilization
 
 ## 2026-05-08 — AMON Shop Backend/POS/Storefront Operational Phase
