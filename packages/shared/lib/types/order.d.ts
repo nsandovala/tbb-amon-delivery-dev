@@ -1,5 +1,5 @@
-export type OrderStatus = "queued" | "accepted" | "preparing" | "ready" | "delivered" | "cancelled";
-export type OrderChannel = "web" | "whatsapp" | "manual" | "marketplace";
+export type OrderStatus = "queued" | "preparing" | "ready" | "on_the_way" | "delivered" | "cancelled";
+export type OrderChannel = "web" | "whatsapp" | "admin_pos" | "marketplace";
 export type OrderItemModifier = {
     modifierId: string;
     name: string;
@@ -23,8 +23,13 @@ export type Order = {
     customer: {
         name?: string;
         phone?: string;
+        email?: string;
+        address?: string;
         notes?: string;
     };
+    /** MVP customer identity — normalized phone used as doc ID */
+    customerId?: string;
+    customerPhoneNormalized?: string;
     items: OrderItem[];
     totals: {
         subtotal: number;

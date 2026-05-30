@@ -16,12 +16,6 @@ export default function Home() {
             >
               Tiendas
             </a>
-            <Link
-              href="/pos"
-              className="rounded border border-white/10 px-3 py-1 text-xs text-zinc-400 transition-all hover:border-accent/40 hover:text-accent"
-            >
-              Panel →
-            </Link>
           </nav>
         </div>
       </header>
@@ -62,12 +56,6 @@ export default function Home() {
             >
               Explorar tiendas
             </a>
-            <Link
-              href="/pos"
-              className="rounded border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/10"
-            >
-              Ir al panel
-            </Link>
           </div>
         </div>
       </section>
@@ -152,13 +140,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-white/5 py-8 text-center">
         <p className="text-xs text-zinc-700">
-          AMON Shop · Sistema de pedidos y operación ·{" "}
-          <Link
-            href="/pedidos"
-            className="text-zinc-600 transition-colors hover:text-zinc-400"
-          >
-            /pedidos
-          </Link>
+          AMON Shop · Sistema de pedidos y operación
         </p>
       </footer>
     </main>

@@ -103,8 +103,11 @@ export async function handleCreateOrder(
     fee
   );
 
-  // Normalize phone for customer identity
+  // Normalize phone for customer identity — reject if invalid
   const normalizedPhone = normalizeChileanPhone(input.customer.phone);
+  if (!normalizedPhone) {
+    throw new Error("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
+  }
 
   await createOrder(tenantId, orderId, {
     tenantId,
@@ -114,7 +117,8 @@ export async function handleCreateOrder(
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "web",
     totals: { subtotal, delivery, total },
-    ...(normalizedPhone ? { customerId: normalizedPhone, customerPhoneNormalized: normalizedPhone } : {}),
+    customerId: normalizedPhone,
+    customerPhoneNormalized: normalizedPhone,
   });
 
   // Upsert customer (non-blocking — order is already persisted)
