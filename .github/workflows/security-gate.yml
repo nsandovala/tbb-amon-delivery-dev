@@ -6,10 +6,18 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: security-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   security-gate:
     name: security-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -22,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Bloquea .env reales pero NO .env.example / .env.sample / .env.template
           if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.local$|(^|/)\.env\.[^.]+\.local$|(^|/)\.env\.(production|development|staging|test)$'; then
             echo "::error::.env files must not be tracked. Use .env.example with placeholders."
             exit 1
@@ -35,7 +44,8 @@ jobs:
           BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
           HEAD_SHA="${{ github.sha }}"
 
-          if [ -z "$BASE_SHA" ]; then
+          # Guard: primer push o SHA vacio/cero -> compara contra el commit anterior
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
             BASE_SHA="$(git rev-parse HEAD~1)"
           fi
 
@@ -48,17 +58,22 @@ jobs:
 
           PATTERN='postgres(ql)?://[^[:space:]"'"'"']+|napi_[A-Za-z0-9]{20,}|npg_[A-Za-z0-9]{8,}|-----BEGIN (RSA|OPENSSH|EC|PRIVATE) KEY-----|FIREBASE_PRIVATE_KEY|PRIVATE_KEY='
 
-          echo "$CHANGED_FILES" | while read -r file; do
+          # FIX: here-string en vez de pipe, asi el loop corre en el shell principal
+          # y el fallo se propaga de verdad. Ademas reporta TODOS los archivos, no solo el primero.
+          found=0
+          while IFS= read -r file; do
             [ -f "$file" ] || continue
-
             case "$file" in
-            .github/workflows/security-gate.yml|*package-lock.json|*.png|*.jpg|*.jpeg|*.webp|*.gif|*.svg)
-              continue
-                    ;;
-                   esac  
-
+              .github/workflows/security-gate.yml|*package-lock.json|*.png|*.jpg|*.jpeg|*.webp|*.gif|*.svg)
+                continue
+                ;;
+            esac
             if grep -nE "$PATTERN" "$file"; then
               echo "::error::Potential secret detected in $file"
-              exit 1
+              found=1
             fi
-          done  
+          done <<< "$CHANGED_FILES"
+
+          if [ "$found" -eq 1 ]; then
+            exit 1
+          fi
