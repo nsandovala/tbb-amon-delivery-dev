@@ -1,5 +1,16 @@
-version: 2.1
 
+# .github/dependabot.yml
+#
+# NOTA OPERATIVA:
+# - Los "major" de framework (next, tailwindcss, typescript, firebase*, @types/node, lucide-react)
+#   están IGNORADOS a propósito durante la marcha blanca del piloto.
+# - No desaparecen para siempre: cuando estabilices el piloto, abre un "sprint de upgrade"
+#   y quita temporalmente los ignore correspondientes para subirlos de forma deliberada y testeada.
+# - No se define `labels:` a propósito: así Dependabot aplica/crea su label por defecto
+#   ("dependencies") sin riesgo de error por label inexistente.
+ 
+version: 2
+ 
 updates:
   # Root workspace dependencies
   - package-ecosystem: "npm"
@@ -30,7 +41,7 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-
+ 
   # Web app dependencies
   - package-ecosystem: "npm"
     directory: "/apps/web"
@@ -56,7 +67,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-
+      # lucide-react: el major 0.x -> 1.x ya rompió imports antes (PR #11). Ignorar majors.
+      - dependency-name: "lucide-react"
+        update-types: ["version-update:semver-major"]
+ 
   # Admin app dependencies
   - package-ecosystem: "npm"
     directory: "/apps/admin"
@@ -82,8 +96,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-
-  # Firebase Functions
+      - dependency-name: "lucide-react"
+        update-types: ["version-update:semver-major"]
+ 
+  # Firebase Functions (camino crítico backend-first)
   - package-ecosystem: "npm"
     directory: "/apps/functions"
     schedule:
@@ -106,7 +122,7 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-
+ 
   # Shared package
   - package-ecosystem: "npm"
     directory: "/packages/shared"
@@ -130,7 +146,7 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-
+ 
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
