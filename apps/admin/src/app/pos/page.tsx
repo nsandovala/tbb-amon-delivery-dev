@@ -69,28 +69,6 @@ function getFallbackImage(product: PosProduct) {
   return "/images/stubs/burger-real.jpg";
 }
 
-function normalizeChileanPhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-
-  if (digits.length === 9 && digits.startsWith("9")) {
-    return `+56${digits}`;
-  }
-
-  if (digits.length === 11 && digits.startsWith("569")) {
-    return `+${digits}`;
-  }
-
-  if (digits.length === 12 && digits.startsWith("56")) {
-    return `+${digits}`;
-  }
-
-  return "";
-}
-
-function isValidChileanPhone(raw: string): boolean {
-  return /^\+569\d{8}$/.test(normalizeChileanPhone(raw));
-}
-
 export default function PosPage() {
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -255,7 +233,7 @@ export default function PosPage() {
   const isFormValid =
     cart.length > 0 &&
     customerName.trim().length >= 2 &&
-    phoneOk &&
+    normalizedPhone.length >= 8 &&
     (fulfillmentType === "pickup" || address.trim().length >= 6);
 
   function addToCart(product: PosProduct) {
@@ -324,17 +302,7 @@ export default function PosPage() {
   }
 
   async function handleCreateOrder() {
-    if (isSubmitting) return;
-
-    if (!phoneOk) {
-      setToast({
-        type: "error",
-        message: "Ingresa un WhatsApp chileno válido. Ej: +56912345678",
-      });
-      return;
-    }
-
-    if (!isFormValid) return;
+    if (!isFormValid || isSubmitting) return;
 
     try {
       setIsSubmitting(true);
@@ -625,23 +593,14 @@ return (
               />
             </div>
 
-            <div>
-              <div className="relative">
-                <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-                <input
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="WhatsApp (+569...)"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-                />
-              </div>
-              {customerPhone.trim().length > 0 && !phoneOk ? (
-                <p className="mt-2 text-xs text-red-300">
-                  Ingresa un WhatsApp chileno válido. Ej: +56912345678
-                </p>
-              ) : null}
+            <div className="relative">
+              <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+              <input
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="WhatsApp (+569...)"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+              />
             </div>
 
             <div className="relative">
