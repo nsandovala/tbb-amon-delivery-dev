@@ -8,6 +8,7 @@ import type { AdminOrder } from "../lib/firebase/queries/orders";
 export function useLiveOrders(tenantId: string) {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/orders`);
@@ -22,10 +23,12 @@ export function useLiveOrders(tenantId: string) {
         }));
 
         setOrders(nextOrders);
+        setError(null);
         setLoading(false);
       },
-      (error) => {
-        console.error("Error leyendo pedidos live:", error);
+      (err) => {
+        console.error("Error leyendo pedidos live:", err);
+        setError(err);
         setLoading(false);
       }
     );
@@ -33,5 +36,5 @@ export function useLiveOrders(tenantId: string) {
     return () => unsub();
   }, [tenantId]);
 
-  return { orders, loading };
+  return { orders, loading, error };
 }
