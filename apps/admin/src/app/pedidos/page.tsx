@@ -9,14 +9,19 @@ import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders"
 
 const tenantId = "tbb";
 
-const STATUS_OPTIONS: OrderStatus[] = [
-  "queued",
-  "preparing",
-  "ready",
-  "on_the_way",
-  "delivered",
-  "cancelled",
-];
+const LEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  queued: ["preparing", "cancelled"],
+  preparing: ["ready", "cancelled"],
+  ready: ["on_the_way", "delivered", "cancelled"],
+  on_the_way: ["delivered", "cancelled"],
+  delivered: [],
+  cancelled: [],
+};
+
+function getLegalNextStatuses(current?: OrderStatus): OrderStatus[] {
+  if (!current) return [];
+  return LEGAL_TRANSITIONS[current] ?? [];
+}
 
 type ProductNameMap = Record<string, string>;
 
@@ -182,21 +187,21 @@ function OrderCard({
   selected,
   onSelect,
   onChangeStatus,
-  updatingId,
+  updatingIds,
   nowTs,
 }: {
   order: AdminOrder;
   selected: boolean;
   onSelect: () => void;
   onChangeStatus: (orderId: string, nextStatus: OrderStatus) => Promise<void>;
-  updatingId: string | null;
+  updatingIds: Set<string>;
   nowTs: number;
 }) {
   const itemCount = getItemCount(order);
   const createdAt = toSafeDate(order.createdAt);
   const createdAtTime = formatReadableTime(createdAt);
   const elapsedTime = formatElapsedTime(createdAt, nowTs);
-  const isUpdating = updatingId === order.id;
+  const isUpdating = updatingIds.has(order.id);
 
   return (
     <button
@@ -261,53 +266,58 @@ function OrderCard({
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
-          <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-500">
-            Cambiar estado
-          </p>
+        {getLegalNextStatuses(order.status).length === 0 ? (
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-500">
+              Estado final
+            </p>
+            <p className="text-xs text-neutral-500">
+              Este pedido ya no acepta cambios desde operación normal.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-500">
+              Cambiar estado
+            </p>
 
-          <div className="flex flex-wrap gap-2">
-            {STATUS_OPTIONS.map((status) => {
-              const active = order.status === status;
-              const disabled = isUpdating;
-
-              return (
+            <div className="flex flex-wrap gap-2">
+              {getLegalNextStatuses(order.status).map((nextStatus) => (
                 <button
                   type="button"
-                  key={status}
+                  key={nextStatus}
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (active || disabled) return;
-                    void onChangeStatus(order.id, status);
+                    if (isUpdating) return;
+                    void onChangeStatus(order.id, nextStatus);
                   }}
-                  disabled={disabled || active}
+                  disabled={isUpdating}
                   className={[
                     "rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-all",
-                    active
-                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                    isUpdating
+                      ? "cursor-not-allowed border-white/10 bg-white/[0.03] text-neutral-500 opacity-60"
                       : "border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/20 hover:bg-white/[0.05] hover:text-white",
-                    disabled ? "cursor-not-allowed opacity-60" : "",
                   ].join(" ")}
                 >
-                  {formatStatusLabel(status)}
+                  {formatStatusLabel(nextStatus)}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+            {isUpdating ? (
+              <p className="mt-3 text-xs text-cyan-300">
+                Actualizando...
+              </p>
+            ) : null}
           </div>
-          {isUpdating ? (
-            <p className="mt-3 text-xs text-cyan-300">
-              Actualizando estado en backend y esperando reflejo live en Firestore...
-            </p>
-          ) : null}
-        </div>
+        )}
       </div>
     </button>
   );
 }
 
 export default function OrdersPage() {
-  const { orders, loading } = useLiveOrders(tenantId);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const { orders, loading, error: ordersError } = useLiveOrders(tenantId);
+  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
   const [nowTs, setNowTs] = useState(() => Date.now());
@@ -364,15 +374,38 @@ export default function OrdersPage() {
     const targetOrder = orders.find((order) => order.id === pendingStatusChange.orderId);
     if (!targetOrder || targetOrder.status !== pendingStatusChange.status) return;
 
+    const { orderId: confirmedId, status: confirmedStatus } = pendingStatusChange;
     setFeedback({
       type: "success",
-      message: `Pedido #${pendingStatusChange.orderId.slice(0, 6).toUpperCase()} actualizado a ${formatStatusLabel(
-        pendingStatusChange.status
-      )}.`,
+      message: `Pedido #${confirmedId.slice(0, 6).toUpperCase()} actualizado a ${formatStatusLabel(confirmedStatus)}.`,
     });
     setPendingStatusChange(null);
-    setUpdatingId(null);
+    setUpdatingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(confirmedId);
+      return next;
+    });
   }, [orders, pendingStatusChange]);
+
+  useEffect(() => {
+    if (!pendingStatusChange) return;
+
+    const { orderId: pendingId } = pendingStatusChange;
+    const timeoutId = window.setTimeout(() => {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pendingId);
+        return next;
+      });
+      setPendingStatusChange(null);
+      setFeedback({
+        type: "error",
+        message: "El servidor no confirmó el cambio a tiempo. Recarga si el estado no se actualizó.",
+      });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [pendingStatusChange]);
 
   const selectedOrder = useMemo(() => {
     if (!orders.length) return null;
@@ -433,23 +466,29 @@ export default function OrdersPage() {
     orderId: string,
     nextStatus: OrderStatus
   ) => {
-    if (updatingId) return;
+    if (updatingIds.has(orderId)) return;
 
     try {
-      setUpdatingId(orderId);
+      setUpdatingIds((prev) => new Set([...prev, orderId]));
       setPendingStatusChange({ orderId, status: nextStatus });
       await updateOrderStatusApi(orderId, nextStatus);
     } catch (error) {
       console.error("Error actualizando estado:", error);
       setPendingStatusChange(null);
-      setFeedback({
-        type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "No pudimos actualizar el estado del pedido.",
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
       });
-      setUpdatingId(null);
+
+      const rawMessage = error instanceof Error ? error.message : "";
+      const humanMessage = rawMessage.toLowerCase().includes("failed to fetch")
+        ? "Sin conexión al servidor. Revisa que el emulador o backend esté activo."
+        : rawMessage.toLowerCase().includes("illegal transition")
+        ? "Este cambio de estado no está permitido por el flujo operativo."
+        : rawMessage || "No pudimos actualizar el estado del pedido.";
+
+      setFeedback({ type: "error", message: humanMessage });
     }
   };
 
@@ -538,6 +577,15 @@ export default function OrdersPage() {
           <div className="rounded-2xl border border-white/10 bg-[#101010] p-6 text-neutral-400">
             Cargando pedidos...
           </div>
+        ) : ordersError ? (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] p-6 text-sm text-red-300">
+            <p className="font-semibold">Error cargando pedidos</p>
+            <p className="mt-1 text-red-400/80">
+              {ordersError.message.toLowerCase().includes("failed to fetch")
+                ? "Sin conexión al servidor. Revisa que el emulador o backend esté activo."
+                : ordersError.message}
+            </p>
+          </div>
         ) : orders.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-[#101010] p-10 text-center text-neutral-500">
             No hay pedidos aún.
@@ -552,7 +600,7 @@ export default function OrdersPage() {
                   selected={selectedOrder?.id === order.id}
                   onSelect={() => setSelectedOrderId(order.id)}
                   onChangeStatus={handleChangeStatus}
-                  updatingId={updatingId}
+                  updatingIds={updatingIds}
                   nowTs={nowTs}
                 />
               ))}
