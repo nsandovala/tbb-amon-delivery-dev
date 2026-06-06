@@ -234,7 +234,7 @@ export default function PosPage() {
   const isFormValid =
     cart.length > 0 &&
     customerName.trim().length >= 2 &&
-    normalizedPhone.length >= 8 &&
+    phoneOk &&
     (fulfillmentType === "pickup" || address.trim().length >= 6);
 
   function addToCart(product: PosProduct) {
@@ -304,6 +304,14 @@ export default function PosPage() {
 
   async function handleCreateOrder() {
     if (!isFormValid || isSubmitting) return;
+
+    if (!phoneOk || !normalizedPhone) {
+      setToast({
+        type: "error",
+        message: "Ingresa un WhatsApp chileno válido. Ej: +56912345678",
+      });
+      return;
+    }
 
     try {
       setIsSubmitting(true);
