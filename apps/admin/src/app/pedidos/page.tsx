@@ -18,77 +18,61 @@ const LEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   cancelled: [],
 };
 
+const ACTIVE_ORDER_STATUSES = new Set<OrderStatus>(["queued", "preparing", "ready", "on_the_way"]);
+
 function getLegalNextStatuses(current?: OrderStatus): OrderStatus[] {
   if (!current) return [];
   return LEGAL_TRANSITIONS[current] ?? [];
 }
 
 type ProductNameMap = Record<string, string>;
+type StatusFilter = OrderStatus | "all";
 
 function formatStatusLabel(status?: string) {
   switch (status) {
-    case "queued":
-      return "En cola";
-    case "preparing":
-      return "Preparando";
-    case "ready":
-      return "Listo";
-    case "on_the_way":
-      return "En reparto";
-    case "delivered":
-      return "Entregado";
-    case "cancelled":
-      return "Cancelado";
-    default:
-      return "Sin definir";
+    case "queued":      return "En cola";
+    case "preparing":   return "Preparando";
+    case "ready":       return "Listo";
+    case "on_the_way":  return "En reparto";
+    case "delivered":   return "Entregado";
+    case "cancelled":   return "Cancelado";
+    default:            return "Sin definir";
   }
 }
 
 function getOrderDisplayLabel(order: AdminOrder) {
-  if (order.channel === "admin_pos") return "Pedido POS";
-  if (order.channel === "web") return "Pedido Web";
-  if (order.channel === "whatsapp") return "Pedido WhatsApp";
-  if (order.channel === "marketplace") return "Marketplace";
+  if (order.channel === "admin_pos")    return "Pedido POS";
+  if (order.channel === "web")          return "Pedido Web";
+  if (order.channel === "whatsapp")     return "Pedido WhatsApp";
+  if (order.channel === "marketplace")  return "Marketplace";
   return "Canal sin definir";
 }
 
 function statusStyles(status: string) {
   switch (status) {
-    case "queued":
-      return "bg-yellow-500/12 text-yellow-300 border-yellow-500/20";
-    case "preparing":
-      return "bg-orange-500/12 text-orange-300 border-orange-500/20";
-    case "ready":
-      return "bg-sky-500/12 text-sky-300 border-sky-500/20";
-    case "on_the_way":
-      return "bg-violet-500/12 text-violet-300 border-violet-500/20";
-    case "delivered":
-      return "bg-emerald-500/12 text-emerald-300 border-emerald-500/20";
-    case "cancelled":
-      return "bg-red-500/12 text-red-300 border-red-500/20";
-    default:
-      return "bg-white/5 text-neutral-300 border-white/10";
+    case "queued":      return "bg-yellow-500/12 text-yellow-300 border-yellow-500/20";
+    case "preparing":   return "bg-orange-500/12 text-orange-300 border-orange-500/20";
+    case "ready":       return "bg-sky-500/12 text-sky-300 border-sky-500/20";
+    case "on_the_way":  return "bg-violet-500/12 text-violet-300 border-violet-500/20";
+    case "delivered":   return "bg-emerald-500/12 text-emerald-300 border-emerald-500/20";
+    case "cancelled":   return "bg-red-500/12 text-red-300 border-red-500/20";
+    default:            return "bg-white/5 text-neutral-300 border-white/10";
   }
 }
 
 function formatFulfillment(type?: string) {
   if (type === "delivery") return "Delivery";
-  if (type === "pickup") return "Retiro";
+  if (type === "pickup")   return "Retiro";
   return "Sin definir";
 }
 
 function formatPaymentMethod(method?: string) {
   switch (method) {
-    case "cash":
-      return "Efectivo";
-    case "card":
-      return "Tarjeta";
-    case "transfer":
-      return "Transferencia";
-    case "pending":
-      return "Pendiente";
-    default:
-      return method || "Sin definir";
+    case "cash":      return "Efectivo";
+    case "card":      return "Tarjeta";
+    case "transfer":  return "Transferencia";
+    case "pending":   return "Pendiente";
+    default:          return method || "Sin definir";
   }
 }
 
@@ -132,19 +116,12 @@ function toSafeDate(value?: unknown) {
 
 function formatReadableTime(date: Date | null) {
   if (!date) return "Sin hora";
-  return date.toLocaleTimeString("es-CL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatReadableDate(date: Date | null) {
   if (!date) return "Sin fecha";
-  return date.toLocaleDateString("es-CL", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return date.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function formatElapsedTime(date: Date | null, nowTs: number) {
@@ -167,7 +144,6 @@ function formatElapsedTime(date: Date | null, nowTs: number) {
 
   const days = Math.floor(totalHours / 24);
   const remainingHours = totalHours % 24;
-
   return remainingHours > 0 ? `Hace ${days}d ${remainingHours}h` : `Hace ${days}d`;
 }
 
@@ -202,29 +178,27 @@ function OrderCard({
   const createdAtTime = formatReadableTime(createdAt);
   const elapsedTime = formatElapsedTime(createdAt, nowTs);
   const isUpdating = updatingIds.has(order.id);
+  const legalNextStatuses = getLegalNextStatuses(order.status);
 
   return (
     <button
       onClick={onSelect}
       className={[
-        "w-full rounded-2xl border p-5 text-left transition-all",
+        "w-full rounded-2xl border p-4 text-left transition-all",
         selected
           ? "border-emerald-400/25 bg-emerald-400/[0.06] shadow-[0_0_0_1px_rgba(0,255,156,0.06),0_0_24px_rgba(0,255,156,0.08)]"
           : "border-white/10 bg-[#101010] hover:border-white/16 hover:bg-[#121212]",
       ].join(" ")}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-lg font-bold text-white">
                 #{order.id.slice(0, 6).toUpperCase()}
               </span>
-
               <span
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${statusStyles(
-                  order.status ?? ""
-                )}`}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${statusStyles(order.status ?? "")}`}
               >
                 {formatStatusLabel(order.status)}
               </span>
@@ -266,9 +240,9 @@ function OrderCard({
           </div>
         </div>
 
-        {getLegalNextStatuses(order.status).length === 0 ? (
+        {legalNextStatuses.length === 0 ? (
           <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-500">
+            <p className="mb-1 text-xs uppercase tracking-[0.16em] text-neutral-500">
               Estado final
             </p>
             <p className="text-xs text-neutral-500">
@@ -280,9 +254,8 @@ function OrderCard({
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-500">
               Cambiar estado
             </p>
-
             <div className="flex flex-wrap gap-2">
-              {getLegalNextStatuses(order.status).map((nextStatus) => (
+              {legalNextStatuses.map((nextStatus) => (
                 <button
                   type="button"
                   key={nextStatus}
@@ -304,9 +277,7 @@ function OrderCard({
               ))}
             </div>
             {isUpdating ? (
-              <p className="mt-3 text-xs text-cyan-300">
-                Actualizando...
-              </p>
+              <p className="mt-3 text-xs text-cyan-300">Actualizando...</p>
             ) : null}
           </div>
         )}
@@ -321,50 +292,36 @@ export default function OrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
   const [nowTs, setNowTs] = useState(() => Date.now());
-  const [feedback, setFeedback] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
-  const [pendingStatusChange, setPendingStatusChange] = useState<{
-    orderId: string;
-    status: OrderStatus;
-  } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ orderId: string; status: OrderStatus } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const loadProducts = async () => {
       try {
         const snapshot = await getDocs(collection(db, `tenants/${tenantId}/products`));
         const nextMap: ProductNameMap = {};
-
         snapshot.forEach((doc) => {
           const data = doc.data() as { name?: string };
           nextMap[doc.id] = data.name || prettifyProductId(doc.id);
         });
-
         setProductNames(nextMap);
       } catch (error) {
         console.error("Error cargando nombres de productos:", error);
       }
     };
-
     void loadProducts();
   }, []);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setNowTs(Date.now());
-    }, 60000);
-
+    const intervalId = window.setInterval(() => setNowTs(Date.now()), 60000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
     if (!feedback) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setFeedback(null);
-    }, 3500);
-
+    const timeoutId = window.setTimeout(() => setFeedback(null), 3500);
     return () => window.clearTimeout(timeoutId);
   }, [feedback]);
 
@@ -407,12 +364,6 @@ export default function OrdersPage() {
     return () => window.clearTimeout(timeoutId);
   }, [pendingStatusChange]);
 
-  const selectedOrder = useMemo(() => {
-    if (!orders.length) return null;
-    const found = orders.find((order) => order.id === selectedOrderId);
-    return found ?? orders[0];
-  }, [orders, selectedOrderId]);
-
   const {
     totalVisible,
     queued,
@@ -422,50 +373,54 @@ export default function OrdersPage() {
     delivered,
     cancelled,
   } = useMemo(() => {
-    const metrics = {
-      totalVisible: orders.length,
-      queued: 0,
-      preparing: 0,
-      ready: 0,
-      onTheWay: 0,
-      delivered: 0,
-      cancelled: 0,
-    };
-
+    const metrics = { totalVisible: orders.length, queued: 0, preparing: 0, ready: 0, onTheWay: 0, delivered: 0, cancelled: 0 };
     orders.forEach((order) => {
       switch (order.status) {
-        case "queued":
-          metrics.queued += 1;
-          break;
-        case "preparing":
-          metrics.preparing += 1;
-          break;
-        case "ready":
-          metrics.ready += 1;
-          break;
-        case "on_the_way":
-          metrics.onTheWay += 1;
-          break;
-        case "delivered":
-          metrics.delivered += 1;
-          break;
-        case "cancelled":
-          metrics.cancelled += 1;
-          break;
-        default:
-          break;
+        case "queued":    metrics.queued += 1; break;
+        case "preparing": metrics.preparing += 1; break;
+        case "ready":     metrics.ready += 1; break;
+        case "on_the_way": metrics.onTheWay += 1; break;
+        case "delivered": metrics.delivered += 1; break;
+        case "cancelled": metrics.cancelled += 1; break;
+        default: break;
       }
     });
-
-    return {
-      ...metrics,
-    };
+    return metrics;
   }, [orders]);
 
-  const handleChangeStatus = async (
-    orderId: string,
-    nextStatus: OrderStatus
-  ) => {
+  const displayedOrders = useMemo(() => {
+    let result = orders as AdminOrder[];
+
+    if (statusFilter !== "all") {
+      result = result.filter((o) => o.status === statusFilter);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (o) =>
+          o.id.toLowerCase().includes(q) ||
+          o.customer?.name?.toLowerCase().includes(q) ||
+          o.customer?.phone?.toLowerCase().includes(q)
+      );
+    }
+
+    return [...result].sort((a, b) => {
+      const aActive = ACTIVE_ORDER_STATUSES.has(a.status as OrderStatus);
+      const bActive = ACTIVE_ORDER_STATUSES.has(b.status as OrderStatus);
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return 0;
+    });
+  }, [orders, statusFilter, searchQuery]);
+
+  const selectedOrder = useMemo(() => {
+    if (!displayedOrders.length) return null;
+    const found = displayedOrders.find((order) => order.id === selectedOrderId);
+    return found ?? displayedOrders[0];
+  }, [displayedOrders, selectedOrderId]);
+
+  const handleChangeStatus = async (orderId: string, nextStatus: OrderStatus) => {
     if (updatingIds.has(orderId)) return;
 
     try {
@@ -499,10 +454,22 @@ export default function OrdersPage() {
 
   const selectedOrderCreatedAt = toSafeDate(selectedOrder?.createdAt);
 
+  const filterTabs: { value: StatusFilter; label: string; count: number; color: string }[] = [
+    { value: "all",        label: "Todos",      count: totalVisible, color: "text-white" },
+    { value: "queued",     label: "En cola",    count: queued,       color: "text-yellow-300" },
+    { value: "preparing",  label: "Preparando", count: preparing,    color: "text-orange-300" },
+    { value: "ready",      label: "Listos",     count: ready,        color: "text-sky-300" },
+    { value: "on_the_way", label: "En reparto", count: onTheWay,     color: "text-violet-300" },
+    { value: "delivered",  label: "Entregados", count: delivered,    color: "text-emerald-300" },
+    { value: "cancelled",  label: "Cancelados", count: cancelled,    color: "text-red-300" },
+  ];
+
   return (
     <main className="min-h-screen bg-[#0B0B0B] text-white">
       <div className="mx-auto max-w-[1600px] px-6 py-8">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+
+        {/* Header + métricas */}
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-2 text-xs uppercase tracking-[0.25em] text-emerald-400/80">
               Centro de operación
@@ -517,49 +484,69 @@ export default function OrdersPage() {
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                Total visible
-              </p>
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">Total</p>
               <p className="mt-1 text-2xl font-bold text-white">{totalVisible}</p>
             </div>
-
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                En cola
-              </p>
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">En cola</p>
               <p className="mt-1 text-2xl font-bold text-yellow-300">{queued}</p>
             </div>
-
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                Preparando
-              </p>
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">Preparando</p>
               <p className="mt-1 text-2xl font-bold text-orange-300">{preparing}</p>
             </div>
-
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                Listos
-              </p>
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">Listos</p>
               <p className="mt-1 text-2xl font-bold text-sky-300">{ready}</p>
             </div>
-
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                En reparto
-              </p>
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">En reparto</p>
               <p className="mt-1 text-2xl font-bold text-violet-300">{onTheWay}</p>
             </div>
-
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-                Moneda
-              </p>
-              <p className="mt-1 text-2xl font-bold text-white">CLP</p>
+              <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">Entregados</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-300">{delivered}</p>
             </div>
           </div>
         </div>
 
+        {/* Filtros de estado + búsqueda */}
+        <div className="mb-5 space-y-2">
+          <div className="flex max-w-full gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {filterTabs.map((tab) => {
+              const active = statusFilter === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.value)}
+                  className={[
+                    "shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all",
+                    active
+                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300 shadow-[0_0_0_1px_rgba(0,255,156,0.04),0_0_16px_rgba(0,255,156,0.06)]"
+                      : "border-white/10 bg-white/[0.03] text-neutral-400 hover:border-white/20 hover:text-white",
+                  ].join(" ")}
+                >
+                  {tab.label}
+                  <span className={["tabular-nums font-bold", active ? "text-emerald-300" : tab.color].join(" ")}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-start xl:justify-end">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar cliente, teléfono o ID..."
+              className="w-full max-w-sm rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-emerald-400/30"
+            />
+          </div>
+        </div>
+
+        {/* Feedback banner */}
         {feedback ? (
           <div
             className={[
@@ -573,6 +560,7 @@ export default function OrdersPage() {
           </div>
         ) : null}
 
+        {/* Estados principales */}
         {loading ? (
           <div className="rounded-2xl border border-white/10 bg-[#101010] p-6 text-neutral-400">
             Cargando pedidos...
@@ -590,10 +578,17 @@ export default function OrdersPage() {
           <div className="rounded-2xl border border-dashed border-white/10 bg-[#101010] p-10 text-center text-neutral-500">
             No hay pedidos aún.
           </div>
+        ) : displayedOrders.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-[#101010] px-6 py-8 text-center">
+            <p className="text-sm font-medium text-neutral-400">Sin resultados</p>
+            <p className="mt-1 text-xs text-neutral-500">
+              No hay pedidos para este filtro o búsqueda.
+            </p>
+          </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
-            <section className="grid gap-4">
-              {orders.map((order) => (
+            <section className="grid auto-rows-min gap-3 content-start">
+              {displayedOrders.map((order) => (
                 <OrderCard
                   key={order.id}
                   order={order}
@@ -609,22 +604,27 @@ export default function OrdersPage() {
             <aside className="h-fit rounded-3xl border border-white/10 bg-[#101010] p-5 xl:sticky xl:top-6">
               {selectedOrder ? (
                 <div className="space-y-5">
+
+                  {/* Encabezado detalle */}
                   <div>
                     <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">
                       Detalle
                     </p>
-                    <h2 className="mt-2 text-2xl font-black text-white">
-                      #{selectedOrder.id.slice(0, 6).toUpperCase()}
-                    </h2>
-                    <p className="mt-2 text-sm text-neutral-400">
-                      Estado actual del pedido y resumen operativo.
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <h2 className="text-2xl font-black text-white">
+                        #{selectedOrder.id.slice(0, 6).toUpperCase()}
+                      </h2>
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${statusStyles(selectedOrder.status ?? "")}`}
+                      >
+                        {formatStatusLabel(selectedOrder.status)}
+                      </span>
+                    </div>
                   </div>
 
+                  {/* Cliente */}
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-                      Cliente
-                    </p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Cliente</p>
                     <p className="mt-3 text-base font-semibold text-white">
                       {selectedOrder.customer?.name || "Sin nombre"}
                     </p>
@@ -636,9 +636,15 @@ export default function OrdersPage() {
                         {selectedOrder.customer.email}
                       </p>
                     ) : null}
-                    <p className="mt-3 text-sm text-neutral-400">
-                      {selectedOrder.customer?.address || "Sin dirección"}
-                    </p>
+                    {selectedOrder.customer?.address ? (
+                      <p className="mt-3 text-sm text-neutral-400">
+                        {selectedOrder.customer.address}
+                      </p>
+                    ) : selectedOrder.fulfillmentType === "pickup" ? (
+                      <p className="mt-3 text-xs text-neutral-500">Retiro en tienda</p>
+                    ) : (
+                      <p className="mt-3 text-xs text-neutral-500">Sin dirección</p>
+                    )}
                     {selectedOrder.customer?.notes ? (
                       <p className="mt-3 text-sm text-neutral-500">
                         Nota: {selectedOrder.customer.notes}
@@ -646,10 +652,9 @@ export default function OrdersPage() {
                     ) : null}
                   </div>
 
+                  {/* Operación */}
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-                      Operación
-                    </p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Operación</p>
                     <div className="mt-3 space-y-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Canal</span>
@@ -657,57 +662,34 @@ export default function OrdersPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Entrega</span>
-                        <span className="text-white">
-                          {formatFulfillment(selectedOrder.fulfillmentType)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-neutral-400">Estado</span>
-                        <span
-                          className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${statusStyles(
-                            selectedOrder.status ?? ""
-                          )}`}
-                        >
-                          {formatStatusLabel(selectedOrder.status)}
-                        </span>
+                        <span className="text-white">{formatFulfillment(selectedOrder.fulfillmentType)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Pago</span>
-                        <span className="text-white">
-                          {formatPaymentMethod(selectedOrder.paymentMethod)}
-                        </span>
+                        <span className="text-white">{formatPaymentMethod(selectedOrder.paymentMethod)}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-400">Monto CLP</span>
-                        <span className="text-white">
-                          {formatMoney(selectedOrder.totals?.total)}
-                        </span>
+                        <span className="text-neutral-400">Monto</span>
+                        <span className="font-semibold text-emerald-400">{formatMoney(selectedOrder.totals?.total)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Fecha</span>
-                        <span className="text-white">
-                          {formatReadableDate(selectedOrderCreatedAt)}
-                        </span>
+                        <span className="text-white">{formatReadableDate(selectedOrderCreatedAt)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Hora</span>
-                        <span className="text-white">
-                          {formatReadableTime(selectedOrderCreatedAt)}
-                        </span>
+                        <span className="text-white">{formatReadableTime(selectedOrderCreatedAt)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Antigüedad</span>
-                        <span className="text-white">
-                          {formatElapsedTime(selectedOrderCreatedAt, nowTs)}
-                        </span>
+                        <span className="text-white">{formatElapsedTime(selectedOrderCreatedAt, nowTs)}</span>
                       </div>
                     </div>
                   </div>
 
+                  {/* Items */}
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-                      Items
-                    </p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Items</p>
                     <div className="mt-3 space-y-3">
                       {selectedOrder.items?.map((item, index) => (
                         <div
@@ -730,22 +712,17 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
+                  {/* Totales */}
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-                      Totales CLP
-                    </p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Totales CLP</p>
                     <div className="mt-3 space-y-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Subtotal</span>
-                        <span className="text-white">
-                          {formatMoney(selectedOrder.totals?.subtotal)}
-                        </span>
+                        <span className="text-white">{formatMoney(selectedOrder.totals?.subtotal)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Delivery</span>
-                        <span className="text-white">
-                          {formatMoney(selectedOrder.totals?.delivery)}
-                        </span>
+                        <span className="text-white">{formatMoney(selectedOrder.totals?.delivery)}</span>
                       </div>
                       <div className="mt-3 flex items-center justify-between border-t border-white/6 pt-3">
                         <span className="text-base font-semibold text-white">Total</span>
@@ -755,6 +732,7 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   </div>
+
                 </div>
               ) : null}
             </aside>
