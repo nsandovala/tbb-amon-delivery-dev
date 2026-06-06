@@ -6,10 +6,20 @@ on:
   push:
     branches: [main]
 
+# Cancela runs viejos del mismo PR/branch (no quema minutos en empujes seguidos)
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
+
+# Menos privilegio posible: QA solo necesita leer el repo
+permissions:
+  contents: read
+
 jobs:
   qa:
     name: qa
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -31,4 +41,4 @@ jobs:
         run: npm --workspace apps/admin run build
 
       - name: Build Firebase functions
-        run: npm --workspace apps/functions run build 
+        run: npm --workspace apps/functions run build
