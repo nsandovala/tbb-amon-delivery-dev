@@ -69,7 +69,7 @@ export declare const orderTotalsSchema: z.ZodObject<{
 export declare const orderCustomerSchema: z.ZodObject<{
     name: z.ZodString;
     phone: z.ZodString;
-    email: z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodOptional<z.ZodString>>;
+    email: z.ZodPreprocess<z.ZodOptional<z.ZodString>>;
     address: z.ZodDefault<z.ZodOptional<z.ZodString>>;
     notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
 }, z.core.$strip>;
@@ -125,7 +125,7 @@ export declare const orderSchema: z.ZodObject<{
     customer: z.ZodObject<{
         name: z.ZodString;
         phone: z.ZodString;
-        email: z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodOptional<z.ZodString>>;
+        email: z.ZodPreprocess<z.ZodOptional<z.ZodString>>;
         address: z.ZodDefault<z.ZodOptional<z.ZodString>>;
         notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
     }, z.core.$strip>;
@@ -146,7 +146,7 @@ export declare const createOrderInputSchema: z.ZodObject<{
     customer: z.ZodObject<{
         name: z.ZodString;
         phone: z.ZodString;
-        email: z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodOptional<z.ZodString>>;
+        email: z.ZodPreprocess<z.ZodOptional<z.ZodString>>;
         address: z.ZodDefault<z.ZodOptional<z.ZodString>>;
         notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
     }, z.core.$strip>;
@@ -186,7 +186,7 @@ export declare const createPosSaleInputSchema: z.ZodObject<{
     customer: z.ZodObject<{
         name: z.ZodString;
         phone: z.ZodString;
-        email: z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodOptional<z.ZodString>>;
+        email: z.ZodPreprocess<z.ZodOptional<z.ZodString>>;
         address: z.ZodDefault<z.ZodOptional<z.ZodString>>;
         notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
     }, z.core.$strip>;

@@ -3,6 +3,48 @@
 ## Fase actual
 Preparación marcha blanca controlada — Backend audit + fixes mínimos
 
+## 2026-06-06 — Frontend/API wiring audit: fix UI → Functions Emulator
+
+### Módulo
+Auditoría de conexión UI → Firebase Functions Emulator. Diagnóstico y patch mínimo para `Failed to fetch` en Brave/Chromium.
+
+### Archivos modificados
+- `apps/web/next.config.ts` — agrega `rewrites` proxy same-origin a `/api/functions/:path*` → `http://127.0.0.1:5001/minerp-sentinel/us-central1/:path*`.
+- `apps/admin/next.config.ts` — igual que web.
+- `apps/web/src/lib/api/orders.ts` — `FUNCTIONS_BASE` usa `/api/functions` cuando `NEXT_PUBLIC_USE_EMULATOR=true`.
+- `apps/admin/src/lib/api/orders.ts` — igual que web.
+
+### Decisión
+Los helpers frontend ya construían la URL correcta (`http://127.0.0.1:5001/minerp-sentinel/us-central1/...`) y los `.env.local` estaban bien configurados. El backend pasaba E2E y respondía correctamente a `curl` directo. El problema era que el navegador (Brave/Chromium) bloquea cross-origin requests a `127.0.0.1:5001` desde `localhost:3000/3001` por **Private Network Access (PNA)** / **Brave Shields**, causando `TypeError: Failed to fetch`. Los tests E2E no usan el navegador, por eso pasaban. El fix mínimo sin tocar backend es un proxy same-origin en Next.js (`rewrites` + ruta relativa `/api/functions`), evitando CORS y PNA por completo.
+
+### Validaciones ejecutadas
+```bash
+npm --workspace apps/web run build     # OK
+npm --workspace apps/admin run build   # OK
+npm run test:e2e:api                   # 5 passed
+```
+Pruebas manuales vía proxy:
+- `POST /api/functions/createOrder` → 201
+- `POST /api/functions/createPosSale` → 201
+- `PATCH /api/functions/updateOrderStatus?orderId=...` → 200
+
+### Riesgos reales corregidos
+1. `Failed to fetch` en storefront al confirmar pedido → corregido via proxy same-origin.
+2. `Failed to fetch` en POS al confirmar venta → corregido via proxy same-origin.
+3. `Failed to fetch` en `/pedidos` al cambiar estado → corregido via proxy same-origin.
+
+### Riesgos abiertos aceptados
+- El proxy solo se activa cuando `NEXT_PUBLIC_USE_EMULATOR=true`. En producción (Vercel) se mantiene `NEXT_PUBLIC_FUNCTIONS_BASE_URL` directo.
+- `next.config.ts` rewrites requiere que el servidor Next.js esté corriendo para funcionar (no aplica a static export).
+
+### Contratos afectados
+- Ninguno. No se cambiaron schemas, services backend, ni lógica de negocio.
+
+### Siguiente fase recomendada
+Live Order Tracking sin login mediante `trackingToken` seguro.
+
+---
+
 ## 2026-05-27 — Preparación marcha blanca controlada
 
 ### Módulo
