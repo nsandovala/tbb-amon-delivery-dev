@@ -8,15 +8,18 @@
   "scripts": {
     "dev:web": "cd apps/web && npm run dev",
     "dev:admin": "cd apps/admin && npm run dev",
-    "dev:emulators": "firebase emulators:start",
+    "dev:emulators": "npm --prefix apps/functions run build && firebase emulators:start",
     "seed": "cd packages/shared && npm run seed",
     "dev:all": "npm run dev:stack",
     "dev:reset": "npm run dev:stack:reset",
     "dev:stack": "concurrently -n FIREBASE,WEB,ADMIN -c yellow,cyan,magenta \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\"",
     "dev:stack:reset": "concurrently -n FIREBASE,WEB,ADMIN,SEED -c yellow,cyan,magenta,green \"npm run dev:emulators\" \"npm run dev:web\" \"npm run dev:admin\" \"npm run dev:seed:wait\"",
-    "dev:seed:wait": "wait-on tcp:127.0.0.1:8080 && npm run seed"
+    "dev:seed:wait": "wait-on tcp:127.0.0.1:8080 && npm run seed",    
+    "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:e2e:api": "playwright test e2e/api/orders.contract.spec.ts --config=playwright.config.ts"
   },
-  "devDependencies": {
+  "devDependencies": {  
+    "@playwright/test": "^1.60.0",
     "concurrently": "^9.2.1",
     "wait-on": "^9.0.10"
   }

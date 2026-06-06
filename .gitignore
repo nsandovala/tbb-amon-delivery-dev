@@ -27,3 +27,7 @@ node_modules
 dist/
 build/
 coverage/
+# E2E
+/test-results/
+/playwright-report/
+/node_modules/.playwright
