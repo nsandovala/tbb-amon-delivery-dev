@@ -9,6 +9,7 @@ import {
   where,
   Timestamp,
 } from "firebase/firestore";
+import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
 import { db } from "../../lib/firebase/client";
 import { createPosSaleApi } from "../../lib/api/orders";
 import {
