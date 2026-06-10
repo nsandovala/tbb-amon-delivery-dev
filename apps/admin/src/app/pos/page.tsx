@@ -82,40 +82,35 @@ export default function PosPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">(
-    "pickup"
-  );
+  const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">("pickup");
 
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
     detail?: string;
   } | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<
-    "cash" | "transfer" | "card" | "pending"
-  >("pending");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | "card" | "pending">("pending");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [todayOrders, setTodayOrders] = useState<PosOrder[]>([]);
   const [pendingLiveOrderId, setPendingLiveOrderId] = useState<string | null>(null);
   const [verifiedLiveOrderId, setVerifiedLiveOrderId] = useState<string | null>(null);
+
   const startOfDay = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     return Timestamp.fromDate(now);
   }, []);
+
   const normalizedPhone = normalizeChileanPhone(customerPhone);
   const phoneOk = isValidChileanPhone(customerPhone);
 
   useEffect(() => {
     if (!toast) return;
-
-    const timer = setTimeout(() => {
-      setToast(null);
-    }, 4500);
-
+    const timer = setTimeout(() => setToast(null), 4500);
     return () => clearTimeout(timer);
   }, [toast]);
+
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/products`);
     const q = query(ref, where("isActive", "==", true));
@@ -124,12 +119,8 @@ export default function PosPage() {
       q,
       (snapshot) => {
         const nextProducts: PosProduct[] = snapshot.docs
-          .map((doc) => ({
-            id: doc.id,
-            ...(doc.data() as Omit<PosProduct, "id">),
-          }))
+          .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<PosProduct, "id">) }))
           .sort((a, b) => a.name.localeCompare(b.name));
-
         setProducts(nextProducts);
         setLoadingProducts(false);
       },
@@ -144,11 +135,7 @@ export default function PosPage() {
 
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/orders`);
-    const q = query(
-      ref,
-      where("createdAt", ">=", startOfDay),
-      orderBy("createdAt", "desc")
-    );
+    const q = query(ref, where("createdAt", ">=", startOfDay), orderBy("createdAt", "desc"));
 
     const unsub = onSnapshot(
       q,
@@ -157,7 +144,6 @@ export default function PosPage() {
           id: doc.id,
           ...(doc.data() as Omit<PosOrder, "id">),
         }));
-
         setTodayOrders(nextOrders);
       },
       (error) => {
@@ -170,10 +156,8 @@ export default function PosPage() {
 
   useEffect(() => {
     if (!pendingLiveOrderId) return;
-
     const persistedOrder = todayOrders.find((order) => order.id === pendingLiveOrderId);
     if (!persistedOrder) return;
-
     setVerifiedLiveOrderId(pendingLiveOrderId);
     setPendingLiveOrderId(null);
     setToast({
@@ -185,73 +169,43 @@ export default function PosPage() {
 
   const categories = useMemo(() => {
     const unique = new Map<string, string>();
-
     products.forEach((product) => {
       const raw = product.categoryId || "sin-categoria";
       const label =
         raw === "sin-categoria"
           ? "Sin categoría"
-          : raw
-              .replace(/-/g, " ")
-              .replace(/\b\w/g, (l) => l.toUpperCase());
-
+          : raw.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
       unique.set(raw, label);
     });
-
     return [{ id: "all", label: "Todo" }, ...Array.from(unique.entries()).map(([id, label]) => ({ id, label }))];
   }, [products]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-
     return products.filter((product) => {
-      const matchCategory =
-        activeCategory === "all" || product.categoryId === activeCategory;
-
+      const matchCategory = activeCategory === "all" || product.categoryId === activeCategory;
       const matchSearch =
         q.length === 0 ||
         product.name?.toLowerCase().includes(q) ||
         product.description?.toLowerCase().includes(q);
-
       return matchCategory && matchSearch;
     });
   }, [products, search, activeCategory]);
 
   const subtotal = useMemo(() => {
-    return cart.reduce(
-      (acc, item) => acc + (item.product.price ?? 0) * item.quantity,
-      0
-    );
+    return cart.reduce((acc, item) => acc + (item.product.price ?? 0) * item.quantity, 0);
   }, [cart]);
 
   const delivery = fulfillmentType === "delivery" ? 1500 : 0;
   const total = subtotal + delivery;
 
-  const itemCount = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.quantity, 0);
-  }, [cart]);
+  const itemCount = useMemo(() => cart.reduce((acc, item) => acc + item.quantity, 0), [cart]);
 
   const isFormValid =
     cart.length > 0 &&
     customerName.trim().length >= 2 &&
     phoneOk &&
     (fulfillmentType === "pickup" || address.trim().length >= 6);
-
-  function addToCart(product: PosProduct) {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
-
-      if (existing) {
-        return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-
-      return [...prev, { product, quantity: 1 }];
-    });
-  }
 
   const successfulTodayOrders = useMemo(
     () => todayOrders.filter((o) => o.status !== "cancelled"),
@@ -272,18 +226,25 @@ export default function PosPage() {
     return totalSalesToday / ordersTodayCount;
   }, [totalSalesToday, ordersTodayCount]);
 
+  function addToCart(product: PosProduct) {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+  }
+
   function updateQuantity(productId: string, nextQty: number) {
     if (nextQty <= 0) {
       setCart((prev) => prev.filter((item) => item.product.id !== productId));
       return;
     }
-
     setCart((prev) =>
-      prev.map((item) =>
-        item.product.id === productId
-          ? { ...item, quantity: nextQty }
-          : item
-      )
+      prev.map((item) => item.product.id === productId ? { ...item, quantity: nextQty } : item)
     );
   }
 
@@ -300,16 +261,14 @@ export default function PosPage() {
     setNotes("");
     setFulfillmentType("pickup");
     setPaymentMethod("pending");
+    setVerifiedLiveOrderId(null);
   }
 
   async function handleCreateOrder() {
     if (!isFormValid || isSubmitting) return;
 
     if (!phoneOk || !normalizedPhone) {
-      setToast({
-        type: "error",
-        message: "Ingresa un WhatsApp chileno válido. Ej: +56912345678",
-      });
+      setToast({ type: "error", message: "Ingresa un WhatsApp chileno válido. Ej: +56912345678" });
       return;
     }
 
@@ -318,10 +277,7 @@ export default function PosPage() {
       setPendingLiveOrderId(null);
       setVerifiedLiveOrderId(null);
 
-      const orderItems = cart.map((item) => ({
-        productId: item.product.id,
-        qty: item.quantity,
-      }));
+      const orderItems = cart.map((item) => ({ productId: item.product.id, qty: item.quantity }));
 
       const { orderId } = await createPosSaleApi({
         tenantId,
@@ -355,330 +311,285 @@ export default function PosPage() {
       setIsSubmitting(false);
     }
   }
-return (
-  <main className="min-h-screen bg-[#0B0B0B] text-white">
-    <div className="mx-auto max-w-[1600px] px-6 py-8">
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-xs uppercase tracking-[0.25em] text-emerald-400/80">
-            Centro de venta
-          </p>
-          <h1 className="text-4xl font-black tracking-tight text-white">
-            POS Lite
-          </h1>
-          <p className="mt-2 text-sm text-neutral-400">
-            Venta manual para caja, WhatsApp, mostrador y eventos.
-          </p>
-        </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">
-            Estado
-          </p>
-          <p className="mt-1 text-2xl font-bold text-emerald-300">
-            Operativo
-          </p>
-        </div>
-      </div>
+  const paymentLabels: Record<string, string> = {
+    cash: "Efectivo",
+    transfer: "Transferencia",
+    card: "Tarjeta",
+    pending: "Pendiente",
+  };
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">
-            Ventas hoy
-          </p>
-          <p className="mt-3 text-3xl font-black text-emerald-400">
-            {formatMoney(totalSalesToday)}
-          </p>
-        </div>
+  return (
+    <main className="min-h-screen bg-[#0B0B0B] text-white">
+      <div className={["mx-auto max-w-[1600px] px-4 py-5", cart.length > 0 ? "pb-24 xl:pb-5" : ""].join(" ")}>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">
-            Pedidos hoy
-          </p>
-          <p className="mt-3 text-3xl font-black text-white">
-            {ordersTodayCount}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">
-            Ticket promedio
-          </p>
-          <p className="mt-3 text-3xl font-black text-cyan-300">
-            {formatMoney(averageTicketToday)}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_420px]">
-        <section className="min-w-0 rounded-3xl border border-white/10 bg-[#101010] p-6">
-          <div className="mb-5 flex flex-col gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                Catálogo rápido
-              </p>
-              <h2 className="mt-3 text-2xl font-bold text-white">
-                Venta manual
-              </h2>
-            </div>
-
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar producto..."
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-emerald-400/30"
-              />
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {categories.map((category) => {
-                const active = activeCategory === category.id;
-
-                return (
-                  <button
-                    key={category.id}
-                    onClick={() => setActiveCategory(category.id)}
-                    className={[
-                      "shrink-0 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-all",
-                      active
-                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300 shadow-[0_0_0_1px_rgba(0,255,156,0.04),0_0_16px_rgba(0,255,156,0.06)]"
-                        : "border-white/10 bg-white/[0.03] text-neutral-400 hover:border-white/20 hover:text-white",
-                    ].join(" ")}
-                  >
-                    {category.label}
-                  </button>
-                );
-              })}
-            </div>
+        {/* Header compacto */}
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-400/80">Centro de venta</p>
+            <h1 className="mt-0.5 text-2xl font-black tracking-tight text-white">POS Lite</h1>
+            <p className="mt-1 text-xs text-neutral-400">
+              Venta manual · {itemCount > 0 ? `${itemCount} ${itemCount === 1 ? "item" : "items"} en caja` : "caja vacía"}
+            </p>
           </div>
 
-          {loadingProducts ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center text-neutral-500">
-              Cargando productos...
+          <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-500">Ventas</p>
+              <p className="mt-0.5 text-base font-black text-emerald-400 xl:text-xl">{formatMoney(totalSalesToday)}</p>
             </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-10 text-center text-neutral-500">
-              No encontramos productos con ese filtro.
+            <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-500">Pedidos</p>
+              <p className="mt-0.5 text-base font-black text-white xl:text-xl">{ordersTodayCount}</p>
             </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-              {filteredProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="overflow-hidden rounded-3xl border border-white/10 bg-[#0D0D0D]"
-                >
-                  <div className="aspect-[4/3] overflow-hidden border-b border-white/6 bg-black/20">
-                    <img
-                      src={product.imageUrl || getFallbackImage(product)}
-                      alt={product.name}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-
-                  <div className="p-4">
-                    <p className="line-clamp-1 text-lg font-bold text-white">
-                      {product.name}
-                    </p>
-                    <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm text-neutral-500">
-                      {product.description || "Producto disponible para venta manual."}
-                    </p>
-
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <span className="text-xl font-black text-emerald-400">
-                        {formatMoney(product.price)}
-                      </span>
-
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-300 transition-all hover:border-emerald-400/30 hover:bg-emerald-400/15"
-                      >
-                        Agregar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <aside className="rounded-3xl border border-white/10 bg-[#101010] p-5">
-          <div className="mb-5 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-neutral-500">
-                Resumen
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white">
-                Caja operativa
-              </h3>
-              <p className="mt-2 text-sm text-neutral-400">
-                Carrito POS, cobro rápido y resumen del turno.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <ShoppingCart className="h-5 w-5 text-emerald-300" />
+            <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-500">Ticket</p>
+              <p className="mt-0.5 text-base font-black text-cyan-300 xl:text-xl">{formatMoney(averageTicketToday)}</p>
             </div>
           </div>
+        </div>
 
-          <div className="space-y-3">
-            {cart.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center text-neutral-500">
-                Aún no agregas productos al POS.
+        {/* Layout principal */}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_400px]">
+
+          {/* CATÁLOGO COMPACTO */}
+          <section className="rounded-2xl border border-white/10 bg-[#101010] p-4">
+
+            {/* Búsqueda + categorías */}
+            <div className="mb-3 space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar producto..."
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-emerald-400/30"
+                />
+              </div>
+
+              <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {categories.map((category) => {
+                  const active = activeCategory === category.id;
+                  return (
+                    <button
+                      key={category.id}
+                      onClick={() => setActiveCategory(category.id)}
+                      className={[
+                        "shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all",
+                        active
+                          ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300 shadow-[0_0_0_1px_rgba(0,255,156,0.04),0_0_16px_rgba(0,255,156,0.06)]"
+                          : "border-white/10 bg-white/[0.03] text-neutral-400 hover:border-white/20 hover:text-white",
+                      ].join(" ")}
+                    >
+                      {category.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Grid de productos */}
+            {loadingProducts ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] px-6 py-8 text-center text-sm text-neutral-500">
+                Cargando productos...
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-8 text-center text-sm text-neutral-500">
+                Sin productos para este filtro.
               </div>
             ) : (
-              cart.map((item) => (
-                <div
-                  key={item.product.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
-                >
-                  <div className="flex items-start gap-3">
+              <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+                {filteredProducts.map((product) => {
+                  const cartItem = cart.find((i) => i.product.id === product.id);
+                  return (
+                    <div
+                      key={product.id}
+                      className="flex items-center gap-3 rounded-xl border border-white/8 bg-[#0D0D0D] p-2.5 transition-colors hover:border-white/16"
+                    >
+                      <img
+                        src={product.imageUrl || getFallbackImage(product)}
+                        alt={product.name}
+                        className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold leading-tight text-white">
+                          {product.name}
+                        </p>
+                        {product.description ? (
+                          <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
+                            {product.description}
+                          </p>
+                        ) : null}
+                        <p className="mt-0.5 text-sm font-bold text-emerald-400">
+                          {formatMoney(product.price)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => addToCart(product)}
+                        className={[
+                          "shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-all",
+                          cartItem
+                            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                            : "border-white/10 bg-white/[0.04] text-neutral-300 hover:border-emerald-400/20 hover:bg-emerald-400/[0.04] hover:text-white",
+                        ].join(" ")}
+                      >
+                        {cartItem ? `×${cartItem.quantity}` : "+"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* CAJA OPERATIVA */}
+          <aside id="pos-checkout" className="rounded-2xl border border-white/10 bg-[#101010] p-4">
+
+            {/* Header caja */}
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.22em] text-neutral-500">Resumen</p>
+                <h3 className="mt-0.5 text-lg font-black text-white">Caja operativa</h3>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+                <ShoppingCart className="h-4 w-4 text-emerald-300" />
+              </div>
+            </div>
+
+            {/* Items del carrito */}
+            {cart.length === 0 ? (
+              <div className="mb-4 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-center text-sm text-neutral-500">
+                Agrega productos para iniciar una venta.
+              </div>
+            ) : (
+              <div className="mb-4 space-y-1.5">
+                {cart.map((item) => (
+                  <div
+                    key={item.product.id}
+                    className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5"
+                  >
                     <img
                       src={item.product.imageUrl || getFallbackImage(item.product)}
                       alt={item.product.name}
-                      className="h-16 w-16 rounded-xl object-cover"
+                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
                     />
-
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">
-                        {item.product.name}
-                      </p>
-                      <p className="mt-1 text-xs text-neutral-500">
-                        {formatMoney(item.product.price)} c/u
-                      </p>
-
-                      <div className="mt-3 flex items-center gap-2">
-                        <button
-                          onClick={() =>
-                            updateQuantity(item.product.id, item.quantity - 1)
-                          }
-                          className="rounded-xl border border-white/10 bg-white/[0.03] p-2 text-neutral-300 hover:text-white"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-
-                        <span className="min-w-[28px] text-center text-sm font-bold text-white">
-                          {item.quantity}
-                        </span>
-
-                        <button
-                          onClick={() =>
-                            updateQuantity(item.product.id, item.quantity + 1)
-                          }
-                          className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-2 text-emerald-300"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      <p className="truncate text-sm font-semibold text-white">{item.product.name}</p>
+                      <p className="text-xs text-neutral-500">{formatMoney(item.product.price)} c/u</p>
                     </div>
-
-                    <div className="text-right">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                        className="rounded-lg border border-white/10 bg-white/[0.03] p-1.5 text-neutral-300 hover:text-white"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </button>
+                      <span className="min-w-[22px] text-center text-sm font-bold text-white">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                        className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-1.5 text-emerald-300"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </button>
                       <button
                         onClick={() => removeFromCart(item.product.id)}
-                        className="mb-2 text-neutral-500 transition-colors hover:text-red-400"
+                        className="ml-0.5 text-neutral-500 transition-colors hover:text-red-400"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                      <p className="text-sm font-bold text-emerald-400">
-                        {formatMoney(item.product.price * item.quantity)}
-                      </p>
                     </div>
+                    <p className="w-14 shrink-0 text-right text-sm font-bold text-emerald-400">
+                      {formatMoney(item.product.price * item.quantity)}
+                    </p>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
-          </div>
 
-          <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="relative">
-              <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-              <input
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Nombre completo"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-              />
-            </div>
+            {/* Formulario */}
+            <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="relative">
+                <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Nombre completo"
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                />
+              </div>
 
-            <div className="relative">
-              <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-              <input
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="WhatsApp (+569...)"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-              />
-            </div>
+              <div className="relative">
+                <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                <input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="WhatsApp (+569...)"
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                />
+              </div>
 
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-              <input
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                placeholder="Email (opcional)"
-                inputMode="email"
-                autoComplete="email"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-              />
-            </div>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                <input
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder="Email (opcional)"
+                  inputMode="email"
+                  autoComplete="email"
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                />
+              </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setFulfillmentType("delivery")}
-                className={[
-                  "flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
-                  fulfillmentType === "delivery"
-                    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                    : "border-white/10 bg-white/[0.03] text-neutral-300",
-                ].join(" ")}
-              >
-                <Bike className="h-4 w-4" />
-                Delivery
-              </button>
+              {/* Fulfillment */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => setFulfillmentType("delivery")}
+                  className={[
+                    "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
+                    fulfillmentType === "delivery"
+                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                      : "border-white/10 bg-white/[0.03] text-neutral-300",
+                  ].join(" ")}
+                >
+                  <Bike className="h-3.5 w-3.5" />
+                  Delivery
+                </button>
+                <button
+                  onClick={() => setFulfillmentType("pickup")}
+                  className={[
+                    "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
+                    fulfillmentType === "pickup"
+                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                      : "border-white/10 bg-white/[0.03] text-neutral-300",
+                  ].join(" ")}
+                >
+                  <Store className="h-3.5 w-3.5" />
+                  Retiro
+                </button>
+              </div>
 
-              <button
-                onClick={() => setFulfillmentType("pickup")}
-                className={[
-                  "flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
-                  fulfillmentType === "pickup"
-                    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                    : "border-white/10 bg-white/[0.03] text-neutral-300",
-                ].join(" ")}
-              >
-                <Store className="h-4 w-4" />
-                Retiro
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">
-                Método de pago
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: "cash", label: "Efectivo", enabled: true },
-                  { id: "transfer", label: "Transferencia", enabled: true },
-                  { id: "card", label: "Tarjeta", enabled: false, disabledLabel: "Próximamente" },
-                  { id: "pending", label: "Pendiente", enabled: true },
-                ].map((option) => {
+              {/* Método de pago */}
+              <div className="grid grid-cols-2 gap-1.5">
+                {(
+                  [
+                    { id: "cash",     label: "Efectivo",      enabled: true },
+                    { id: "transfer", label: "Transferencia", enabled: true },
+                    { id: "card",     label: "Tarjeta",       enabled: false, disabledLabel: "Próximamente" },
+                    { id: "pending",  label: "Pendiente",     enabled: true },
+                  ] as { id: string; label: string; enabled: boolean; disabledLabel?: string }[]
+                ).map((option) => {
                   const active = paymentMethod === option.id;
                   const disabled = !option.enabled;
-
                   return (
                     <button
                       key={option.id}
                       type="button"
                       disabled={disabled}
-                      onClick={() =>
-                        setPaymentMethod(
-                          option.id as "cash" | "transfer" | "card" | "pending"
-                        )
-                      }
+                      onClick={() => setPaymentMethod(option.id as "cash" | "transfer" | "card" | "pending")}
                       className={[
-                        "rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
+                        "rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
                         disabled
                           ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-neutral-600"
                           : active
@@ -691,136 +602,157 @@ return (
                           <span className="text-[10px] text-neutral-600">{option.label}</span>
                           <span className="text-[9px] italic text-neutral-600">{option.disabledLabel}</span>
                         </span>
-                      ) : (
-                        option.label
-                      )}
+                      ) : option.label}
                     </button>
                   );
                 })}
               </div>
-            </div>
 
-            {fulfillmentType === "delivery" ? (
+              {fulfillmentType === "delivery" ? (
+                <div className="relative">
+                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                  <input
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Dirección de entrega"
+                    className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                  />
+                </div>
+              ) : null}
+
               <div className="relative">
-                <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-                <input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Dirección de entrega"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                <MessageSquare className="pointer-events-none absolute left-3 top-3 h-3.5 w-3.5 text-neutral-500" />
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Notas del pedido"
+                  rows={2}
+                  className="w-full resize-none rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
                 />
               </div>
-            ) : null}
+            </div>
 
-            <div className="relative">
-              <MessageSquare className="pointer-events-none absolute left-4 top-4 h-4 w-4 text-neutral-500" />
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notas del pedido"
-                rows={3}
-                className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-              />
+            {/* Totales */}
+            <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between text-neutral-400">
+                  <span>Subtotal</span>
+                  <span>{formatMoney(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between text-neutral-400">
+                  <span>{fulfillmentType === "delivery" ? "Delivery" : "Retiro"}</span>
+                  <span>{formatMoney(delivery)}</span>
+                </div>
+                <div className="flex items-center justify-between text-neutral-400">
+                  <span>Pago</span>
+                  <span>{paymentLabels[paymentMethod]}</span>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
+                <span className="text-sm font-semibold text-white">Total</span>
+                <span
+                  className={[
+                    "text-2xl font-black",
+                    cart.length > 0 ? "text-emerald-400" : "text-neutral-600",
+                  ].join(" ")}
+                >
+                  {formatMoney(total)}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center justify-between text-sm text-neutral-400">
-              <span>Productos</span>
-              <span>{itemCount}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-sm text-neutral-400">
-              <span>Subtotal</span>
-              <span>{formatMoney(subtotal)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-sm text-neutral-400">
-              <span>{fulfillmentType === "delivery" ? "Delivery" : "Retiro"}</span>
-              <span>{formatMoney(delivery)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-sm text-neutral-400">
-              <span>Pago</span>
-              <span>
-                {{
-                  cash: "Efectivo",
-                  transfer: "Transferencia",
-                  card: "Tarjeta",
-                  pending: "Pendiente",
-                }[paymentMethod]}
-              </span>
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
-              <span className="text-lg font-semibold text-white">Total</span>
-              <span className="text-3xl font-black text-emerald-400">
-                {formatMoney(total)}
-              </span>
-            </div>
-          </div>
+            {/* Acciones */}
+            <div className="mt-3 grid gap-2">
+              <button
+                onClick={() => void handleCreateOrder()}
+                disabled={!isFormValid || isSubmitting}
+                className={[
+                  "flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-black uppercase tracking-[0.1em] transition-all",
+                  !isFormValid || isSubmitting
+                    ? "cursor-not-allowed bg-white/[0.06] text-neutral-500"
+                    : "bg-emerald-400 text-black shadow-[0_0_18px_rgba(0,255,156,0.22)] hover:bg-emerald-300",
+                ].join(" ")}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creando pedido...
+                  </>
+                ) : (
+                  `Confirmar venta${cart.length > 0 ? ` · ${formatMoney(total)}` : ""}`
+                )}
+              </button>
 
-          <div className="mt-5 grid gap-3">
-            <button
-              onClick={() => void handleCreateOrder()}
-              disabled={!isFormValid || isSubmitting}
-              className={[
-                "flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-black uppercase tracking-[0.12em] transition-all",
-                !isFormValid || isSubmitting
-                  ? "cursor-not-allowed bg-white/8 text-neutral-500"
-                  : "bg-emerald-400 text-black shadow-[0_0_18px_rgba(0,255,156,0.22)] hover:bg-emerald-300",
-              ].join(" ")}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creando pedido...
-                </>
-              ) : (
-                "Confirmar venta"
-              )}
-            </button>
+              <button
+                onClick={clearPos}
+                disabled={isSubmitting}
+                className="rounded-xl border border-white/10 bg-white/[0.03] py-2.5 text-xs font-semibold text-neutral-300 transition-all hover:border-white/20 hover:text-white"
+              >
+                Nueva venta
+              </button>
+            </div>
 
-            <button
-              onClick={clearPos}
-              disabled={isSubmitting}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-sm font-semibold text-neutral-300 transition-all hover:border-white/20 hover:text-white"
-            >
-              Limpiar POS
-            </button>
-
+            {/* Estados live */}
             {pendingLiveOrderId ? (
-              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                Esperando que la venta #{pendingLiveOrderId.slice(0, 6).toUpperCase()} aparezca en /pedidos.
+              <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2.5 text-sm text-cyan-100">
+                Esperando #{pendingLiveOrderId.slice(0, 6).toUpperCase()} en /pedidos...
               </div>
             ) : null}
 
             {verifiedLiveOrderId ? (
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-                Venta #{verifiedLiveOrderId.slice(0, 6).toUpperCase()} confirmada en Firestore y visible para operación.
+              <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-sm text-emerald-100">
+                Venta #{verifiedLiveOrderId.slice(0, 6).toUpperCase()} confirmada y visible para operación.
               </div>
             ) : null}
+          </aside>
+        </div>
+      </div>
 
-            {toast ? (
-              <div className="pointer-events-none fixed right-6 top-6 z-[100]">
-                <div
-                  className={[
-                    "min-w-[280px] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-sm",
-                    toast.type === "success"
-                      ? "border-emerald-400/20 bg-[#07150f]/95 text-emerald-200"
-                      : "border-red-400/20 bg-[#1a0b0b]/95 text-red-200",
-                  ].join(" ")}
-                >
-                  <p className="text-sm font-semibold">
-                    {toast.type === "success" ? "Venta registrada" : "Error operativo"}
-                  </p>
-                  <p className="mt-1 text-sm opacity-90">{toast.message}</p>
-                  {toast.detail ? (
-                    <p className="mt-1 text-xs opacity-75">{toast.detail}</p>
-                  ) : null}
-                </div>
+      {/* Barra inferior sticky — mobile only, cart con items */}
+      {cart.length > 0 ? (
+        <div className="fixed bottom-0 left-0 right-0 z-50 xl:hidden">
+          <div className="border-t border-white/10 bg-[#0B0B0B]/95 px-4 py-3 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-neutral-500">Caja</p>
+                <p className="truncate text-sm font-bold text-white">
+                  {itemCount} {itemCount === 1 ? "item" : "items"} · {formatMoney(total)}
+                </p>
               </div>
+              <button
+                onClick={() => {
+                  document.getElementById("pos-checkout")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="shrink-0 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition-all hover:bg-emerald-400/15"
+              >
+                Ver caja
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Toast global */}
+      {toast ? (
+        <div className="pointer-events-none fixed right-6 top-6 z-[100]">
+          <div
+            className={[
+              "min-w-[280px] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-sm",
+              toast.type === "success"
+                ? "border-emerald-400/20 bg-[#07150f]/95 text-emerald-200"
+                : "border-red-400/20 bg-[#1a0b0b]/95 text-red-200",
+            ].join(" ")}
+          >
+            <p className="text-sm font-semibold">
+              {toast.type === "success" ? "Venta registrada" : "Error operativo"}
+            </p>
+            <p className="mt-1 text-sm opacity-90">{toast.message}</p>
+            {toast.detail ? (
+              <p className="mt-1 text-xs opacity-75">{toast.detail}</p>
             ) : null}
           </div>
-        </aside>
-      </div>
-    </div>
-  </main>
-);
+        </div>
+      ) : null}
+    </main>
+  );
 }
