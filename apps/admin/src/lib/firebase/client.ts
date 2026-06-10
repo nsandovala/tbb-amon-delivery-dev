@@ -4,6 +4,11 @@ import {
   getFirestore,
   type Firestore,
 } from "firebase/firestore";
+import {
+  connectAuthEmulator,
+  getAuth,
+  type Auth,
+} from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "dev",
@@ -15,6 +20,8 @@ const globalForFirebase = globalThis as typeof globalThis & {
   __admin_firebase_app__?: FirebaseApp;
   __admin_firestore_db__?: Firestore;
   __admin_firestore_emulator_connected__?: boolean;
+  __admin_auth__?: Auth;
+  __admin_auth_emulator_connected__?: boolean;
 };
 
 function getFirebaseAppInstance(): FirebaseApp {
@@ -61,4 +68,31 @@ function getFirestoreInstance(): Firestore {
   return firestore;
 }
 
+function getAuthInstance(): Auth {
+  if (globalForFirebase.__admin_auth__) {
+    return globalForFirebase.__admin_auth__;
+  }
+
+  const auth = getAuth(getFirebaseAppInstance());
+
+  const useEmulator = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
+
+  if (
+    typeof window !== "undefined" &&
+    useEmulator &&
+    !globalForFirebase.__admin_auth_emulator_connected__
+  ) {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", {
+      disableWarnings: true,
+    });
+    globalForFirebase.__admin_auth_emulator_connected__ = true;
+
+    console.log("[admin/firebase] Auth emulator connected at 127.0.0.1:9099");
+  }
+
+  globalForFirebase.__admin_auth__ = auth;
+  return auth;
+}
+
 export const db = getFirestoreInstance();
+export const auth = getAuthInstance();

@@ -1,7 +1,6 @@
 "use client";
 
 import "./globals.css";
-import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -21,11 +20,15 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const isLogin = pathname === "/login";
 
   return (
     <html lang="es">
       <body className="min-h-screen bg-[#0B0B0B] text-white antialiased">
         <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(0,255,156,0.07),transparent_32%),#0B0B0B]">
+          {isLogin ? (
+            children
+          ) : (
           <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
             <aside className="border-b border-white/6 bg-[#0D0D0D]/92 backdrop-blur-xl lg:border-b-0 lg:border-r">
               <div className="flex h-full flex-col px-5 py-6">
@@ -78,6 +81,7 @@ export default function RootLayout({
 
             <section className="min-w-0">{children}</section>
           </div>
+          )}
         </div>
       </body>
     </html>
