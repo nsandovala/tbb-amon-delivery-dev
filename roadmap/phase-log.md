@@ -3,6 +3,37 @@
 ## Fase actual
 Preparación marcha blanca controlada — Backend audit + fixes mínimos
 
+## 2026-06-11 — Catálogo TBB sincronizado con menú de marcha blanca
+
+### Módulo
+Seed de catálogo TBB (`packages/shared/src/data/tbb`) para storefront y POS.
+
+### Archivos modificados
+- `packages/shared/src/data/tbb/products.ts` — sincroniza productos, combos, promociones y precios con el menú final de marcha blanca.
+- `packages/shared/src/data/tbb/categories.ts` — agrega categoría de combos y renombra categorías visibles manteniendo IDs operativos.
+
+### Decisión
+La fuente comercial final de TBB debe quedar en el seed de Firestore, porque storefront y POS leen productos desde `tenants/tbb/products`. No se tocó lógica de Functions, Admin, Web, reglas ni estilos.
+
+### Contratos afectados
+- Catálogo seedado de productos y categorías para `tenants/tbb/products` y `tenants/tbb/categories`.
+- Sin cambios en contrato de orders, customers, estados, delivery fee ni reglas.
+
+### Validaciones ejecutadas
+```bash
+npm --prefix packages/shared run build  # OK
+npm run seed                            # OK contra emulator
+npm run test:e2e:api                    # 7 passed
+node tools/test-rules-anon.mjs          # 4/4
+```
+
+### Riesgos restantes
+- `packages/shared/src/data/tbb/modifiers.ts` mantiene `papas-kaioken-addon` en 1500; no se modificó porque esta fase se acotó a `products.ts` y `categories.ts`.
+- Los pedidos demo en `packages/shared/src/data/tbb/orders.ts` mantienen precios históricos; no afectan el cálculo backend de pedidos nuevos.
+
+### Siguiente paso
+Validación manual de Nelson en `/tienda/tbb`, `/pos` y `/pedidos` tras seed local.
+
 ## 2026-06-06 — Frontend/API wiring audit: fix UI → Functions Emulator
 
 ### Módulo
