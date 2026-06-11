@@ -107,5 +107,11 @@ await assert(
   true
 );
 
-console.log(`\n${passed}/3 aserciones pasaron.`);
+// 4. Public read of modifierGroups must succeed (catalog, no PII)
+await assert(
+  "Lectura pública de tenants/tbb/modifierGroups",
+  () => getDocs(collection(db, "tenants/tbb/modifierGroups"))
+);
+
+console.log(`\n${passed}/4 aserciones pasaron.`);
 process.exit(failed > 0 ? 1 : 0);
