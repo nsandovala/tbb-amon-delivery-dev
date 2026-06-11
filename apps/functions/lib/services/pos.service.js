@@ -54,7 +54,7 @@ async function calculateTotals(tenantId, items, fulfillmentType) {
 async function handleCreatePosSale(tenantId, input) {
     const orderId = (0, firestore_orders_repo_1.generateOrderId)(tenantId);
     // Calculate totals server-side from DB prices
-    const resolvedFulfillment = input.fulfillmentType ?? "pickup";
+    const resolvedFulfillment = input.fulfillmentType;
     const { items: processedItems, subtotal, delivery, total } = await calculateTotals(tenantId, input.items, resolvedFulfillment);
     // Normalize phone for customer identity — reject if invalid
     const normalizedPhone = (0, customers_service_1.normalizeChileanPhone)(input.customer.phone);
@@ -65,7 +65,7 @@ async function handleCreatePosSale(tenantId, input) {
         tenantId,
         items: processedItems,
         customer: input.customer,
-        fulfillmentType: input.fulfillmentType ?? "pickup",
+        fulfillmentType: input.fulfillmentType,
         paymentMethod: input.paymentMethod ?? "pending",
         channel: "admin_pos",
         totals: { subtotal, delivery, total },

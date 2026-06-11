@@ -63,6 +63,47 @@ test.describe("Orders API contract emulator", () => {
     expect(body.data.tenantId).toBe(TENANT);
   });
 
+  test("createPosSale delivery cobra fee y persiste en getOrder", async ({ request }) => {
+    const res = await request.post("createPosSale", {
+      data: { ...validPosSale, fulfillmentType: "delivery" },
+    });
+    expect(res.status(), await res.text()).toBe(201);
+
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    const orderId: string = body.data.orderId;
+    expect(orderId).toBeTruthy();
+
+    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`);
+    expect(get.status(), await get.text()).toBe(200);
+
+    const found = await get.json();
+    expect(found.data.fulfillmentType).toBe("delivery");
+    expect(found.data.channel).toBe("admin_pos");
+    expect(found.data.totals.delivery).toBe(1500);
+    expect(found.data.totals.total).toBe(found.data.totals.subtotal + 1500);
+  });
+
+  test("createPosSale sin fulfillmentType persiste pickup y delivery cero", async ({ request }) => {
+    const { fulfillmentType: _, ...posSaleWithoutFulfillment } = validPosSale;
+    const res = await request.post("createPosSale", { data: posSaleWithoutFulfillment });
+    expect(res.status(), await res.text()).toBe(201);
+
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    const orderId: string = body.data.orderId;
+    expect(orderId).toBeTruthy();
+
+    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`);
+    expect(get.status(), await get.text()).toBe(200);
+
+    const found = await get.json();
+    expect(found.data.fulfillmentType).toBe("pickup");
+    expect(found.data.channel).toBe("admin_pos");
+    expect(found.data.totals.delivery).toBe(0);
+    expect(found.data.totals.total).toBe(found.data.totals.subtotal);
+  });
+
   test("createOrder con items vacíos retorna 400", async ({ request }) => {
     const res = await request.post("createOrder", {
       data: { ...validOrder, items: [] },
