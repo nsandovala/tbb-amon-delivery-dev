@@ -1,8 +1,10 @@
 export const TBB_ORDERS = [
     {
-        id: "order-001",
+        id: "DEMO01",
         status: "preparing",
         channel: "web",
+        fulfillmentType: "delivery",
+        paymentMethod: "pending",
         customer: { name: "Cliente Demo", phone: "+56900000000" },
         items: [
             {
@@ -24,16 +26,17 @@ export const TBB_ORDERS = [
         ],
         totals: {
             subtotal: 9490,
-            deliveryFee: 0,
+            delivery: 1500,
             discount: 0,
-            total: 9490,
+            total: 10990,
         },
-        ui: { source: "storefront" },
     },
     {
-        id: "order-002",
+        id: "DEMO02",
         status: "queued",
-        channel: "web",
+        channel: "admin_pos",
+        fulfillmentType: "pickup",
+        paymentMethod: "cash",
         customer: { name: "Cliente Demo 2", phone: "+56900000001" },
         items: [
             {
@@ -46,10 +49,9 @@ export const TBB_ORDERS = [
         ],
         totals: {
             subtotal: 14980,
-            deliveryFee: 0,
+            delivery: 0,
             discount: 0,
             total: 14980,
         },
-        ui: { source: "storefront" },
     },
 ];
