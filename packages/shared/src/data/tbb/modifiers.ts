@@ -14,7 +14,7 @@ export const TBB_MODIFIERS = [
   {
     id: "papas-kaioken-addon",
     name: "Papas Kaioken",
-    priceDelta: 1500,
+    priceDelta: 1600,
     isActive: true,
     description: "¿La quieres acompañada o huérfana?",
   },
