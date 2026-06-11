@@ -34,3 +34,39 @@ rules:
         - edge case
         - smoke
     use: qa
+
+  - when:
+      contains:
+        - incident
+        - bug
+        - root cause
+        - postmortem
+    use: qa
+    reference: agents/incident-memory.yaml
+
+  - when:
+      contains:
+        - release
+        - marcha blanca
+        - production
+        - deploy
+    use: architect
+    reference: agents/release-checklist.yaml
+
+  - when:
+      contains:
+        - product context
+        - business model
+        - tenant
+        - TBB
+    use: architect
+    reference: agents/product-context.yaml
+
+  - when:
+      contains:
+        - architecture map
+        - flujo crítico
+        - schema
+        - data flow
+    use: architect
+    reference: agents/architecture-map.md

@@ -42,10 +42,18 @@ context_references:
   - agents: agents/registry.yaml
   - agents: agents/routing-rules.yaml
   - agents: agents/sprint-memory.yaml
-  - agents: agents/backend.yaml
-  - agents: agents/frontend.yaml
-  - agents: agents/qa.yaml
-  - agents: agents/architect.yaml
+  - agents: agents/product-context.yaml
+  - agents: agents/incident-memory.yaml
+  - agents: agents/release-checklist.yaml
+  - agents: agents/architecture-map.md
+  - agents: agents/backend/AGENT.md
+  - agents: agents/backend/SKILLS.md
+  - agents: agents/frontend/AGENT.md
+  - agents: agents/frontend/SKILLS.md
+  - agents: agents/qa/AGENT.md
+  - agents: agents/qa/SKILLS.md
+  - agents: agents/architect/AGENT.md
+  - agents: agents/architect/SKILLS.md
   - playbooks: playbooks/repo-rules.md
   - playbooks: playbooks/backend-first.md
   - playbooks: playbooks/debugging-checklist.md

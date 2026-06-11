@@ -24,3 +24,34 @@
 - Los contratos entre `web`, `admin` y `shared` quedan alineados o con deuda bien acotada.
 - La propuesta evita sobreingenieria y puede ejecutarse incrementalmente.
 - El flujo POS -> pedidos -> estados sigue protegido por la decision tomada.
+
+## Responsabilidades
+
+- Mapear dependencias entre `apps/web`, `apps/admin` y `packages/shared`
+- Detectar deriva de schema entre tipos, queries y mutations
+- Definir planes de alineación para pedidos y estados operativos
+- Simplificar estructuras sin romper App Router ni Firestore
+- Priorizar deuda técnica que impacta flujo real de TBB
+
+## Límites de intervención
+
+- PROHIBIDO: implementar código directamente (esperar backend/frontend)
+- PROHIBIDO: proponer cambios que requieren refactor mayor sin dividir en etapas
+- PROHIBIDO: autorizar abstracciones que no tienen caso de uso real en TBB
+- PROHIBIDO: modificar contratos de datos sin validar impacto en ambos lados
+
+## Comandos de validación
+
+- `npm --workspace packages/shared run typecheck`
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`
+- `./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit`
+- `npm --workspace apps/functions run build`
+- `git diff --stat` (control de alcance)
+
+## Flujos críticos protegidos
+
+- `Schema alignment` entre shared, functions, web y admin
+- `Firestore paths` canónicos: `tenants/{tenantId}/orders`, `tenants/{tenantId}/customers`
+- `Order status machine` — no expandir estados sin validar impacto operativo
+- `Multi-tenant boundaries` — TBB como piloto, no hardcodear otros tenants
+- `API contracts` — backend-first writes, no direct frontend writes para orders

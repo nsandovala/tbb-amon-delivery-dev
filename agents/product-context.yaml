@@ -1,0 +1,38 @@
+product: AMON Delivery
+model: pickup-first food delivery platform
+tenant_model: multi-tenant
+  path: tenants/{tenantId}/...
+  pilot: tbb
+  currency: CLP
+  city: Valparaíso
+
+capabilities:
+  - pickup
+  - delivery
+  - assistant (order support)
+  - addons (modifiers)
+  - reviews (future)
+
+delivery:
+  fee_rule: fixed by fulfillmentType
+    pickup: 0
+    delivery: 1500
+  partner_uber_direct: pass-through (future)
+
+channels:
+  - web (storefront)
+  - admin_pos (POS dashboard)
+  - whatsapp (bot, future bridge)
+  - marketplace (future)
+
+payment_methods:
+  current:
+    - cash
+    - transfer
+    - card (disabled, "Próximamente")
+  future:
+    - Flow (online card payments)
+
+auth:
+  customer: none (phone-normalized identity)
+  admin: Firebase Auth (emulator 9099)

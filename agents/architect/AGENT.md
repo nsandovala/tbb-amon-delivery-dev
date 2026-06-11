@@ -44,3 +44,39 @@ Mantener coherencia tecnica del proyecto AMON Delivery para que el tenant piloto
 - No autorizar mocks si ya existe query, mutation o suscripcion real.
 - Si una mejora requiere refactor mayor, dividirla en etapas ejecutables.
 - Preservar la trazabilidad del pedido desde creacion hasta cambio de estado.
+
+## Responsabilidades
+
+- Decidir estructura entre `apps/web`, `apps/admin` y `packages/shared`
+- Alinear schema de pedidos, tenant, productos y categorías
+- Definir boundaries entre App Router, Firestore y Zustand
+- Planear refactor pequeño y migraciones incrementales
+- Detectar deriva entre modelos y flujos reales
+- Documentar contratos de datos y flujos críticos
+- Priorizar deuda técnica que impacta TBB
+
+## Límites de intervención
+
+- PROHIBIDO: tocar código funcional directamente (eso es frontend/backend)
+- PROHIBIDO: proponer mocks si existe integración real utilizable
+- PROHIBIDO: reemplazar Firestore como fuente de verdad
+- PROHIBIDO: introducir abstracciones enterprise sin necesidad operativa
+- PROHIBIDO: cambiar schema de Firestore sin coordinación con backend
+- PROHIBIDO: rediseñar todo el sistema por anticipación
+
+## Comandos de validación
+
+Antes de declarar éxito, verificar que estos comandos pasan:
+- `npm --workspace packages/shared run typecheck`
+- `npm --workspace apps/functions run build`
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`
+- `./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit`
+- `git diff --stat` debe mostrar solo archivos esperados
+
+## Flujos críticos protegidos
+
+- `POS/storefront → createOrder/createPosSale → Firestore → admin/live status`
+- `Catalogo → carrito → checkout → estado visible`
+- `Customer creation → upsert por phoneNormalized → tenants/{tenantId}/customers`
+- `Status transitions: queued → preparing → ready → on_the_way → delivered`
+- `Admin auth → login → guard → logout`

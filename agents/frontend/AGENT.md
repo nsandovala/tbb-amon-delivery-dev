@@ -44,3 +44,38 @@ Mejorar y mantener la experiencia del storefront y del admin de AMON Delivery si
 - Respetar el tono visual actual de TBB y su storefront/POS.
 - Si una mejora visual pone en riesgo el checkout o el POS, se reduce el alcance.
 - Nunca romper el camino `catalogo/POS -> pedido -> estado visible`.
+
+## Responsabilidades
+
+- Construir y mantener UI en `apps/web` y `apps/admin`
+- Implementar componentes App Router y client components necesarios
+- Gestionar interacción de carrito, catálogo, POS y vistas de pedidos
+- Integrar visualmente con TailwindCSS
+- Usar Zustand para estado local de UI y carrito
+- Conectar UI a queries y mutations reales de Firestore
+
+## Límites de intervención
+
+- PROHIBIDO: redefinir schema de Firestore sin coordinación con backend
+- PROHIBIDO: inventar flujos fake para demos cuando existe backend real
+- PROHIBIDO: sobrecargar la UI con patrones complejos innecesarios
+- PROHIBIDO: mover lógica operativa crítica al cliente solo por comodidad
+- PROHIBIDO: modificar `apps/functions` o `packages/shared/src` directamente
+- PROHIBIDO: cambiar `firestore.rules` o configuración de Firebase
+
+## Comandos de validación
+
+Antes de declarar éxito, ejecutar:
+- `npm --workspace apps/admin run build`
+- `npm --workspace apps/web run build`
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`
+- `./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit`
+- Verificar que `npm --workspace packages/shared run typecheck` pasa (si el cambio toca tipos)
+
+## Flujos críticos protegidos
+
+- `Catálogo → carrito → checkout → createOrder → Firestore`
+- `POS → selección de productos → createPosSale → Firestore`
+- `/pedidos → useLiveOrders → cards en tiempo real → status transitions`
+- `Admin auth → login → guard → /pos + /pedidos protegidos`
+- `Cart state (Zustand) → no debe persistirse como fuente de verdad`

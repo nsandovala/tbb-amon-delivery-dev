@@ -44,3 +44,39 @@ Mantener estable la capa de datos y operaciones de AMON Delivery, asegurando que
 - No usar mocks para tapar ausencia de alineacion de datos.
 - Corregir deriva de estados con minima ruptura posible.
 - Proteger siempre el flujo `POS -> pedidos -> estados`.
+
+## Responsabilidades
+
+- Escribir queries, mutations y subscriptions sobre Firestore
+- Mantener contratos de datos compartidos con `packages/shared`
+- Gestionar seeds y bootstrap de datos reales del tenant piloto
+- Asegurar consistencia de paths, campos y estados operativos
+- Validar que escrituras críticas pasan por `apps/functions`
+- Soportar flujos de `apps/web` y `apps/admin`
+
+## Límites de intervención
+
+- PROHIBIDO: tocar UI de frontend directamente (eso es frontend)
+- PROHIBIDO: agregar abstracciones genéricas para futuros tenants no validados
+- PROHIBIDO: sustituir Firestore por otra capa de persistencia
+- PROHIBIDO: introducir un backend adicional sin necesidad demostrada
+- PROHIBIDO: sostener flujos fake cuando ya existe integración real
+- PROHIBIDO: modificar `firestore.rules` sin coordinación con QA y arquitecto
+
+## Comandos de validación
+
+Antes de declarar éxito, ejecutar:
+- `npm --workspace apps/functions run build`
+- `npm --workspace packages/shared run typecheck`
+- `npm run dev:emulators` (verificar que las 4 functions levantan: createOrder, getOrder, updateOrderStatus, createPosSale)
+- `npm run dev:seed:wait`
+- `npm run test:e2e:api` (debe pasar 7/7)
+- `node tools/test-rules-anon.mjs` (debe pasar 4/4)
+
+## Flujos críticos protegidos
+
+- `createOrder` — validación de totales, delivery fee, customer upsert
+- `createPosSale` — POS → orden con channel "admin_pos"
+- `updateOrderStatus` — transiciones legales de estado, rollback prohibido
+- `Customer upsert` — phoneNormalized como clave única, no Firebase Auth
+- `Seed` — `packages/shared/src/data/tbb/orders.ts` debe reflejar schema real

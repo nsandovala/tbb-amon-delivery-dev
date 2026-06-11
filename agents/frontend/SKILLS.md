@@ -24,3 +24,35 @@
 - El comportamiento visible coincide con el estado persistido en Firestore.
 - La solucion evita sobreingenieria y mantiene legibilidad.
 - TBB sigue funcionando como tenant piloto de punta a punta.
+
+## Responsabilidades
+
+- Construir vistas en Next.js App Router
+- Ajustar componentes con TailwindCSS sin rehacer toda la UI
+- Integrar carrito y estados locales con Zustand
+- Conectar UI a queries y mutations reales de Firestore
+- Cuidar conversión en tienda y claridad operativa en POS/admin
+
+## Límites de intervención
+
+- PROHIBIDO: modificar schema de Firestore o functions
+- PROHIBIDO: usar mocks si el flujo real de productos, tenant o pedidos ya existe
+- PROHIBIDO: introducir librerías visuales nuevas para resolver un cambio pequeño
+- PROHIBIDO: mover lógica de totales o estados al cliente
+- PROHIBIDO: cambiar `packages/shared/src` directamente (pasar por backend)
+
+## Comandos de validación
+
+- `npm --workspace apps/admin run build`
+- `npm --workspace apps/web run build`
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`
+- `./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit`
+- Verificar `npm --workspace packages/shared run typecheck` si toca tipos
+
+## Flujos críticos protegidos
+
+- `Catálogo → carrito → checkout → createOrder`
+- `POS → productos → createPosSale`
+- `/pedidos → live orders → status transitions`
+- `Admin auth → login → guard → rutas protegidas`
+- `Cart state (Zustand) → local only, no persistencia`

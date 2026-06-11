@@ -1,0 +1,42 @@
+incidents:
+  - id: INC-001
+    date: "2026-06-01"
+    symptom: "Firebase Functions 404 en emulador"
+    root_cause: "Faltaba npm run build en apps/functions antes de dev:emulators"
+    fix: "Agregar build step explícito al runbook de arranque"
+    lesson: "Siempre build functions antes de levantar emuladores"
+    
+  - id: INC-002
+    date: "2026-06-01"
+    symptom: "Tests falsos negativos en local"
+    root_cause: "Procesos/puertos viejos colgados (3000, 3001, 4000, 5001, 8080, 9099)"
+    fix: "Script de kill de puertos: lsof -tiTCP:..."
+    lesson: "Antes de dev:all, verificar que puertos estén libres"
+    
+  - id: INC-003
+    date: "2026-06-01"
+    symptom: "Divergencias entre prod y local"
+    root_cause: "Datos seed vs datos reales, configuración .env"
+    fix: "Documentar variables críticas y no commitear .env"
+    lesson: "Validar contra emulador con seed fresh antes de afirmar que funciona en prod"
+    
+  - id: INC-004
+    date: "2026-06-01"
+    symptom: "Pedidos con createdAt inválido o rollover incorrecto"
+    root_cause: "DAY_CUTOFF_HOUR afecta agrupación diaria; pedidos sin createdAt válido rompen métricas"
+    fix: "Validar createdAt en createOrder y createPosSale; documentar DAY_CUTOFF_HOUR"
+    lesson: "Nunca confiar en createdAt generado por cliente; usar serverTimestamp o validar"
+    
+  - id: INC-005
+    date: "2026-06-01"
+    symptom: "Clientes del bot WhatsApp no aparecen en colección customers"
+    root_cause: "Bot escribe directo a Firestore sin pasar por createOrder"
+    fix: "Deuda arquitectónica: bridge bot → createOrder o upsertCustomer"
+    lesson: "Cualquier canal de entrada debe pasar por la API de backend para mantener consistencia de customers"
+    
+  - id: INC-006
+    date: "2026-06-01"
+    symptom: "Service account JSON presente en .secrets/"
+    root_cause: "Riesgo de leak de credenciales en repo"
+    fix: "Verificar .gitignore incluye .secrets/; rotar credencial si estuvo en historial"
+    lesson: "Nunca commitear credenciales; auditar .gitignore en cada setup"

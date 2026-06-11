@@ -1,0 +1,40 @@
+release: marcha-blanca-tbb
+date: TBD
+
+blockers_hard:
+  - id: B-H-01
+    description: "Firestore rules cerradas"
+    status: "OPEN"
+    note: "Hoy están abiertas (allow read/write). Bloqueante de seguridad."
+    
+  - id: B-H-02
+    description: "Autenticación admin en /pos y /pedidos"
+    status: "OPEN"
+    note: "Hoy sin auth. Cualquiera con URL puede acceder."
+    
+  - id: B-H-03
+    description: "Credenciales fuera del repo y rotadas si corresponde"
+    status: "PENDING_VERIFY"
+    note: "Revisar .secrets/, .env, firebase service accounts. Rotar si estuvieron en git."
+
+blockers_soft:
+  - id: B-S-01
+    description: "Bot WhatsApp ruteado por createOrder"
+    status: "PENDING"
+    note: "O deuda documentada con plan de migración. Ver INC-005."
+    
+  - id: B-S-02
+    description: "Suite Playwright E2E verde"
+    status: "PENDING"
+    note: "Ejecutar suite completa y documentar cobertura."
+    
+  - id: B-S-03
+    description: "Build limpio en apps/admin y functions"
+    status: "PENDING"
+    note: "npm run build sin errores de tipo ni warnings críticos."
+
+verification:
+  - "npm run build:all"
+  - "npm run test:e2e:api"
+  - "node tools/test-rules-anon.mjs"
+  - "Manual: crear pedido web, pos pickup, pos delivery, cambiar estados"

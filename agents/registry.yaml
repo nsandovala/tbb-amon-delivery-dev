@@ -35,3 +35,9 @@ agents:
       - regression
       - smoke-tests
       - edge-cases
+
+context:
+  - agents/product-context.yaml
+  - agents/incident-memory.yaml
+  - agents/release-checklist.yaml
+  - agents/architecture-map.md
