@@ -3,7 +3,9 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
 
 const navItems = [
   { label: "Pedidos", href: "/pedidos" },
@@ -20,7 +22,17 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isLogin = pathname === "/login";
+
+  async function handleLogout() {
+    try {
+      await signOut(auth);
+      router.replace("/login");
+    } catch (err) {
+      console.error("[admin] signOut error:", err);
+    }
+  }
 
   return (
     <html lang="es">
@@ -76,6 +88,13 @@ export default function RootLayout({
                     The Best Burger – Receta de la Abuela
                   </p>
                 </div>
+
+                <button
+                  onClick={handleLogout}
+                  className="mt-2 flex w-full items-center rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3 text-sm font-medium text-neutral-400 transition-all hover:border-red-400/30 hover:bg-red-400/10 hover:text-red-300"
+                >
+                  Cerrar sesión
+                </button>
               </div>
             </aside>
 
