@@ -33,8 +33,16 @@ blockers_soft:
     status: "PENDING"
     note: "npm run build sin errores de tipo ni warnings críticos."
 
+completed:
+  - id: C-01
+    date: "2026-06-11"
+    description: "Dejar de trackear artifacts compilados lib/"
+    status: "DONE"
+    note: "INC-007. Opción C aprobada. apps/functions/lib/ y packages/shared/lib/ untrackeados. Validado regeneración local."
+
 verification:
   - "npm run build:all"
   - "npm run test:e2e:api"
   - "node tools/test-rules-anon.mjs"
   - "Manual: crear pedido web, pos pickup, pos delivery, cambiar estados"
+  - "Validar que lib/ no aparece en git status después de build"

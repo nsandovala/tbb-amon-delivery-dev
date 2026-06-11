@@ -40,3 +40,19 @@ incidents:
     root_cause: "Riesgo de leak de credenciales en repo"
     fix: "Verificar .gitignore incluye .secrets/; rotar credencial si estuvo en historial"
     lesson: "Nunca commitear credenciales; auditar .gitignore en cada setup"
+    
+  - id: INC-007
+    date: "2026-06-11"
+    symptom: "Artifacts compilados (lib/) generaban ruido en diffs y commits accidentales"
+    root_cause: "apps/functions/lib/ y packages/shared/lib/ estaban trackeados en git"
+    fix: "Dejar de trackear lib/; agregar a .gitignore; mantener src/ como fuente de verdad"
+    lesson: "Los artifacts regenerables por build no deben estar en git. Validar regeneración antes de deploy."
+    affected_dirs:
+      - "apps/functions/lib/"
+      - "packages/shared/lib/"
+    regeneration_commands:
+      - "npm --prefix apps/functions run build"
+      - "npm --prefix packages/shared run build"
+    risk: "firebase emulators:start directo falla si no existe lib/"
+    mitigation: "Usar siempre npm run dev:emulators (ya incluye build). Validar build antes de deploy."
+    roadmap_status: "M6 historial/query y M7 delivery avanzado quedan en pausa táctica; se retoman después de higiene repo + predeploy local"

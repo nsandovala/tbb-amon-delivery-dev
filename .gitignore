@@ -27,6 +27,9 @@ node_modules
 dist/
 build/
 coverage/
+# compiled artifacts (regenerables via tsc)
+apps/functions/lib/
+packages/shared/lib/
 # E2E
 /test-results/
 /playwright-report/
