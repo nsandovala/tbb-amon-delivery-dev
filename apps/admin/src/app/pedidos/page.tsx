@@ -114,6 +114,18 @@ function toSafeDate(value?: unknown) {
   return null;
 }
 
+const DAY_CUTOFF_HOUR = 5;
+// TODO: mover a tenants/{tenantId}/settings/store cuando exista configuración por tenant.
+
+function getOperationalDayStart(now: Date, cutoffHour = DAY_CUTOFF_HOUR): Date {
+  const start = new Date(now);
+  start.setHours(cutoffHour, 0, 0, 0);
+  if (start.getTime() > now.getTime()) {
+    start.setDate(start.getDate() - 1);
+  }
+  return start;
+}
+
 function formatReadableTime(date: Date | null) {
   if (!date) return "Sin hora";
   return date.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
@@ -364,6 +376,19 @@ export default function OrdersPage() {
     return () => window.clearTimeout(timeoutId);
   }, [pendingStatusChange]);
 
+  const operationalDayStart = useMemo(
+    () => getOperationalDayStart(new Date(nowTs)),
+    [nowTs]
+  );
+
+  const operationalOrders = useMemo(() => {
+    const startMs = operationalDayStart.getTime();
+    return orders.filter((order) => {
+      const createdAt = toSafeDate(order.createdAt);
+      return createdAt ? createdAt.getTime() >= startMs : false;
+    });
+  }, [orders, operationalDayStart]);
+
   const {
     totalVisible,
     queued,
@@ -373,8 +398,8 @@ export default function OrdersPage() {
     delivered,
     cancelled,
   } = useMemo(() => {
-    const metrics = { totalVisible: orders.length, queued: 0, preparing: 0, ready: 0, onTheWay: 0, delivered: 0, cancelled: 0 };
-    orders.forEach((order) => {
+    const metrics = { totalVisible: operationalOrders.length, queued: 0, preparing: 0, ready: 0, onTheWay: 0, delivered: 0, cancelled: 0 };
+    operationalOrders.forEach((order) => {
       switch (order.status) {
         case "queued":    metrics.queued += 1; break;
         case "preparing": metrics.preparing += 1; break;
@@ -386,7 +411,7 @@ export default function OrdersPage() {
       }
     });
     return metrics;
-  }, [orders]);
+  }, [operationalOrders]);
 
   const displayedOrders = useMemo(() => {
     let result = orders as AdminOrder[];
