@@ -19,7 +19,7 @@
     "test:e2e:api": "playwright test e2e/api/orders.contract.spec.ts --config=playwright.config.ts"
   },
   "devDependencies": {  
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.0",
     "concurrently": "^10.0.3",
     "wait-on": "^9.0.10"
   }
