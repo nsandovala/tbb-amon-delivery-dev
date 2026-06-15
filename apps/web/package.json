@@ -13,7 +13,7 @@
     "firebase": "^11.1.0",
     "firebase-admin": "^13.10.0",
     "framer-motion": "^12.40.0",
-    "lucide-react": "^1.17.0",
+    "lucide-react": "^1.18.0",
     "next": "^15.5.19",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -22,7 +22,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@types/node": "^22.19.20",
+    "@types/node": "^22.19.21",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.5.0",
