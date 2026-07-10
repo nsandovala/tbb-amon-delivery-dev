@@ -36,6 +36,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /expenses/{expenseId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+
       match /modifiers/{modifierId} {
         allow read: if true;
         allow write: if false;

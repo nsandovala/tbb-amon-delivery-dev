@@ -3,9 +3,12 @@
  * Validates Firestore security rules from an anonymous (unauthenticated) perspective.
  *
  * Assertions:
- *   1. Public read of tenants/tbb/products → PASS
- *   2. Anonymous read of tenants/tbb/orders → FAIL (permission-denied)
- *   3. Anonymous write to a test path       → FAIL (permission-denied)
+ *   1. Public read of tenants/tbb/products      → PASS
+ *   2. Anonymous read of tenants/tbb/orders     → FAIL (permission-denied)
+ *   3. Anonymous write to a test path           → FAIL (permission-denied)
+ *   4. Public read of tenants/tbb/modifierGroups → PASS
+ *   5. Anonymous read of tenants/tbb/expenses   → FAIL (permission-denied)
+ *   6. Anonymous write to tenants/tbb/expenses  → FAIL (permission-denied)
  *
  * Requires Firestore Emulator running at 127.0.0.1:8080.
  *
@@ -113,5 +116,19 @@ await assert(
   () => getDocs(collection(db, "tenants/tbb/modifierGroups"))
 );
 
-console.log(`\n${passed}/4 aserciones pasaron.`);
+// 5. Anonymous read of expenses must be denied (admin-only, business data)
+await assert(
+  "Lectura anónima de tenants/tbb/expenses bloqueada",
+  () => getDocs(collection(db, "tenants/tbb/expenses")),
+  true
+);
+
+// 6. Anonymous write to expenses must be denied (createExpense is the only path)
+await assert(
+  "Escritura anónima a tenants/tbb/expenses bloqueada",
+  () => addDoc(collection(db, "tenants/tbb/expenses"), { amount: 1 }),
+  true
+);
+
+console.log(`\n${passed}/${passed + failed} aserciones pasaron.`);
 process.exit(failed > 0 ? 1 : 0);
