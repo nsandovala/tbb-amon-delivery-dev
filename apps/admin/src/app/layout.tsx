@@ -10,6 +10,7 @@ import { auth } from "@/lib/firebase/client";
 const navItems = [
   { label: "Pedidos", href: "/pedidos" },
   { label: "POS", href: "/pos" },
+  { label: "Gastos", href: "/gastos" },
   { label: "Catálogo", href: "#" },
   { label: "Clientes", href: "#" },
   { label: "Métricas", href: "#" },

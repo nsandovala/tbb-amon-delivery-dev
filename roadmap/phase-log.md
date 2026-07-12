@@ -1,7 +1,63 @@
 # Phase Log
 
 ## Fase actual
-Preparación marcha blanca controlada — Backend audit + fixes mínimos
+M6C — Gastos operativos en Admin
+
+## 2026-07-12 — M6C: pantalla admin `/gastos`
+
+### Módulo
+Registro de gastos operativos TBB/Foodtruck en `apps/admin`. Cierra el frontend del
+endpoint `createExpense` entregado en `23fc424`.
+
+### Archivos modificados
+- `apps/admin/src/lib/api/expenses.ts` — nuevo. `createExpenseApi` contra la Function `createExpense`, con el mismo patrón emulator/`NEXT_PUBLIC_FUNCTIONS_BASE_URL` que `lib/api/orders.ts`.
+- `apps/admin/src/lib/firebase/queries/expenses.ts` — nuevo. Tipo `AdminExpense` + labels de categoría y método de pago.
+- `apps/admin/src/hooks/use-live-expenses.ts` — nuevo. Lectura live de `tenants/tbb/expenses`.
+- `apps/admin/src/app/gastos/layout.tsx` — nuevo. Protege la ruta con `AdminGuard`.
+- `apps/admin/src/app/gastos/page.tsx` — nuevo. Formulario (category, description, amount, paymentMethod, occurredAt opcional, notes opcional) + listado de últimos gastos.
+- `apps/admin/src/app/layout.tsx` — activa el link real "Gastos" en el nav.
+
+### Decisión
+El formulario **no escribe directo a Firestore**: llama a la Function `createExpense`,
+que es el único write path (las rules niegan writes de cliente sobre `expenses`).
+El listado **sí lee directo** Firestore, porque las rules ya restringen `read` a admin.
+El listado ordena por `occurredAt` y no por `createdAt`, porque el operador puede
+backdatear un gasto que registra tarde y `createdAt` no reflejaría la línea de tiempo real.
+
+Sin hard delete, sin anulación y sin dashboard de métricas: quedan fuera de M6C.
+
+### Contratos afectados
+- Ninguno nuevo. Consume el contrato existente de `createExpense` (`apps/functions/src/schemas/expense.schema.ts`) sin modificarlo.
+- Sin cambios en Firestore rules, schemas, Functions, storefront, POS ni pedidos (salvo el link de navegación).
+
+### Validaciones ejecutadas
+```bash
+npm --workspace apps/admin run build   # OK (/gastos 4.83 kB)
+npm --prefix apps/functions run build  # OK
+npm run test:e2e:api                   # 16 passed (orders + expenses)
+node tools/test-rules-anon.mjs         # 6/6
+git diff --check                       # limpio
+```
+
+### Hallazgo de entorno (no es bug de código)
+La primera corrida de `test:e2e:api` falló 9/16: **todos** los tests que escriben en
+Firestore colgaban ~60s, mientras los de validación (400/405) pasaban. Causa: la
+instancia del emulador Firestore había quedado trabada en el arranque (aceptaba TCP en
+8080 pero no servía; `firestore-debug.log` en 0 bytes). No es Java 25 — el JAR corre
+bien standalone con los mismos args. Se resolvió matando el stack de emuladores y
+reiniciando limpio + `npm run seed` (los tests de orders necesitan catálogo sembrado).
+Si `test:e2e:api` vuelve a fallar solo en los happy-path, sospechar primero del emulador.
+
+### Riesgos restantes
+- `apiFetch` quedó duplicado entre `lib/api/orders.ts` y `lib/api/expenses.ts`. No se
+  extrajo a un helper común para no tocar el path de POS/pedidos en esta fase.
+- La lista está capada a 50 gastos y sin filtro por fecha/categoría: suficiente para
+  marcha blanca, insuficiente cuando el volumen crezca.
+- No hay edición, anulación ni borrado de gastos: un gasto mal cargado solo se puede
+  corregir desde backend.
+
+### Siguiente paso
+Validación manual de Nelson en `/gastos` con sesión admin (claim `admin: true`).
 
 ## 2026-06-11 — Catálogo TBB sincronizado con menú de marcha blanca
 
