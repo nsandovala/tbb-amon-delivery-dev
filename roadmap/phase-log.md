@@ -1,7 +1,80 @@
 # Phase Log
 
 ## Fase actual
-M6C — Gastos operativos en Admin
+Preparación de integración ERP — cierre de R1/R2 del contrato financiero
+
+## 2026-07-12 — R1/R2: cierre de venta presencial y máquina de estados
+
+### Módulo
+Preparación para congelar `contracts/financial-events.md`. No se implementó outbox ni ERP.
+
+### Archivos modificados
+- `contracts/order-status.md` — corrige la tabla de transiciones inválidas y declara `ILLEGAL_TRANSITIONS` (backend) como única fuente de enforcement.
+- `apps/admin/src/app/pedidos/page.tsx` — botón "Cerrar venta" para órdenes `channel === "admin_pos"` en estado activo.
+- `apps/admin/src/app/pos/page.tsx` — panel "Ventas sin cerrar" con contador y cierre de un clic.
+- `contracts/financial-events.md` — cierra R1 (§3.0.1) y R2 (§4.2) en el checklist de congelamiento.
+
+Sin cambios en Functions, `paymentStatus`, Firestore rules, `/gastos` ni `/metricas`.
+
+### Hallazgo raíz
+La máquina de estados vivía en **tres lugares que se contradecían**:
+
+| Fuente | `delivered → cancelled` | `queued → delivered` |
+|---|---|---|
+| `order.shared.ts` (backend, el que valida) | legal | legal |
+| `pedidos/page.tsx` (allowlist de UI) | bloqueado | bloqueado |
+| `contracts/order-status.md` (doc) | "inválido" | "inválido" |
+
+`ILLEGAL_TRANSITIONS.queued = []` significa que **cualquier salto hacia adelante ya era legal**.
+El documento estaba equivocado, no el código.
+
+### Decisión R1 — cierre manual, no auto-`delivered`
+Se descartó que `createPosSale` cree la orden en `delivered`, porque: rompe la cola de cocina (el
+POS alimenta `/pedidos`), el POS también crea pedidos `delivery` (marcaría como entregada comida
+que no salió del camión), le rompe el significado a `occurred_at` para el ERP, y reconoce ingreso
+antes de que el producto exista.
+
+La modificación mínima resultó ser **solo de UI**: la transición ya era legal, faltaba el
+afordance. Botón "Cerrar venta" en `/pedidos` y `/pos`, filtrado por `channel === "admin_pos"`
+para que un pedido web no pueda cerrarse saltándose la cocina.
+
+### Decisión R2 — solo documentación
+`delivered → cancelled` ya era legal en el backend. Se corrigió el doc. **No** se agregó botón de
+anulación: emitir `order.cancelled` no sirve hasta que exista el consumidor ERP.
+
+### Contratos afectados
+- `contracts/order-status.md` — corregido para reflejar el backend real (no cambia comportamiento).
+- `contracts/financial-events.md` — R1/R2 cerrados; sigue **sin congelar** por R3.
+- Sin cambios en el contrato de orders, schemas ni Functions.
+
+### Validaciones ejecutadas
+```bash
+npm --workspace apps/admin run build   # OK (/pedidos 6.62 kB, /pos 8.09 kB)
+npm --prefix apps/functions run build  # OK
+npm run test:e2e:api                   # 16 passed
+node tools/test-rules-anon.mjs         # 6/6
+git diff --check                       # limpio
+```
+Verificado contra el emulador (no solo por lectura de código):
+- `createPosSale` → orden `queued` / `admin_pos`
+- `PATCH updateOrderStatus` `queued → delivered` → **200**, `statusChangedAt` estampado
+- `delivered → cancelled` → **200** (confirma R2)
+- `cancelled → preparing` → **409**
+
+### Riesgos restantes
+- **El operador puede olvidar cerrar la venta.** Es el costo de elegir cierre manual: una venta sin
+  cerrar es plata que la contabilidad nunca verá. El panel ámbar con contador lo hace difícil de
+  ignorar, no imposible. La alerta Sentinel *"órdenes `admin_pos` activas > N horas"* queda como
+  **condición bloqueante** para congelar el ERP.
+- El cierre de un clic salta `preparing`/`ready`, así que esos contadores en `/pedidos` dejan de
+  representar el trabajo real del camión.
+- El backend permite `queued → delivered` para cualquier canal vía API directa (no hay ruta de UI).
+  Es el status quo, no un riesgo nuevo.
+- **R3 abierto:** `paymentStatus` sigue muerto (se escribe `"pending"` al crear y nada lo actualiza).
+  `delivered` prueba entrega, no cobro.
+
+### Siguiente paso
+Cerrar R3 y la alerta Sentinel antes de congelar el contrato ERP.
 
 ## 2026-07-12 — M6C: pantalla admin `/gastos`
 

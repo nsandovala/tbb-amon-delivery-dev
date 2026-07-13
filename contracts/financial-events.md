@@ -1,7 +1,7 @@
 # Contrato de Eventos Financieros — AMON Shop → AMON ERP
 
 **Versión de esquema de eventos:** `1.0.0`
-**Estado:** Borrador revisado contra el contrato real de AMON Shop. **NO congelado.**
+**Estado:** Borrador revisado. **R1 y R2 resueltos. R3 abierto → NO congelado todavía.**
 **Ubicación:** `contracts/financial-events.md` (en ambos repos, o repo compartido)
 **Repos afectados:** `tbb-amon-delivery-dev` (emisor) · `tbb-finance` / AMON ERP (consumidor)
 **Revisado:** 2026-07-12 contra `apps/functions/src/schemas/order.shared.ts`, `contracts/order.schema.json` y `contracts/order-status.md`
@@ -82,10 +82,38 @@ que quizá nadie pagó.
 **Regla v1:** `order.completed` se emite **una sola vez**, en la transición a `delivered`,
 tanto para `delivery` como para `pickup`.
 
-> **Consecuencia operativa (bloqueante, ver Riesgos R1):** hoy toda orden nace en `queued`,
-> incluidas las ventas POS al contado. Nadie las lleva a `delivered` automáticamente. Mientras
-> eso no cambie, **una venta de foodtruck pagada en efectivo nunca emitiría `order.completed`.**
-> Antes de congelar hay que decidir quién marca `delivered` en pickup/POS.
+### 3.0.1 R1 — resuelto: quién cierra una venta presencial
+
+**El problema:** toda orden nace en `queued`, incluidas las ventas POS al contado. Nadie las
+llevaba a `delivered`, así que una venta de foodtruck pagada en efectivo **nunca habría emitido
+`order.completed`**: plata real, invisible para la contabilidad.
+
+**Se descartó el auto-`delivered` en `createPosSale`**, por cuatro razones:
+
+1. **Rompe la cocina.** El POS alimenta el stream operativo de `/pedidos`. Un foodtruck arma la
+   hamburguesa al momento: si la venta nace `delivered`, nunca entra a la cola de cocina.
+2. **POS también crea `delivery`.** `createPosSale` acepta `fulfillmentType: "delivery"` y cobra
+   los $1.500. Auto-entregarla marcaría como entregada comida que no salió del camión.
+3. **Le rompe el significado a `occurred_at`.** El ERP necesita que `delivered` sea *el momento del
+   traspaso*. Estampado al crear, `delivered` significaría dos cosas distintas según el canal y el
+   evento dejaría de ser auditable.
+4. **Reconoce ingreso antes de que exista el producto.** Si la venta se cae dos minutos después, ya
+   emitiste la venta y necesitas un reverso que hoy no tiene consumidor.
+
+**Decisión: cierre manual de un clic.** No requirió ningún cambio de backend: `queued → delivered`
+**ya era legal** en `ILLEGAL_TRANSITIONS` (verificado contra el emulador: `PATCH updateOrderStatus`
+de `queued` a `delivered` → `200`, con `statusChangedAt` estampado). Lo que faltaba era el
+afordance, no la transición. Se agregó un botón **"Cerrar venta"**:
+
+- en `/pedidos`, para órdenes con `channel === "admin_pos"` en estado activo;
+- en `/pos`, en un panel **"Ventas sin cerrar"** con contador, que es donde vive el operador del camión.
+
+Ambos filtran por `channel === "admin_pos"`: un pedido web sigue recorriendo el flujo de cocina y
+**no** se puede cerrar desde el POS.
+
+> **Riesgo residual aceptado:** el operador puede olvidar cerrar. El panel ámbar con contador lo
+> hace difícil de ignorar, pero no imposible. La alerta Sentinel *"órdenes `admin_pos` activas > N
+> horas"* sigue siendo **condición de congelamiento**: el botón no la reemplaza.
 
 ### 3.1 Payload
 
@@ -214,17 +242,22 @@ Reglas:
 | `refund_method` | **No existe** | Constante: el `payment_method` del evento reversado |
 | `courier_fee_refunded` | **No existe** | Constante `false` |
 
-### 4.2 Dependencia con la máquina de estados (contradicción a resolver)
+### 4.2 R2 — resuelto: `delivered → cancelled` ya era legal
 
-Este evento requiere que `delivered → cancelled` sea una transición **legal**.
+Este evento requiere que `delivered → cancelled` sea una transición **legal**. Lo era desde
+siempre; el que mentía era el documento.
 
-- El **código** (`order.shared.ts`, `ILLEGAL_TRANSITIONS.delivered`) sí la permite: bloquea volver
-  a `queued`/`preparing`/`ready`/`on_the_way`, pero **no** bloquea `cancelled`.
-- La **documentación** (`contracts/order-status.md`) dice lo contrario: *"`delivered` → any (except no-op) — Terminal state"*.
+- El **código** (`order.shared.ts`, `ILLEGAL_TRANSITIONS.delivered`) la permite: bloquea volver a
+  `queued`/`preparing`/`ready`/`on_the_way`, pero **no** bloquea `cancelled`.
+  Verificado contra el emulador: `delivered → cancelled` → `200`; `cancelled → preparing` → `409`.
+- La **documentación** (`contracts/order-status.md`) afirmaba lo contrario (*"`delivered` → any —
+  Terminal state"*). **Corregido el 2026-07-12**: el doc ahora refleja el backend y declara
+  `ILLEGAL_TRANSITIONS` como única fuente de enforcement.
 
-Código y documento se contradicen hoy, y este contrato depende de esa transición. Hay que
-resolverlo (ver R2) antes de congelar: la postura propuesta es **mantener `delivered → cancelled`
-legal** (es lo que hace posible el reverso) y corregir `contracts/order-status.md`.
+No hubo cambio de código. La UI de `/pedidos` **no** expone botón de anulación, y así se queda:
+emitir `order.cancelled` no sirve de nada hasta que exista el consumidor ERP, y una anulación sin
+reverso contable es solo una venta que desaparece. Hoy la transición solo es alcanzable por API
+directa — intencional.
 
 ---
 
@@ -292,9 +325,10 @@ Ampliar el enum requiere bump de versión menor y actualización en ambos repos.
 
 ## 8. Checklist de congelamiento
 
-- [ ] **R1:** decidir quién marca `delivered` en pickup/POS. Sin esto, las ventas de foodtruck no emiten evento
-- [ ] **R2:** resolver la contradicción `delivered → cancelled` entre `order-status.md` y `ILLEGAL_TRANSITIONS`
+- [x] **R1:** quién marca `delivered` en pickup/POS → **cierre manual de un clic** ("Cerrar venta" en `/pedidos` y `/pos`). Se descartó el auto-`delivered`. Sin cambio de backend (ver §3.0.1)
+- [x] **R2:** contradicción `delivered → cancelled` → **el doc estaba mal, el código siempre la permitió**. `contracts/order-status.md` corregido (ver §4.2)
 - [ ] **R3:** confirmar que el ERP trata `payment_method = "pending"` como cuentas por cobrar y **no** lee `paymentStatus`
+- [ ] **Sentinel: alerta "órdenes `admin_pos` activas > N horas"** — mitigación del riesgo residual de R1 (venta sin cerrar = venta invisible). **Bloqueante**
 - [ ] Confirmar el mapeo `tenantId → company_id` en el ERP (`tbb` → `the-best-burger`)
 - [ ] Revisar nombres de campos contra `contracts/order.schema.json` (el pedido usa `camelCase`, el evento financiero usa `snake_case`; el mapeo está en §2.1 y §3.2)
 - [ ] Commit de este archivo en ambos repos
@@ -333,5 +367,6 @@ Ninguno existe todavía; ninguno se creó en esta fase.
 
 ---
 
-*Borrador revisado el 2026-07-12 contra el contrato real de AMON Shop. **Pendiente de congelar**: cerrar R1, R2 y R3 primero.*
+*Borrador revisado el 2026-07-12 contra el contrato real de AMON Shop. R1 y R2 cerrados el mismo día.*
+***Pendiente de congelar**: R3 (tratamiento de `pending` en el ERP) y la alerta Sentinel de ventas sin cerrar.*
 *Dirección: Nelson alias Vito (humano director) · Arquitectura: Claude · Ejecutores: según asignación*
