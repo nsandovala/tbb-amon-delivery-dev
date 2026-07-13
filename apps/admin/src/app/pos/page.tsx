@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
 import { db } from "../../lib/firebase/client";
-import { createPosSaleApi } from "../../lib/api/orders";
+import { createPosSaleApi, updateOrderStatusApi } from "../../lib/api/orders";
 import {
   Minus,
   Plus,
@@ -58,6 +58,13 @@ type PosOrder = {
 
 const tenantId = "tbb";
 
+/**
+ * A sale stays operationally open until it is handed over. Only a closed (delivered)
+ * sale is financially final — order.completed fires on delivered — so an unclosed sale
+ * is revenue the books will never see.
+ */
+const ACTIVE_POS_STATUSES = new Set(["queued", "preparing", "ready", "on_the_way"]);
+
 function formatMoney(value?: number) {
   return `$${(value ?? 0).toLocaleString("es-CL")}`;
 }
@@ -95,6 +102,7 @@ export default function PosPage() {
   const [todayOrders, setTodayOrders] = useState<PosOrder[]>([]);
   const [pendingLiveOrderId, setPendingLiveOrderId] = useState<string | null>(null);
   const [verifiedLiveOrderId, setVerifiedLiveOrderId] = useState<string | null>(null);
+  const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
 
   const startOfDay = useMemo(() => {
     const now = new Date();
@@ -212,6 +220,16 @@ export default function PosPage() {
     [todayOrders]
   );
 
+  // Only presential POS sales. Web orders stay in the kitchen flow of /pedidos:
+  // closing them from here would mark food as delivered before it left the truck.
+  const openSales = useMemo(
+    () =>
+      todayOrders.filter(
+        (o) => o.channel === "admin_pos" && ACTIVE_POS_STATUSES.has(o.status ?? "")
+      ),
+    [todayOrders]
+  );
+
   const totalSalesToday = useMemo(() => {
     return successfulTodayOrders.reduce((acc, order) => {
       const value = order.totals?.total ?? order.total ?? 0;
@@ -309,6 +327,34 @@ export default function PosPage() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleCloseSale(orderId: string) {
+    if (closingIds.has(orderId)) return;
+
+    setClosingIds((prev) => new Set(prev).add(orderId));
+
+    try {
+      await updateOrderStatusApi(orderId, "delivered");
+      setToast({
+        type: "success",
+        message: `Venta #${orderId.slice(0, 6).toUpperCase()} cerrada`,
+        detail: "Queda como entregada y financieramente cerrada.",
+      });
+    } catch (error) {
+      console.error("Error cerrando venta POS:", error);
+      setToast({
+        type: "error",
+        message: "No pudimos cerrar la venta.",
+        detail: error instanceof Error ? error.message : "Revisa Functions y Firestore.",
+      });
+    } finally {
+      setClosingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   }
 
@@ -440,6 +486,66 @@ export default function PosPage() {
                 })}
               </div>
             )}
+
+            {/* VENTAS ABIERTAS — sin cerrar no hay evento financiero */}
+            {openSales.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.05] p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-300/90">
+                    Ventas sin cerrar
+                  </p>
+                  <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold text-amber-200">
+                    {openSales.length}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {openSales.map((sale) => {
+                    const isClosing = closingIds.has(sale.id);
+                    const saleTotal = sale.totals?.total ?? sale.total ?? 0;
+
+                    return (
+                      <div
+                        key={sale.id}
+                        className="flex items-center gap-2.5 rounded-lg border border-white/8 bg-[#0D0D0D] p-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            #{sale.id.slice(0, 6).toUpperCase()}
+                            <span className="ml-2 text-[11px] font-normal text-neutral-500">
+                              {paymentLabels[sale.paymentMethod ?? "pending"]}
+                              {" · "}
+                              {sale.fulfillmentType === "delivery" ? "Delivery" : "Retiro"}
+                            </span>
+                          </p>
+                          <p className="text-sm font-bold text-emerald-400">
+                            {formatMoney(saleTotal)}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => void handleCloseSale(sale.id)}
+                          disabled={isClosing}
+                          className={[
+                            "shrink-0 rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-[0.1em] transition-all",
+                            isClosing
+                              ? "cursor-not-allowed bg-white/[0.06] text-neutral-500"
+                              : "bg-emerald-400 text-black hover:bg-emerald-300",
+                          ].join(" ")}
+                        >
+                          {isClosing ? "Cerrando..." : "Cerrar venta"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p className="mt-2 text-[11px] text-neutral-500">
+                  Una venta sin cerrar no queda entregada ni cuenta como venta final.
+                </p>
+              </div>
+            ) : null}
           </section>
 
           {/* CAJA OPERATIVA */}

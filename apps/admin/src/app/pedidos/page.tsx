@@ -25,6 +25,20 @@ function getLegalNextStatuses(current?: OrderStatus): OrderStatus[] {
   return LEGAL_TRANSITIONS[current] ?? [];
 }
 
+/**
+ * A presential POS sale is handed over at the counter, so it can be closed in one step
+ * instead of walking the kitchen flow. The backend already allows queued → delivered
+ * (see contracts/order-status.md); this is the affordance for it.
+ *
+ * Closing the sale is what makes it financially final: order.completed fires on delivered.
+ */
+function canCloseSale(order: AdminOrder): boolean {
+  return (
+    order.channel === "admin_pos" &&
+    ACTIVE_ORDER_STATUSES.has(order.status as OrderStatus)
+  );
+}
+
 type ProductNameMap = Record<string, string>;
 type StatusFilter = OrderStatus | "all";
 
@@ -251,6 +265,34 @@ function OrderCard({
             </p>
           </div>
         </div>
+
+        {canCloseSale(order) ? (
+          <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-emerald-300/80">
+              Venta presencial
+            </p>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (isUpdating) return;
+                void onChangeStatus(order.id, "delivered");
+              }}
+              disabled={isUpdating}
+              className={[
+                "w-full rounded-xl py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all",
+                isUpdating
+                  ? "cursor-not-allowed bg-white/[0.06] text-neutral-500"
+                  : "bg-emerald-400 text-black hover:bg-emerald-300",
+              ].join(" ")}
+            >
+              {isUpdating ? "Cerrando..." : "Cerrar venta"}
+            </button>
+            <p className="mt-2 text-[11px] text-neutral-500">
+              Marca la venta como entregada. Es lo que la cierra financieramente.
+            </p>
+          </div>
+        ) : null}
 
         {legalNextStatuses.length === 0 ? (
           <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3">
