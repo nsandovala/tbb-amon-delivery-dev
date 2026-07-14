@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import {
+  collection,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  type QueryConstraint,
+} from "firebase/firestore";
 import { db } from "../lib/firebase/client";
 import type { AdminExpense } from "../lib/firebase/queries/expenses";
 
@@ -14,14 +21,20 @@ import type { AdminExpense } from "../lib/firebase/queries/expenses";
  * Ordered by occurredAt because an operator can backdate an expense they log
  * late, so createdAt would not reflect the operational timeline.
  */
-export function useLiveExpenses(tenantId: string, max = 50) {
+export function useLiveExpenses(tenantId: string, max?: number) {
   const [expenses, setExpenses] = useState<AdminExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/expenses`);
-    const q = query(ref, orderBy("occurredAt", "desc"), limit(max));
+    const constraints: QueryConstraint[] = [orderBy("occurredAt", "desc")];
+
+    if (typeof max === "number") {
+      constraints.push(limit(max));
+    }
+
+    const q = query(ref, ...constraints);
 
     const unsub = onSnapshot(
       q,

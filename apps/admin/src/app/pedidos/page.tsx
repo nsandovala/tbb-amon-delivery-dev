@@ -6,6 +6,10 @@ import { useLiveOrders } from "../../hooks/use-live-orders";
 import { updateOrderStatusApi } from "../../lib/api/orders";
 import { db } from "../../lib/firebase/client";
 import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
+import {
+  getOperationalDayStart as getSharedOperationalDayStart,
+  toDate,
+} from "../../lib/time";
 
 const tenantId = "tbb";
 
@@ -98,46 +102,11 @@ function formatMoney(value?: number) {
   return `$${(value ?? 0).toLocaleString("es-CL")}`;
 }
 
-function toSafeDate(value?: unknown) {
-  if (!value) return null;
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === "object" && value !== null) {
-    if (
-      "toDate" in value &&
-      typeof (value as { toDate?: () => Date }).toDate === "function"
-    ) {
-      const parsed = (value as { toDate: () => Date }).toDate();
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    if ("seconds" in value && typeof (value as { seconds?: number }).seconds === "number") {
-      const parsed = new Date((value as { seconds: number }).seconds * 1000);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-  }
-
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  return null;
-}
-
 const DAY_CUTOFF_HOUR = 5;
 // TODO: mover a tenants/{tenantId}/settings/store cuando exista configuración por tenant.
 
 function getOperationalDayStart(now: Date, cutoffHour = DAY_CUTOFF_HOUR): Date {
-  const start = new Date(now);
-  start.setHours(cutoffHour, 0, 0, 0);
-  if (start.getTime() > now.getTime()) {
-    start.setDate(start.getDate() - 1);
-  }
-  return start;
+  return getSharedOperationalDayStart(now, cutoffHour);
 }
 
 function formatReadableTime(date: Date | null) {
@@ -200,7 +169,7 @@ function OrderCard({
   nowTs: number;
 }) {
   const itemCount = getItemCount(order);
-  const createdAt = toSafeDate(order.createdAt);
+  const createdAt = toDate(order.createdAt);
   const createdAtTime = formatReadableTime(createdAt);
   const elapsedTime = formatElapsedTime(createdAt, nowTs);
   const isUpdating = updatingIds.has(order.id);
@@ -426,7 +395,7 @@ export default function OrdersPage() {
   const operationalOrders = useMemo(() => {
     const startMs = operationalDayStart.getTime();
     return orders.filter((order) => {
-      const createdAt = toSafeDate(order.createdAt);
+      const createdAt = toDate(order.createdAt);
       return createdAt ? createdAt.getTime() >= startMs : false;
     });
   }, [orders, operationalDayStart]);
@@ -519,7 +488,7 @@ export default function OrdersPage() {
     return productNames[productId] || prettifyProductId(productId);
   };
 
-  const selectedOrderCreatedAt = toSafeDate(selectedOrder?.createdAt);
+  const selectedOrderCreatedAt = toDate(selectedOrder?.createdAt);
 
   const filterTabs: { value: StatusFilter; label: string; count: number; color: string }[] = [
     { value: "all",        label: "Todos",      count: totalVisible, color: "text-white" },

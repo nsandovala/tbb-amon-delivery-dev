@@ -10,6 +10,7 @@ import {
   type ExpenseCategory,
   type ExpensePaymentMethod,
 } from "../../lib/firebase/queries/expenses";
+import { toDate } from "../../lib/time";
 
 const tenantId = "tbb";
 
@@ -20,31 +21,6 @@ const PAYMENT_METHODS = Object.keys(
 
 function formatMoney(value?: number) {
   return `$${(value ?? 0).toLocaleString("es-CL")}`;
-}
-
-/**
- * occurredAt arrives as a Firestore Timestamp from the live listener, but as a
- * plain object right after a write is echoed back, so both shapes are handled.
- */
-function toDate(value: unknown): Date | null {
-  if (!value) return null;
-
-  if (value instanceof Date) return value;
-
-  if (typeof value === "object" && value !== null) {
-    const candidate = value as {
-      toDate?: () => Date;
-      seconds?: number;
-      _seconds?: number;
-    };
-
-    if (typeof candidate.toDate === "function") return candidate.toDate();
-
-    const seconds = candidate.seconds ?? candidate._seconds;
-    if (typeof seconds === "number") return new Date(seconds * 1000);
-  }
-
-  return null;
 }
 
 function formatDate(value: unknown) {
@@ -60,7 +36,7 @@ function formatDate(value: unknown) {
 }
 
 export default function GastosPage() {
-  const { expenses, loading, error } = useLiveExpenses(tenantId);
+  const { expenses, loading, error } = useLiveExpenses(tenantId, 50);
 
   const [category, setCategory] = useState<ExpenseCategory>("supplies");
   const [description, setDescription] = useState("");
