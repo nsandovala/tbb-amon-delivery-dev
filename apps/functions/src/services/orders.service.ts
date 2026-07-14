@@ -90,7 +90,12 @@ async function calculateTotals(
 export async function handleCreateOrder(
   tenantId: string,
   input: CreateOrderInput
-): Promise<{ orderId: string }> {
+): Promise<{
+  orderId: string;
+  displayOrderNumber: number;
+  displayCode: string;
+  operationalDate: string;
+}> {
   const orderId = generateOrderId(tenantId);
 
   // Derive delivery fee from fulfillmentType (single source of truth)
@@ -109,8 +114,7 @@ export async function handleCreateOrder(
     throw new Error("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
   }
 
-  await createOrder(tenantId, orderId, {
-    tenantId,
+  const orderMeta = await createOrder(tenantId, orderId, {
     items: processedItems,
     customer: input.customer,
     fulfillmentType: input.fulfillmentType,
@@ -132,7 +136,7 @@ export async function handleCreateOrder(
 
   logger.info("Order created via service", { tenantId, orderId, subtotal, delivery, total, customerId: normalizedPhone });
 
-  return { orderId };
+  return { orderId, ...orderMeta };
 }
 
 export async function handleUpdateOrderStatus(

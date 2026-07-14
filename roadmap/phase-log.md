@@ -412,3 +412,78 @@ No endurecer Firestore Rules hasta que:
 1. el flujo HTTP backend esté completo
 2. el e2e esté validado
 3. se confirme que frontend ya no depende de writes directos
+
+## 2026-07-13 — M6F números humanos + menos fricción operativa
+
+### Qué cambió
+- Orders web y ventas POS ahora persisten `displayOrderNumber`, `displayCode` y `operationalDate` desde Functions.
+- El correlativo humano se genera por tenant y por día operacional con corte `05:00`, sin depender del frontend.
+- `/pedidos`, `/pos`, `/metricas` y el checkout web muestran `Pedido #NNN` como identificador principal; el Firestore ID queda secundario.
+- POS agrega modo rápido `Cliente mostrador` para ventas pickup sin teléfono, sin crear customer falso.
+- `/gastos` precarga `occurredAt` en la hora actual y agrega CTA `Hoy / Ahora`.
+- `/metricas` aclara ventas POS abiertas con copy explícito para `0` y para pendientes.
+
+### Por qué cambió
+- El ID técnico no sirve para cocina ni entrega.
+- Repetir datos en POS ralentizaba la operación presencial.
+- Gastos requerían fricción innecesaria para registrar el caso más común: “ahora”.
+- El dashboard debía advertir mejor qué ventas POS siguen abiertas.
+
+### Archivos modificados
+- `apps/functions/src/lib/operational-order.ts`
+- `apps/functions/src/repositories/firestore-orders.repo.ts`
+- `apps/functions/src/services/orders.service.ts`
+- `apps/functions/src/services/pos.service.ts`
+- `apps/functions/src/routes/orders.ts`
+- `apps/functions/src/routes/pos.ts`
+- `apps/functions/src/schemas/order.shared.ts`
+- `apps/functions/src/schemas/create-order.schema.ts`
+- `apps/functions/src/schemas/create-pos-sale.schema.ts`
+- `packages/shared/src/schemas/order.schema.ts`
+- `apps/admin/src/app/pedidos/page.tsx`
+- `apps/admin/src/app/pos/page.tsx`
+- `apps/admin/src/app/gastos/page.tsx`
+- `apps/admin/src/app/metricas/page.tsx`
+- `apps/admin/src/lib/orders.ts`
+- `apps/admin/src/lib/api/orders.ts`
+- `apps/admin/src/lib/firebase/queries/orders.ts`
+- `apps/web/src/components/cart/cart-summary.tsx`
+- `apps/web/src/lib/orders.ts`
+- `apps/web/src/lib/api/orders.ts`
+- `apps/web/src/lib/firebase/queries/orders.ts`
+- `e2e/api/orders.contract.spec.ts`
+
+### Contratos afectados
+- Order Firestore:
+  - `displayOrderNumber?: number`
+  - `displayCode?: string`
+  - `operationalDate?: string`
+- POS input:
+  - `pickup` permite `customer.phone` vacío
+  - `delivery` mantiene `customer.phone` y `customer.address` obligatorios
+- Customer upsert:
+  - solo se ejecuta si hay teléfono normalizable
+
+### Validación
+```bash
+npm run build --workspace packages/shared
+.\node_modules\.bin\tsc -p packages/shared/tsconfig.json --noEmit
+npm run build --prefix apps/functions
+npm run build --workspace apps/admin
+.\node_modules\.bin\playwright test e2e/api --config=playwright.config.ts
+node tools/test-rules-anon.mjs
+git diff --check
+git status --short
+```
+
+### Riesgos restantes
+- El correlativo diario depende de `orderCounters` por tenant y no corrige pedidos legacy ya existentes sin `displayCode`.
+- `git diff --check` queda verde, pero en Windows Git sigue avisando conversión futura `LF -> CRLF` en varios archivos.
+- La validación pedida vía `npm run typecheck --workspace packages/shared` y `npm run test:e2e:api` chocó con el sandbox del runner; se validó con los comandos equivalentes directos del repo.
+
+### Próximo paso
+- QA manual sobre emulator para confirmar:
+  - número humano visible en web y POS
+  - cierre de venta POS intacto
+  - gasto nuevo con fecha actual
+  - copy final de métricas con `0` y con pendientes

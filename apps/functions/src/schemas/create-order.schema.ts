@@ -2,5 +2,5 @@ export {
   createOrderSchema,
   type CreateOrderInput,
   orderItemSchema,
-  orderCustomerSchema,
+  createOrderCustomerSchema,
 } from "./order.shared";

@@ -44,6 +44,9 @@ export interface AdminOrder {
   paymentMethod?: string;
   channel?: string;
   fulfillmentType?: "delivery" | "pickup";
+  displayOrderNumber?: number;
+  displayCode?: string;
+  operationalDate?: string;
   items?: AdminOrderItem[];
   modifiers?: unknown[];
   customer?: AdminOrderCustomer;

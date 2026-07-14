@@ -23,6 +23,16 @@ function formatMoney(value?: number) {
   return `$${(value ?? 0).toLocaleString("es-CL")}`;
 }
 
+function getCurrentDateTimeLocalValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function formatDate(value: unknown) {
   const date = toDate(value);
   if (!date) return "—";
@@ -42,7 +52,7 @@ export default function GastosPage() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<ExpensePaymentMethod>("cash");
-  const [occurredAt, setOccurredAt] = useState("");
+  const [occurredAt, setOccurredAt] = useState(() => getCurrentDateTimeLocalValue());
   const [notes, setNotes] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,7 +83,7 @@ export default function GastosPage() {
     setDescription("");
     setAmount("");
     setPaymentMethod("cash");
-    setOccurredAt("");
+    setOccurredAt(getCurrentDateTimeLocalValue());
     setNotes("");
   }
 
@@ -250,9 +260,18 @@ export default function GastosPage() {
                   type="datetime-local"
                   className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
                 />
-                <p className="mt-1 text-[11px] text-neutral-600">
-                  Vacío usa la hora del servidor.
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-neutral-600">
+                    Precargado en ahora. Puedes backdatear si hace falta.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOccurredAt(getCurrentDateTimeLocalValue())}
+                    className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 transition-all hover:bg-emerald-400/15"
+                  >
+                    Hoy / Ahora
+                  </button>
+                </div>
               </div>
 
               <div>

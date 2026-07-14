@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useCartStore } from "@/lib/store/cart-store";
 import { createOrderApi } from "@/lib/api/orders";
+import { getHumanOrderCode } from "@/lib/orders";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -166,7 +167,7 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
         qty: i.quantity,
       }));
 
-      const { orderId } = await createOrderApi({
+      const { orderId, displayCode } = await createOrderApi({
         tenantId,
         items: orderItems,
         fulfillmentType,
@@ -183,7 +184,7 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
       clearCart();
       closeCart();
 
-      toast.success(`Pedido recibido #${orderId.slice(0, 6).toUpperCase()}`, {
+      toast.success(`Pedido recibido #${getHumanOrderCode({ orderId, displayCode })}`, {
         description:
           fulfillmentType === "delivery"
             ? "Tu pedido quedó en cola. Te contactaremos por WhatsApp."

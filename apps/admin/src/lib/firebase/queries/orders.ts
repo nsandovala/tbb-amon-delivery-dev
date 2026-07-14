@@ -37,6 +37,9 @@ export interface AdminOrder {
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
   paymentStatus?: string;
   fulfillmentType?: string;
+  displayOrderNumber?: number;
+  displayCode?: string;
+  operationalDate?: string;
   items?: AdminOrderItem[];
   customer?: AdminOrderCustomer;
   totals?: AdminOrderTotals;

@@ -7,7 +7,11 @@ import { updateOrderStatusApi } from "../../lib/api/orders";
 import { db } from "../../lib/firebase/client";
 import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
 import {
-  getOperationalDayStart as getSharedOperationalDayStart,
+  getHumanOrderLabel,
+  getOrderOperatorTitle,
+} from "../../lib/orders";
+import {
+  getOperationalDayStart,
   toDate,
 } from "../../lib/time";
 
@@ -102,13 +106,6 @@ function formatMoney(value?: number) {
   return `$${(value ?? 0).toLocaleString("es-CL")}`;
 }
 
-const DAY_CUTOFF_HOUR = 5;
-// TODO: mover a tenants/{tenantId}/settings/store cuando exista configuración por tenant.
-
-function getOperationalDayStart(now: Date, cutoffHour = DAY_CUTOFF_HOUR): Date {
-  return getSharedOperationalDayStart(now, cutoffHour);
-}
-
 function formatReadableTime(date: Date | null) {
   if (!date) return "Sin hora";
   return date.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
@@ -190,7 +187,7 @@ function OrderCard({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-lg font-bold text-white">
-                #{order.id.slice(0, 6).toUpperCase()}
+                {getOrderOperatorTitle(order)}
               </span>
               <span
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${statusStyles(order.status ?? "")}`}
@@ -200,9 +197,6 @@ function OrderCard({
             </div>
 
             <div className="space-y-1">
-              <p className="text-sm font-medium text-white">
-                {order.customer?.name || "Sin nombre"}
-              </p>
               <p className="text-sm text-neutral-400">
                 {order.customer?.phone || "Sin teléfono"}
               </p>
@@ -355,9 +349,12 @@ export default function OrdersPage() {
     if (!targetOrder || targetOrder.status !== pendingStatusChange.status) return;
 
     const { orderId: confirmedId, status: confirmedStatus } = pendingStatusChange;
+    const humanLabel = targetOrder
+      ? getHumanOrderLabel(targetOrder)
+      : "Pedido";
     setFeedback({
       type: "success",
-      message: `Pedido #${confirmedId.slice(0, 6).toUpperCase()} actualizado a ${formatStatusLabel(confirmedStatus)}.`,
+      message: `${humanLabel} actualizado a ${formatStatusLabel(confirmedStatus)}.`,
     });
     setPendingStatusChange(null);
     setUpdatingIds((prev) => {
@@ -436,6 +433,7 @@ export default function OrdersPage() {
       result = result.filter(
         (o) =>
           o.id.toLowerCase().includes(q) ||
+          o.displayCode?.toLowerCase().includes(q) ||
           o.customer?.name?.toLowerCase().includes(q) ||
           o.customer?.phone?.toLowerCase().includes(q)
       );
@@ -576,7 +574,7 @@ export default function OrdersPage() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar cliente, teléfono o ID..."
+              placeholder="Buscar cliente, teléfono o # pedido..."
               className="w-full max-w-sm rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-emerald-400/30"
             />
           </div>
@@ -648,7 +646,7 @@ export default function OrdersPage() {
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-3">
                       <h2 className="text-2xl font-black text-white">
-                        #{selectedOrder.id.slice(0, 6).toUpperCase()}
+                        {getOrderOperatorTitle(selectedOrder)}
                       </h2>
                       <span
                         className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${statusStyles(selectedOrder.status ?? "")}`}
@@ -656,6 +654,9 @@ export default function OrdersPage() {
                         {formatStatusLabel(selectedOrder.status)}
                       </span>
                     </div>
+                    <p className="mt-2 text-xs uppercase tracking-[0.18em] text-neutral-500">
+                      ID tecnico: {selectedOrder.id}
+                    </p>
                   </div>
 
                   {/* Cliente */}
@@ -695,6 +696,10 @@ export default function OrdersPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Canal</span>
                         <span className="text-white">{formatChannelLabel(selectedOrder.channel)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Numero humano</span>
+                        <span className="text-white">{getHumanOrderLabel(selectedOrder)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Entrega</span>

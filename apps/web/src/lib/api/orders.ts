@@ -65,6 +65,9 @@ interface CreateOrderPayload {
 interface CreateOrderResponse {
   orderId: string;
   tenantId: string;
+  displayOrderNumber: number;
+  displayCode: string;
+  operationalDate: string;
 }
 
 export async function createOrderApi(

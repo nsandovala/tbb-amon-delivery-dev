@@ -90,7 +90,12 @@ async function calculateTotals(
 export async function handleCreatePosSale(
   tenantId: string,
   input: CreatePosSaleInput
-): Promise<{ orderId: string }> {
+): Promise<{
+  orderId: string;
+  displayOrderNumber: number;
+  displayCode: string;
+  operationalDate: string;
+}> {
   const orderId = generateOrderId(tenantId);
 
   // Calculate totals server-side from DB prices
@@ -101,35 +106,38 @@ export async function handleCreatePosSale(
     resolvedFulfillment
   );
 
-  // Normalize phone for customer identity — reject if invalid
-  const normalizedPhone = normalizeChileanPhone(input.customer.phone);
-  if (!normalizedPhone) {
+  const rawPhone = input.customer.phone?.trim() ?? "";
+  const normalizedPhone = rawPhone ? normalizeChileanPhone(rawPhone) : null;
+  if (resolvedFulfillment === "delivery" && !normalizedPhone) {
     throw new Error("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
   }
 
-  await createOrder(tenantId, orderId, {
-    tenantId,
+  const orderMeta = await createOrder(tenantId, orderId, {
     items: processedItems,
     customer: input.customer,
     fulfillmentType: input.fulfillmentType,
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "admin_pos",
     totals: { subtotal, delivery, total },
-    customerId: normalizedPhone,
-    customerPhoneNormalized: normalizedPhone,
+    customerId: normalizedPhone ?? undefined,
+    customerPhoneNormalized: normalizedPhone ?? undefined,
   });
 
-  // Upsert customer (non-blocking — order is already persisted)
-  await upsertCustomerFromOrder({
-    tenantId,
-    customer: input.customer,
-    orderTotal: total,
-    paymentMethod: input.paymentMethod ?? "pending",
-    fulfillmentType: resolvedFulfillment,
-  });
+  if (normalizedPhone) {
+    await upsertCustomerFromOrder({
+      tenantId,
+      customer: {
+        ...input.customer,
+        phone: rawPhone,
+      },
+      orderTotal: total,
+      paymentMethod: input.paymentMethod ?? "pending",
+      fulfillmentType: resolvedFulfillment,
+    });
+  }
 
   logger.info("POS sale recorded", { tenantId, orderId, subtotal, total, customerId: normalizedPhone });
 
-  return { orderId };
+  return { orderId, ...orderMeta };
 }
 

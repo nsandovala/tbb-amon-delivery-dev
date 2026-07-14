@@ -67,6 +67,9 @@ interface CreateOrderPayload {
 interface CreateOrderResponse {
   orderId: string;
   tenantId: string;
+  displayOrderNumber: number;
+  displayCode: string;
+  operationalDate: string;
 }
 
 export async function createOrderApi(
@@ -83,7 +86,7 @@ interface CreatePosSalePayload {
   items: { productId: string; qty: number }[];
   customer: {
     name: string;
-    phone: string;
+    phone?: string;
     email?: string;
     address?: string;
     notes?: string;
@@ -95,6 +98,9 @@ interface CreatePosSalePayload {
 interface CreatePosSaleResponse {
   orderId: string;
   tenantId: string;
+  displayOrderNumber: number;
+  displayCode: string;
+  operationalDate: string;
 }
 
 export async function createPosSaleApi(

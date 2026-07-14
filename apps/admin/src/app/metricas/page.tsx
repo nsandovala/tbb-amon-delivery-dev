@@ -26,6 +26,7 @@ import {
   getOperationalDayStart,
   toDate,
 } from "../../lib/time";
+import { getOrderOperatorTitle } from "../../lib/orders";
 
 const tenantId = "tbb";
 
@@ -495,15 +496,27 @@ export default function MetricasPage() {
               </section>
             </section>
 
-            <section className="rounded-3xl border border-white/10 bg-[#101010] p-5">
+            <section
+              className={[
+                "rounded-3xl p-5",
+                metrics.openAdminPosOrders.length === 0
+                  ? "border border-white/10 bg-[#101010]"
+                  : "border border-amber-400/20 bg-amber-400/[0.05]",
+              ].join(" ")}
+            >
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
                     Alerta operativa
                   </p>
                   <h2 className="mt-1 text-xl font-black text-white">
-                    Ordenes admin_pos activas sin cerrar
+                    Ventas POS abiertas sin cerrar
                   </h2>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    {metrics.openAdminPosOrders.length === 0
+                      ? "Todas las ventas POS del período están cerradas."
+                      : `${metrics.openAdminPosOrders.length} ventas POS pendientes de cerrar.`}
+                  </p>
                 </div>
                 <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.08] px-4 py-2">
                   <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">
@@ -517,7 +530,7 @@ export default function MetricasPage() {
 
               {metrics.openAdminPosOrders.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-8 text-center text-neutral-500">
-                  No hay ventas POS abiertas en este periodo.
+                  Todas las ventas POS del período están cerradas.
                 </div>
               ) : (
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -531,7 +544,7 @@ export default function MetricasPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-base font-black text-white">
-                              #{order.id.slice(0, 6).toUpperCase()}
+                              {getOrderOperatorTitle(order)}
                             </p>
                             <p className="mt-1 text-xs uppercase tracking-[0.14em] text-neutral-500">
                               {order.status ?? "Sin estado"}

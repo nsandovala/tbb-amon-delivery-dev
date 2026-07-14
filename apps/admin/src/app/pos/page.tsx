@@ -12,6 +12,8 @@ import {
 import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
 import { db } from "../../lib/firebase/client";
 import { createPosSaleApi, updateOrderStatusApi } from "../../lib/api/orders";
+import { getHumanOrderLabel } from "../../lib/orders";
+import { getOperationalDayStart } from "../../lib/time";
 import {
   Minus,
   Plus,
@@ -45,11 +47,18 @@ type PosCartItem = {
 
 type PosOrder = {
   id: string;
+  displayCode?: string;
+  displayOrderNumber?: number;
+  operationalDate?: string;
   status?: string;
   channel?: string;
   total?: number;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
   fulfillmentType?: "delivery" | "pickup";
+  customer?: {
+    name?: string;
+    phone?: string;
+  };
   createdAt?: unknown;
   totals?: {
     total?: number;
@@ -57,6 +66,7 @@ type PosOrder = {
 };
 
 const tenantId = "tbb";
+const COUNTER_CUSTOMER_NAME = "Cliente mostrador";
 
 /**
  * A sale stays operationally open until it is handed over. Only a closed (delivered)
@@ -86,10 +96,11 @@ export default function PosPage() {
   const [cart, setCart] = useState<PosCartItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(COUNTER_CUSTOMER_NAME);
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">("pickup");
+  const [showPickupCustomerFields, setShowPickupCustomerFields] = useState(false);
 
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -100,24 +111,51 @@ export default function PosPage() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [todayOrders, setTodayOrders] = useState<PosOrder[]>([]);
-  const [pendingLiveOrderId, setPendingLiveOrderId] = useState<string | null>(null);
-  const [verifiedLiveOrderId, setVerifiedLiveOrderId] = useState<string | null>(null);
+  const [pendingLiveOrder, setPendingLiveOrder] = useState<{
+    orderId: string;
+    displayCode: string;
+  } | null>(null);
+  const [verifiedLiveOrder, setVerifiedLiveOrder] = useState<{
+    orderId: string;
+    displayCode: string;
+  } | null>(null);
   const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
 
   const startOfDay = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return Timestamp.fromDate(now);
+    return Timestamp.fromDate(getOperationalDayStart(new Date()));
   }, []);
 
-  const normalizedPhone = normalizeChileanPhone(customerPhone);
-  const phoneOk = isValidChileanPhone(customerPhone);
+  const normalizedPhone = customerPhone.trim()
+    ? normalizeChileanPhone(customerPhone)
+    : null;
+  const isPickupCounterSale =
+    fulfillmentType === "pickup" &&
+    !showPickupCustomerFields &&
+    customerName.trim() === COUNTER_CUSTOMER_NAME;
+  const phoneRequired = fulfillmentType === "delivery";
+  const phoneOk = phoneRequired
+    ? isValidChileanPhone(customerPhone)
+    : customerPhone.trim().length === 0 || isValidChileanPhone(customerPhone);
 
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 4500);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (fulfillmentType === "delivery") {
+      setShowPickupCustomerFields(true);
+      if (customerName.trim() === COUNTER_CUSTOMER_NAME && !customerPhone.trim()) {
+        setCustomerName("");
+      }
+      return;
+    }
+
+    if (!customerName.trim()) {
+      setCustomerName(COUNTER_CUSTOMER_NAME);
+    }
+  }, [customerName, customerPhone, fulfillmentType]);
 
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/products`);
@@ -163,17 +201,23 @@ export default function PosPage() {
   }, [startOfDay]);
 
   useEffect(() => {
-    if (!pendingLiveOrderId) return;
-    const persistedOrder = todayOrders.find((order) => order.id === pendingLiveOrderId);
+    if (!pendingLiveOrder) return;
+    const persistedOrder = todayOrders.find((order) => order.id === pendingLiveOrder.orderId);
     if (!persistedOrder) return;
-    setVerifiedLiveOrderId(pendingLiveOrderId);
-    setPendingLiveOrderId(null);
+    setVerifiedLiveOrder({
+      orderId: persistedOrder.id,
+      displayCode: persistedOrder.displayCode || pendingLiveOrder.displayCode,
+    });
+    setPendingLiveOrder(null);
     setToast({
       type: "success",
-      message: `Venta #${pendingLiveOrderId.slice(0, 6).toUpperCase()} visible en /pedidos`,
+      message: `${getHumanOrderLabel({
+        id: persistedOrder.id,
+        displayCode: persistedOrder.displayCode || pendingLiveOrder.displayCode,
+      })} visible en /pedidos`,
       detail: "La venta ya quedó persistida en Firestore y reflejada en el stream operativo.",
     });
-  }, [pendingLiveOrderId, todayOrders]);
+  }, [pendingLiveOrder, todayOrders]);
 
   const categories = useMemo(() => {
     const unique = new Map<string, string>();
@@ -272,37 +316,38 @@ export default function PosPage() {
 
   function clearPos() {
     setCart([]);
-    setCustomerName("");
+    setCustomerName(COUNTER_CUSTOMER_NAME);
     setCustomerPhone("");
     setCustomerEmail("");
     setAddress("");
     setNotes("");
     setFulfillmentType("pickup");
     setPaymentMethod("pending");
-    setVerifiedLiveOrderId(null);
+    setShowPickupCustomerFields(false);
+    setVerifiedLiveOrder(null);
   }
 
   async function handleCreateOrder() {
     if (!isFormValid || isSubmitting) return;
 
-    if (!phoneOk || !normalizedPhone) {
+    if (phoneRequired && (!phoneOk || !normalizedPhone)) {
       setToast({ type: "error", message: "Ingresa un WhatsApp chileno válido. Ej: +56912345678" });
       return;
     }
 
     try {
       setIsSubmitting(true);
-      setPendingLiveOrderId(null);
-      setVerifiedLiveOrderId(null);
+      setPendingLiveOrder(null);
+      setVerifiedLiveOrder(null);
 
       const orderItems = cart.map((item) => ({ productId: item.product.id, qty: item.quantity }));
 
-      const { orderId } = await createPosSaleApi({
+      const { orderId, displayCode } = await createPosSaleApi({
         tenantId,
         items: orderItems,
         customer: {
           name: customerName.trim(),
-          phone: normalizedPhone,
+          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
           email: customerEmail.trim() || undefined,
           address: fulfillmentType === "delivery" ? address.trim() : "",
           notes: notes.trim(),
@@ -311,11 +356,11 @@ export default function PosPage() {
         paymentMethod,
       });
 
-      setPendingLiveOrderId(orderId);
+      setPendingLiveOrder({ orderId, displayCode });
       clearPos();
       setToast({
         type: "success",
-        message: `Venta creada #${orderId.slice(0, 6).toUpperCase()}`,
+        message: `${getHumanOrderLabel({ id: orderId, displayCode })} creada`,
         detail: "Esperando confirmación live en /pedidos...",
       });
     } catch (error) {
@@ -333,13 +378,18 @@ export default function PosPage() {
   async function handleCloseSale(orderId: string) {
     if (closingIds.has(orderId)) return;
 
+    const targetOrder = todayOrders.find((order) => order.id === orderId);
+    const humanLabel = targetOrder
+      ? getHumanOrderLabel(targetOrder)
+      : "Venta POS";
+
     setClosingIds((prev) => new Set(prev).add(orderId));
 
     try {
       await updateOrderStatusApi(orderId, "delivered");
       setToast({
         type: "success",
-        message: `Venta #${orderId.slice(0, 6).toUpperCase()} cerrada`,
+        message: `${humanLabel} cerrada`,
         detail: "Queda como entregada y financieramente cerrada.",
       });
     } catch (error) {
@@ -511,13 +561,16 @@ export default function PosPage() {
                       >
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-white">
-                            #{sale.id.slice(0, 6).toUpperCase()}
+                            {getHumanOrderLabel({ id: sale.id, displayCode: sale.displayCode })}
                             <span className="ml-2 text-[11px] font-normal text-neutral-500">
                               {paymentLabels[sale.paymentMethod ?? "pending"]}
                               {" · "}
                               {sale.fulfillmentType === "delivery" ? "Delivery" : "Retiro"}
                             </span>
                           </p>
+                          {sale.customer?.name ? (
+                            <p className="text-[11px] text-neutral-500">{sale.customer.name}</p>
+                          ) : null}
                           <p className="text-sm font-bold text-emerald-400">
                             {formatMoney(saleTotal)}
                           </p>
@@ -616,38 +669,6 @@ export default function PosPage() {
 
             {/* Formulario */}
             <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <div className="relative">
-                <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
-                <input
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Nombre completo"
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-                />
-              </div>
-
-              <div className="relative">
-                <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
-                <input
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="WhatsApp (+569...)"
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-                />
-              </div>
-
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
-                <input
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="Email (opcional)"
-                  inputMode="email"
-                  autoComplete="email"
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
-                />
-              </div>
-
               {/* Fulfillment */}
               <div className="grid grid-cols-2 gap-1.5">
                 <button
@@ -675,6 +696,81 @@ export default function PosPage() {
                   Retiro
                 </button>
               </div>
+
+              {fulfillmentType === "pickup" ? (
+                <div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-300/80">
+                        Venta rapida mostrador
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {isPickupCounterSale ? COUNTER_CUSTOMER_NAME : customerName || COUNTER_CUSTOMER_NAME}
+                      </p>
+                      <p className="mt-1 text-[11px] text-neutral-500">
+                        Si no agregas telefono, no se crea customer y la venta queda igual operativa.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerName(COUNTER_CUSTOMER_NAME);
+                        setCustomerPhone("");
+                        setCustomerEmail("");
+                        setShowPickupCustomerFields(false);
+                      }}
+                      className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-emerald-200 transition-all hover:bg-emerald-400/15"
+                    >
+                      Cliente mostrador
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPickupCustomerFields((prev) => !prev)}
+                    className="mt-3 text-[11px] font-semibold text-neutral-300 transition-colors hover:text-white"
+                  >
+                    {showPickupCustomerFields ? "Ocultar datos extra" : "Agregar datos del cliente"}
+                  </button>
+                </div>
+              ) : null}
+
+              {fulfillmentType === "delivery" || showPickupCustomerFields ? (
+                <>
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                    <input
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder={fulfillmentType === "delivery" ? "Nombre completo" : "Nombre del cliente"}
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                    <input
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder={fulfillmentType === "delivery" ? "WhatsApp (+569...)" : "WhatsApp (opcional)"}
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+                    <input
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="Email (opcional)"
+                      inputMode="email"
+                      autoComplete="email"
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                    />
+                  </div>
+                </>
+              ) : null}
 
               {/* Método de pago */}
               <div className="grid grid-cols-2 gap-1.5">
@@ -799,15 +895,21 @@ export default function PosPage() {
             </div>
 
             {/* Estados live */}
-            {pendingLiveOrderId ? (
+            {pendingLiveOrder ? (
               <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2.5 text-sm text-cyan-100">
-                Esperando #{pendingLiveOrderId.slice(0, 6).toUpperCase()} en /pedidos...
+                Esperando {getHumanOrderLabel({
+                  id: pendingLiveOrder.orderId,
+                  displayCode: pendingLiveOrder.displayCode,
+                })} en /pedidos...
               </div>
             ) : null}
 
-            {verifiedLiveOrderId ? (
+            {verifiedLiveOrder ? (
               <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-sm text-emerald-100">
-                Venta #{verifiedLiveOrderId.slice(0, 6).toUpperCase()} confirmada y visible para operación.
+                {getHumanOrderLabel({
+                  id: verifiedLiveOrder.orderId,
+                  displayCode: verifiedLiveOrder.displayCode,
+                })} confirmada y visible para operación.
               </div>
             ) : null}
           </aside>

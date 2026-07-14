@@ -48,6 +48,15 @@ const optionalEmailSchema = z.preprocess(
   z.string().email("Email must be valid").optional()
 );
 
+const optionalTrimmedStringSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : undefined;
+  },
+  z.string().optional()
+);
+
 export const paymentMethodSchema = z.enum(PAYMENT_METHODS);
 export const paymentStatusSchema = z.enum([
   "pending",
@@ -76,7 +85,23 @@ export const orderTotalsSchema = z.object({
 
 export const orderCustomerSchema = z.object({
   name: z.string().min(1, "Customer name is required"),
+  phone: optionalTrimmedStringSchema,
+  email: optionalEmailSchema,
+  address: z.string().optional().default(""),
+  notes: z.string().optional().default(""),
+});
+
+export const createOrderCustomerSchema = z.object({
+  name: z.string().min(1, "Customer name is required"),
   phone: z.string().min(1, "Customer phone is required"),
+  email: optionalEmailSchema,
+  address: z.string().optional().default(""),
+  notes: z.string().optional().default(""),
+});
+
+export const createPosSaleCustomerSchema = z.object({
+  name: z.string().min(1, "Customer name is required"),
+  phone: optionalTrimmedStringSchema,
   email: optionalEmailSchema,
   address: z.string().optional().default(""),
   notes: z.string().optional().default(""),
@@ -95,6 +120,9 @@ export const orderSchema = z.object({
   customer: orderCustomerSchema,
   customerId: z.string().min(1).optional(),
   customerPhoneNormalized: z.string().min(1).optional(),
+  displayOrderNumber: z.number().int().positive().optional(),
+  displayCode: z.string().min(3).optional(),
+  operationalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   createdAt: z.unknown().optional(),
   updatedAt: z.unknown().optional(),
 });
@@ -105,7 +133,7 @@ export const createOrderSchema = z.object({
     productId: z.string().min(1),
     qty: z.number().int().positive(),
   })).min(1, "Order must have at least one item"),
-  customer: orderCustomerSchema,
+  customer: createOrderCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema,
   paymentMethod: paymentMethodSchema.optional().default("pending"),
 });
@@ -120,9 +148,29 @@ export const createPosSaleSchema = z.object({
     productId: z.string().min(1),
     qty: z.number().int().positive(),
   })).min(1, "POS sale must have at least one item"),
-  customer: orderCustomerSchema,
+  customer: createPosSaleCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema.optional().default("pickup"),
   paymentMethod: paymentMethodSchema.optional().default("pending"),
+}).superRefine((value, ctx) => {
+  if (value.fulfillmentType !== "delivery") {
+    return;
+  }
+
+  if (!value.customer.phone?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["customer", "phone"],
+      message: "Customer phone is required for delivery",
+    });
+  }
+
+  if (!value.customer.address?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["customer", "address"],
+      message: "Customer address is required for delivery",
+    });
+  }
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

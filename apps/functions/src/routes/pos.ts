@@ -88,7 +88,13 @@ export const createPosSale = onRequest(
 
       res.status(201).json({
         ok: true,
-        data: { orderId: result.orderId, tenantId },
+        data: {
+          orderId: result.orderId,
+          tenantId,
+          displayOrderNumber: result.displayOrderNumber,
+          displayCode: result.displayCode,
+          operationalDate: result.operationalDate,
+        },
       } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);

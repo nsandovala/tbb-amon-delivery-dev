@@ -19,9 +19,10 @@ Storefront checkout
 POS sale
   -> POST createPosSale
   -> pos.service.ts
-  -> normalizeChileanPhone(customer.phone)
+  -> optional normalizeChileanPhone(customer.phone)
+  -> reserve displayOrderNumber in tenants/{tenantId}/orderCounters/{operationalDate}
   -> createOrder() in tenants/{tenantId}/orders/{orderId}
-  -> upsertCustomerFromOrder()
+  -> upsertCustomerFromOrder() only when phone exists and normalizes
   -> tenants/{tenantId}/customers/{customerId}
 ```
 
@@ -29,6 +30,7 @@ POS sale
 
 - Orders: `tenants/{tenantId}/orders/{orderId}`
 - Customers: `tenants/{tenantId}/customers/{customerId}`
+- Daily order counter: `tenants/{tenantId}/orderCounters/{operationalDate}`
 
 ## Campos principales
 
@@ -44,6 +46,9 @@ POS sale
 - `customer`
 - `customerId?`
 - `customerPhoneNormalized?`
+- `displayOrderNumber?`
+- `displayCode?`
+- `operationalDate?`
 - `items`
 - `totals.subtotal`
 - `totals.delivery`
@@ -70,14 +75,31 @@ POS sale
 ## Reglas operativas
 
 - `customerId` es el teléfono chileno normalizado.
-- Si el teléfono no se puede normalizar, la order igual se persiste y el upsert de customer se omite.
+- Storefront sigue requiriendo teléfono válido y crea/actualiza customer.
+- POS pickup puede persistir una venta con `customer.phone` vacío cuando opera como `Cliente mostrador`.
+- Si el teléfono no existe o no se puede normalizar, la order igual se persiste y el upsert de customer se omite.
 - `customerPhoneNormalized` debe persistirse en la order cuando exista normalización válida.
+- `displayOrderNumber` se asigna en backend por tenant y por día operacional.
+- `displayCode` es la versión humana del correlativo (`padStart(3, "0")`).
+- `operationalDate` usa corte operacional `05:00` en `America/Santiago`.
 - El delivery fee se deriva exclusivamente de `fulfillmentType`:
   - `delivery = 1500`
   - `pickup = 0`
 - Los totales finales se calculan en backend desde Firestore.
 - El frontend puede previsualizar totales, pero nunca los envía en el payload de creación.
 - `paymentMethod: "card"` está deshabilitado en storefront y POS hasta integración Flow.
+
+## Validaciones técnicas (2026-07-13)
+
+```bash
+npm run build --workspace packages/shared
+.\node_modules\.bin\tsc -p packages/shared/tsconfig.json --noEmit
+npm run build --prefix apps/functions
+npm run build --workspace apps/admin
+.\node_modules\.bin\playwright test e2e/api --config=playwright.config.ts
+node tools/test-rules-anon.mjs
+git diff --check
+```
 
 ## Validaciones técnicas (2026-05-27)
 

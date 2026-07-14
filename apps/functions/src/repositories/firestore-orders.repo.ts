@@ -2,10 +2,16 @@ import admin from "firebase-admin";
 import { getDb } from "../lib/firebase-admin";
 import { NotFoundError, ConflictError } from "../lib/errors";
 import { logger } from "../lib/logger";
-import type { CreateOrderInput, OrderStatus } from "../schemas/order.shared";
+import type { OrderStatus } from "../schemas/order.shared";
 import { ILLEGAL_TRANSITIONS } from "../schemas/order.shared";
+import {
+  formatDisplayCode,
+  getOperationalDate,
+  type OperationalOrderMeta,
+} from "../lib/operational-order";
 
 const ORDERS_COLLECTION = "orders";
+const ORDER_COUNTERS_COLLECTION = "orderCounters";
 
 /**
  * Tenant-scoped reference: tenants/{tenantId}/orders
@@ -18,6 +24,17 @@ function orderDoc(tenantId: string, orderId: string): admin.firestore.DocumentRe
   return ordersCol(tenantId).doc(orderId);
 }
 
+function orderCounterDoc(
+  tenantId: string,
+  operationalDate: string
+): admin.firestore.DocumentReference {
+  return getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection(ORDER_COUNTERS_COLLECTION)
+    .doc(operationalDate);
+}
+
 export type OrderDoc = admin.firestore.DocumentSnapshot;
 
 /**
@@ -27,36 +44,75 @@ export type OrderDoc = admin.firestore.DocumentSnapshot;
 export async function createOrder(
   tenantId: string,
   orderId: string,
-  input: CreateOrderInput & {
+  input: {
+    items: Array<{
+      productId: string;
+      productName: string;
+      qty: number;
+      unitPrice: number;
+      imageUrl?: string | null;
+      categoryId?: string | null;
+    }>;
+    customer: {
+      name: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+      notes?: string;
+    };
+    fulfillmentType: "delivery" | "pickup";
     totals: { subtotal: number; delivery: number; total: number };
     paymentMethod: string;
     channel: string;
     customerId?: string;
     customerPhoneNormalized?: string;
   }
-): Promise<void> {
+): Promise<OperationalOrderMeta> {
   const now = admin.firestore.FieldValue.serverTimestamp();
+  const operationalDate = getOperationalDate();
 
-  await orderDoc(tenantId, orderId).set({
-    id: orderId,
-    tenantId,
-    status: "queued",
-    channel: input.channel,
-    paymentMethod: input.paymentMethod,
-    paymentStatus: "pending",
-    customer: input.customer,
-    items: input.items,
-    totals: input.totals,
-    fulfillmentType: input.fulfillmentType,
-    ...(input.customerId ? { customerId: input.customerId } : {}),
-    ...(input.customerPhoneNormalized
-      ? { customerPhoneNormalized: input.customerPhoneNormalized }
-      : {}),
-    createdAt: now,
-    updatedAt: now,
+  const meta = await getDb().runTransaction(async (transaction) => {
+    const counterRef = orderCounterDoc(tenantId, operationalDate);
+    const counterSnap = await transaction.get(counterRef);
+    const currentValue = (counterSnap.data()?.lastDisplayOrderNumber as number | undefined) ?? 0;
+    const displayOrderNumber = currentValue + 1;
+    const displayCode = formatDisplayCode(displayOrderNumber);
+
+    transaction.set(counterRef, {
+      tenantId,
+      operationalDate,
+      lastDisplayOrderNumber: displayOrderNumber,
+      updatedAt: now,
+      createdAt: counterSnap.exists ? counterSnap.get("createdAt") ?? now : now,
+    }, { merge: true });
+
+    transaction.set(orderDoc(tenantId, orderId), {
+      id: orderId,
+      tenantId,
+      status: "queued",
+      channel: input.channel,
+      paymentMethod: input.paymentMethod,
+      paymentStatus: "pending",
+      customer: input.customer,
+      items: input.items,
+      totals: input.totals,
+      fulfillmentType: input.fulfillmentType,
+      displayOrderNumber,
+      displayCode,
+      operationalDate,
+      ...(input.customerId ? { customerId: input.customerId } : {}),
+      ...(input.customerPhoneNormalized
+        ? { customerPhoneNormalized: input.customerPhoneNormalized }
+        : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { displayOrderNumber, displayCode, operationalDate };
   });
 
-  logger.info("Order created", { tenantId, orderId });
+  logger.info("Order created", { tenantId, orderId, ...meta });
+  return meta;
 }
 
 /**

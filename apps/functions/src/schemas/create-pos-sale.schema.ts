@@ -1,5 +1,5 @@
 export {
   createPosSaleSchema,
   type CreatePosSaleInput,
-  orderCustomerSchema,
+  createPosSaleCustomerSchema,
 } from "./order.shared";
