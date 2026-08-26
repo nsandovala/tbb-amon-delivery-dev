@@ -75,9 +75,14 @@ POS sale
 ## Reglas operativas
 
 - `customerId` es el teléfono chileno normalizado.
-- Storefront sigue requiriendo teléfono válido y crea/actualiza customer.
-- POS pickup puede persistir una venta con `customer.phone` vacío cuando opera como `Cliente mostrador`.
-- Si el teléfono no existe o no se puede normalizar, la order igual se persiste y el upsert de customer se omite.
+- Storefront exige nombre y teléfono válido; si `fulfillmentType === "delivery"`, también exige dirección no vacía.
+- El botón de confirmación del storefront permanece accionable para mostrar la causa exacta cuando la validación frontend falla; solo se deshabilita durante el envío.
+- En desarrollo, el cliente web usa el proxy same-origin `/api/functions` si no existe una base URL explícita, evitando depender de un env local para sortear PNA/CORS.
+- POS pickup puede persistir una venta con `customer.phone` vacío cuando opera en modo explícito `Cliente mostrador`.
+- El modo POS con datos de cliente conserva inputs controlados: borrar nombre o teléfono no repone texto automáticamente ni bloquea una venta pickup.
+- En POS pickup sin nombre se persiste `Cliente mostrador` como fallback operativo; sin teléfono normalizable no se crea customer.
+- POS delivery exige nombre, teléfono chileno válido y dirección.
+- En POS pickup, si el teléfono no existe o no se puede normalizar, la order igual se persiste y el upsert de customer se omite.
 - `customerPhoneNormalized` debe persistirse en la order cuando exista normalización válida.
 - `displayOrderNumber` se asigna en backend por tenant y por día operacional.
 - `displayCode` es la versión humana del correlativo (`padStart(3, "0")`).
@@ -88,6 +93,25 @@ POS sale
 - Los totales finales se calculan en backend desde Firestore.
 - El frontend puede previsualizar totales, pero nunca los envía en el payload de creación.
 - `paymentMethod: "card"` está deshabilitado en storefront y POS hasta integración Flow.
+
+## Validaciones técnicas (2026-08-26 — M6H)
+
+```bash
+npm run build --workspace packages/shared              # OK
+npm run build --prefix apps/functions                  # OK
+npm run build --workspace apps/admin                   # OK
+npm run build --workspace apps/web                     # OK adicional
+npm run test:e2e:api                                   # OK, 22/22
+node tools/test-rules-anon.mjs                          # OK, 6/6
+```
+
+- `createOrder` delivery válido retorna `201` y conserva `displayOrderNumber`/`displayCode`.
+- `createOrder` delivery sin teléfono o sin dirección retorna `400`.
+- `createPosSale` pickup mostrador retorna `201` sin `customerId`.
+- `createPosSale` delivery sin dirección retorna `400`.
+- `createPosSale` con teléfono normalizable retorna `201` y persiste identidad normalizada.
+- QA visual quedó pendiente porque el navegador integrado no estaba disponible; las rutas locales respondieron `200` por smoke HTTP.
+- Smoke same-origin contra Next.js rewrites confirmó: web delivery `201` (`displayCode 009`), web pickup `201` (`010`), POS mostrador `201` (`011`) y cierre POS `delivered`.
 
 ## Validaciones técnicas (2026-07-13)
 

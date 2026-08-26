@@ -3,6 +3,69 @@
 ## Fase actual
 Preparación de integración ERP — cierre de R1/R2 del contrato financiero
 
+## 2026-08-26 — M6H: QA checkout web + formulario cliente POS
+
+### Qué cambió
+
+- Checkout web mantiene `Confirmar pedido` accionable para explicar validaciones y usa el proxy same-origin local por defecto en desarrollo cuando no hay Functions base URL explícita.
+- Backend y shared rechazan con `400` un `createOrder` delivery sin dirección; teléfonos delivery inválidos ahora producen `ValidationError` (`400`) en vez de un error genérico (`500`).
+- POS reemplaza la sincronización reactiva defectuosa del nombre por modos explícitos `counter`/`details`.
+- Borrar nombre o teléfono en pickup ya no repone `Cliente mostrador` dentro del input ni bloquea la venta; el payload conserva un nombre operativo y solo envía teléfono en modo con datos.
+- Se agregaron contratos E2E para los seis casos mínimos M6H.
+
+### Por qué cambió
+
+- M6F introdujo un efecto dependiente de `customerName` que reescribía el mismo estado al vaciar el campo.
+- El checkout ocultaba el diagnóstico detrás de un botón nativamente deshabilitado.
+- El contrato backend no aplicaba la regla de dirección obligatoria a delivery web, aunque la UI sí la previsualizaba.
+- La selección del proxy local dependía enteramente de env y podía recaer en una URL cross-origin bloqueada por PNA/CORS.
+
+### Archivos modificados
+
+- `apps/web/src/components/cart/cart-summary.tsx`
+- `apps/web/src/lib/api/orders.ts`
+- `apps/admin/src/app/pos/page.tsx`
+- `apps/functions/src/schemas/order.shared.ts`
+- `apps/functions/src/services/orders.service.ts`
+- `apps/functions/src/services/pos.service.ts`
+- `packages/shared/src/schemas/order.schema.ts`
+- `e2e/api/orders.contract.spec.ts`
+- `docs/architecture/customer-order-contract.md`
+- `roadmap/phase-log.md`
+- `docs/agent-sessions/2026-08-26/codex-m6h-checkout-pos-form.md`
+
+### Contratos afectados
+
+- `createOrder`: delivery requiere nombre, teléfono y dirección; validaciones de cliente retornan `400`.
+- `createPosSale`: pickup mostrador no requiere teléfono ni crea customer; delivery exige nombre, teléfono y dirección.
+- Customer upsert POS: se mantiene únicamente cuando el teléfono normaliza.
+- Order numbering: pedidos nuevos conservan `displayOrderNumber`, `displayCode` y `operationalDate` generados por backend.
+
+### Validación
+
+```bash
+npm run build --workspace packages/shared   # OK
+npm run build --prefix apps/functions       # OK
+npm run build --workspace apps/admin        # OK
+npm run build --workspace apps/web          # OK adicional
+npm run test:e2e:api                        # OK, 22/22
+node tools/test-rules-anon.mjs               # OK, 6/6
+```
+
+Smoke HTTP local: `/tienda/tbb`, `/pos`, `/pedidos`, `/gastos` y `/metricas` respondieron `200`.
+Smoke por proxy same-origin: pedido web delivery `201` (`Pedido #009`), web pickup `201` (`#010`), POS mostrador `201` (`#011`) y `Cerrar venta` dejó la POS en `delivered`.
+
+### Riesgos restantes
+
+- El navegador integrado no estuvo disponible; queda pendiente repetir visualmente los ocho pasos. Los flujos HTTP/proxy equivalentes sí pasaron contra emulator.
+- `startOfDay` del POS continúa congelado al montar el componente; no cambió en M6H.
+- Firestore rules no fueron modificadas.
+- 2MUCH, ERP/outbox, catálogo, clientes y configuración permanecieron congelados.
+
+### Siguiente paso
+
+- Ejecutar QA visual/manual con navegador disponible y aprobar commit M6H si los ocho pasos pasan.
+
 ## 2026-07-12 — R1/R2: cierre de venta presencial y máquina de estados
 
 ### Módulo

@@ -3,6 +3,7 @@ import { getDb } from "../lib/firebase-admin";
 import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
+import { ValidationError } from "../lib/errors";
 
 const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
@@ -111,7 +112,7 @@ export async function handleCreateOrder(
   // Normalize phone for customer identity — reject if invalid
   const normalizedPhone = normalizeChileanPhone(input.customer.phone);
   if (!normalizedPhone) {
-    throw new Error("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
+    throw new ValidationError("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
   }
 
   const orderMeta = await createOrder(tenantId, orderId, {

@@ -85,15 +85,15 @@ export const orderCustomerSchema = z.object({
 });
 
 export const createOrderCustomerSchema = z.object({
-  name: z.string().min(1, "Customer name is required"),
-  phone: z.string().min(1, "Customer phone is required"),
+  name: z.string().trim().min(1, "Customer name is required"),
+  phone: z.string().trim().min(1, "Customer phone is required"),
   email: optionalEmailSchema,
   address: z.string().optional().default(""),
   notes: z.string().optional().default(""),
 });
 
 export const createPosSaleCustomerSchema = z.object({
-  name: z.string().min(1, "Customer name is required"),
+  name: z.string().trim().min(1, "Customer name is required"),
   phone: optionalTrimmedStringSchema,
   email: optionalEmailSchema,
   address: z.string().optional().default(""),
@@ -135,6 +135,14 @@ export const createOrderInputSchema = z.object({
   customer: createOrderCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema,
   paymentMethod: paymentMethodSchema.optional().default("pending"),
+}).superRefine((value, ctx) => {
+  if (value.fulfillmentType === "delivery" && !value.customer.address?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["customer", "address"],
+      message: "Customer address is required for delivery",
+    });
+  }
 });
 
 /**

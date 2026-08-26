@@ -100,7 +100,7 @@ export default function PosPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">("pickup");
-  const [showPickupCustomerFields, setShowPickupCustomerFields] = useState(false);
+  const [customerMode, setCustomerMode] = useState<"counter" | "details">("counter");
 
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -130,10 +130,17 @@ export default function PosPage() {
     : null;
   const isPickupCounterSale =
     fulfillmentType === "pickup" &&
-    !showPickupCustomerFields &&
-    customerName.trim() === COUNTER_CUSTOMER_NAME;
+    customerMode === "counter";
+  const effectiveCustomerName =
+    isPickupCounterSale ||
+    (fulfillmentType === "pickup" && !customerName.trim())
+      ? COUNTER_CUSTOMER_NAME
+      : customerName.trim();
+  const phoneForOrder = isPickupCounterSale ? null : normalizedPhone;
   const phoneRequired = fulfillmentType === "delivery";
-  const phoneOk = phoneRequired
+  const phoneOk = isPickupCounterSale
+    ? true
+    : phoneRequired
     ? isValidChileanPhone(customerPhone)
     : customerPhone.trim().length === 0 || isValidChileanPhone(customerPhone);
 
@@ -142,20 +149,6 @@ export default function PosPage() {
     const timer = setTimeout(() => setToast(null), 4500);
     return () => clearTimeout(timer);
   }, [toast]);
-
-  useEffect(() => {
-    if (fulfillmentType === "delivery") {
-      setShowPickupCustomerFields(true);
-      if (customerName.trim() === COUNTER_CUSTOMER_NAME && !customerPhone.trim()) {
-        setCustomerName("");
-      }
-      return;
-    }
-
-    if (!customerName.trim()) {
-      setCustomerName(COUNTER_CUSTOMER_NAME);
-    }
-  }, [customerName, customerPhone, fulfillmentType]);
 
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/products`);
@@ -255,9 +248,9 @@ export default function PosPage() {
 
   const isFormValid =
     cart.length > 0 &&
-    customerName.trim().length >= 2 &&
     phoneOk &&
-    (fulfillmentType === "pickup" || address.trim().length >= 6);
+    (fulfillmentType === "pickup" ||
+      (customerName.trim().length >= 2 && address.trim().length >= 6));
 
   const successfulTodayOrders = useMemo(
     () => todayOrders.filter((o) => o.status !== "cancelled"),
@@ -323,7 +316,7 @@ export default function PosPage() {
     setNotes("");
     setFulfillmentType("pickup");
     setPaymentMethod("pending");
-    setShowPickupCustomerFields(false);
+    setCustomerMode("counter");
     setVerifiedLiveOrder(null);
   }
 
@@ -346,8 +339,8 @@ export default function PosPage() {
         tenantId,
         items: orderItems,
         customer: {
-          name: customerName.trim(),
-          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+          name: effectiveCustomerName,
+          ...(phoneForOrder ? { phone: phoneForOrder } : {}),
           email: customerEmail.trim() || undefined,
           address: fulfillmentType === "delivery" ? address.trim() : "",
           notes: notes.trim(),
@@ -672,7 +665,14 @@ export default function PosPage() {
               {/* Fulfillment */}
               <div className="grid grid-cols-2 gap-1.5">
                 <button
-                  onClick={() => setFulfillmentType("delivery")}
+                  type="button"
+                  onClick={() => {
+                    setFulfillmentType("delivery");
+                    setCustomerMode("details");
+                    if (customerName.trim() === COUNTER_CUSTOMER_NAME) {
+                      setCustomerName("");
+                    }
+                  }}
                   className={[
                     "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
                     fulfillmentType === "delivery"
@@ -684,6 +684,7 @@ export default function PosPage() {
                   Delivery
                 </button>
                 <button
+                  type="button"
                   onClick={() => setFulfillmentType("pickup")}
                   className={[
                     "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
@@ -718,7 +719,7 @@ export default function PosPage() {
                         setCustomerName(COUNTER_CUSTOMER_NAME);
                         setCustomerPhone("");
                         setCustomerEmail("");
-                        setShowPickupCustomerFields(false);
+                        setCustomerMode("counter");
                       }}
                       className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-emerald-200 transition-all hover:bg-emerald-400/15"
                     >
@@ -726,17 +727,28 @@ export default function PosPage() {
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowPickupCustomerFields((prev) => !prev)}
-                    className="mt-3 text-[11px] font-semibold text-neutral-300 transition-colors hover:text-white"
-                  >
-                    {showPickupCustomerFields ? "Ocultar datos extra" : "Agregar datos del cliente"}
-                  </button>
+                  {customerMode === "counter" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerMode("details");
+                        if (customerName.trim() === COUNTER_CUSTOMER_NAME) {
+                          setCustomerName("");
+                        }
+                      }}
+                      className="mt-3 text-[11px] font-semibold text-neutral-300 transition-colors hover:text-white"
+                    >
+                      Agregar datos del cliente
+                    </button>
+                  ) : (
+                    <p className="mt-3 text-[11px] font-semibold text-emerald-200/80">
+                      Datos del cliente activos
+                    </p>
+                  )}
                 </div>
               ) : null}
 
-              {fulfillmentType === "delivery" || showPickupCustomerFields ? (
+              {fulfillmentType === "delivery" || customerMode === "details" ? (
                 <>
                   <div className="relative">
                     <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />

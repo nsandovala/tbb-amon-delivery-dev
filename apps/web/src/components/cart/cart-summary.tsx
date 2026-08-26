@@ -155,6 +155,12 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
     if (isSubmitting) return;
 
     if (!isFormValid) {
+      setTouched({
+        name: true,
+        phone: true,
+        email: true,
+        address: fulfillmentType === "delivery",
+      });
       toast.error(getDisabledReason() ?? "Completa los datos del pedido.");
       return;
     }
@@ -497,11 +503,12 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
 
       {/* ── Submit ──────────────────────────────────────────────── */}
       <button
+        type="button"
         onClick={handleCheckout}
-        disabled={isSubmitting || !isFormValid}
+        disabled={isSubmitting}
         className={cn(
           "flex w-full flex-col items-center justify-center gap-1 rounded-xl py-4 text-[15px] font-bold transition-all duration-200",
-          isSubmitting || !isFormValid
+          isSubmitting
             ? "cursor-not-allowed bg-white/10 text-white/50"
             : "bg-accent text-background shadow-[0_0_15px_rgba(0,255,156,0.3)] hover:bg-accent/90 hover:shadow-[0_0_25px_rgba(0,255,156,0.4)] active:scale-95"
         )}

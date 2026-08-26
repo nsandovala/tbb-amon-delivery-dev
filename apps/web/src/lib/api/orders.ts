@@ -1,4 +1,9 @@
-const USE_EMULATOR = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
+const HAS_EXPLICIT_FUNCTIONS_BASE = Boolean(
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL
+);
+const USE_EMULATOR =
+  process.env.NEXT_PUBLIC_USE_EMULATOR === "true" ||
+  (process.env.NODE_ENV === "development" && !HAS_EXPLICIT_FUNCTIONS_BASE);
 const FUNCTIONS_BASE = USE_EMULATOR
   ? "/api/functions"
   : (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??

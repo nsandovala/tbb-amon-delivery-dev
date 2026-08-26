@@ -17,6 +17,15 @@ const validOrder = {
   paymentMethod: "cash" as const,
 };
 
+const validDeliveryOrder = {
+  ...validOrder,
+  fulfillmentType: "delivery" as const,
+  customer: {
+    ...validOrder.customer,
+    address: "Av. Brasil 1234",
+  },
+};
+
 const validPosSale = {
   tenantId: TENANT,
   items: [{ productId: "vader-burger", qty: 1 }],
@@ -37,6 +46,37 @@ test.describe("Orders API contract emulator", () => {
     expect(body.data.displayOrderNumber).toBeGreaterThan(0);
     expect(body.data.displayCode).toMatch(/^\d{3,}$/);
     expect(body.data.operationalDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test("createOrder web delivery válido retorna 201", async ({ request }) => {
+    const res = await request.post("createOrder", { data: validDeliveryOrder });
+    expect(res.status(), await res.text()).toBe(201);
+
+    const body = await res.json();
+    expect(body.data.displayOrderNumber).toBeGreaterThan(0);
+    expect(body.data.displayCode).toMatch(/^\d{3,}$/);
+  });
+
+  test("createOrder delivery sin teléfono retorna 400", async ({ request }) => {
+    const res = await request.post("createOrder", {
+      data: {
+        ...validDeliveryOrder,
+        customer: { name: "E2E Bot", address: "Av. Brasil 1234" },
+      },
+    });
+
+    expect(res.status(), await res.text()).toBe(400);
+  });
+
+  test("createOrder delivery sin dirección retorna 400", async ({ request }) => {
+    const res = await request.post("createOrder", {
+      data: {
+        ...validDeliveryOrder,
+        customer: { name: "E2E Bot", phone: "+56912345678" },
+      },
+    });
+
+    expect(res.status(), await res.text()).toBe(400);
   });
 
   test("createOrder persiste pedido consultable con getOrder", async ({ request }) => {
@@ -96,6 +136,27 @@ test.describe("Orders API contract emulator", () => {
     expect(found.data.channel).toBe("admin_pos");
     expect(found.data.totals.delivery).toBe(1500);
     expect(found.data.totals.total).toBe(found.data.totals.subtotal + 1500);
+  });
+
+  test("createPosSale delivery sin dirección retorna 400", async ({ request }) => {
+    const res = await request.post("createPosSale", {
+      data: { ...validPosSale, fulfillmentType: "delivery" },
+    });
+
+    expect(res.status(), await res.text()).toBe(400);
+  });
+
+  test("createPosSale con cliente normal y teléfono retorna 201", async ({ request }) => {
+    const res = await request.post("createPosSale", { data: validPosSale });
+    expect(res.status(), await res.text()).toBe(201);
+
+    const body = await res.json();
+    const get = await request.get(`getOrder/${body.data.orderId}?tenantId=${TENANT}`);
+    expect(get.status(), await get.text()).toBe(200);
+
+    const found = await get.json();
+    expect(found.data.customerId).toBe("+56912345678");
+    expect(found.data.customerPhoneNormalized).toBe("+56912345678");
   });
 
   test("createPosSale sin fulfillmentType persiste pickup y delivery cero", async ({ request }) => {
