@@ -6,6 +6,7 @@ M6J — horario operativo fail-closed, operación manual auditada y cierre de ca
 ## 2026-10-15 — M6J: horario operativo, apertura/cierre manual y cierre de caja
 
 ### Qué cambió
+- Correcciones de revisión M6J: el cierre de caja ahora es una frontera financiera real; gastos y cambios de estado de pedidos leen `cashCloses/{operationalDate}` dentro de la misma transacción y se rechazan después del cierre. `getStoreStatus` público quedó en lectura pura, `resume_schedule` conserva su evento específico y la configuración acepta solo `America/Santiago`, único timezone soportado por la fecha operacional actual.
 - Horario editable por día en `tenants/{tenantId}/settings/storeHours` (inicial TBB: 17:30–22:30, `America/Santiago`, DST real vía Intl).
 - Evaluador puro `apps/functions/src/lib/store-hours.ts` con 6 estados (`scheduled_open`, `closing`, `manual_open`, `scheduled_closed`, `manual_closed`, `closed`) y fail-closed ante config ausente/inválida/no evaluable.
 - `createOrder` y `createPosSale` validan el estado dentro de la misma transacción del correlativo → `409 STORE_CLOSED`. Un cierre manual bloquea de inmediato; no se cancelan pedidos ni cambia la máquina de estados.
@@ -30,6 +31,7 @@ M6J — horario operativo fail-closed, operación manual auditada y cierre de ca
 - Docs: `docs/architecture/store-operation-contract.md` (nuevo), `contracts/api-contracts.md`, `contracts/firestore-collections.md`, `docs/architecture/customer-order-contract.md`, `roadmap/phase-log.md`
 
 ### Contratos afectados
+- Mutaciones posteriores a un cierre de caja retornan `409 CONFLICT` y no alteran la jornada cerrada. `getStoreStatus` ya no escribe `storeEvents` ni `settings/storeOperation`.
 - `createOrder` / `createPosSale`: nuevo rechazo `409 STORE_CLOSED`. El payload y el documento de pedido no cambian.
 - Nuevos paths Firestore: `settings/storeHours`, `settings/storeOperation`, `storeEvents`, `cashCloses`. Rules sin cambios.
 - `AppError` acepta `details`; las rutas de orders/POS lo exponen en la respuesta de error.
@@ -47,6 +49,8 @@ npm --prefix apps/functions run build                            # OK
 git diff --check                                                 # OK
 ```
 
+Regresiones añadidas para los hallazgos P1/P2: endpoint público sin escrituras, timezone no soportado, auditoría de `resume_schedule` y bloqueo de gasto posterior al cierre.
+
 ### Riesgos restantes
 - Despliegue sin `settings/storeHours` = tienda cerrada (fail-closed intencional). Crear el horario antes de desplegar.
 - Los 7 días quedan activos por defecto; TBB debe confirmar los días de atención reales.
@@ -54,6 +58,7 @@ git diff --check                                                 # OK
 - Endpoints existentes (`createPosSale`, `updateOrderStatus`, `createExpense`) siguen sin auth.
 - Los eventos de horario se registran al observarse (polling admin/storefront), no en el segundo exacto del borde.
 - QA visual en navegador pendiente (sin sesión admin en el emulador de Auth del navegador).
+- La protección de `updateOrderStatus` usa el `operationalDate` persistido en cada pedido; los pedidos legacy sin ese campo no pueden asociarse a una jornada cerrada por esta barrera y requieren migración/normalización antes de producción.
 
 ### Próximo paso
 - QA manual de `/operacion`, `/pos` y checkout con emulador y usuario admin (`tools/set-admin-claim.mjs`).

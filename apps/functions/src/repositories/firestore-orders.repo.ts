@@ -9,6 +9,7 @@ import {
   getOperationalDate,
   type OperationalOrderMeta,
 } from "../lib/operational-order";
+import { assertCashCloseOpen } from "../lib/cash-close-guard";
 
 const ORDERS_COLLECTION = "orders";
 const ORDER_COUNTERS_COLLECTION = "orderCounters";
@@ -154,28 +155,38 @@ export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus
 ): Promise<void> {
-  const snap = await getOrder(tenantId, orderId);
-  const data = snap.data() as { status?: string } | undefined;
-  const currentStatus = data?.status as OrderStatus | undefined;
+  let previousStatus: OrderStatus | undefined;
+  await getDb().runTransaction(async (transaction) => {
+    const ref = orderDoc(tenantId, orderId);
+    const snap = await transaction.get(ref);
+    if (!snap.exists) throw new NotFoundError(`Order ${orderId}`);
 
-  if (currentStatus && isIllegalTransition(currentStatus, newStatus)) {
-    throw new ConflictError(
-      `Illegal transition from "${currentStatus}" to "${newStatus}"`
-    );
-  }
+    const data = snap.data() as { status?: string; operationalDate?: string } | undefined;
+    const currentStatus = data?.status as OrderStatus | undefined;
+    previousStatus = currentStatus;
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
+    if (currentStatus && isIllegalTransition(currentStatus, newStatus)) {
+      throw new ConflictError(
+        `Illegal transition from "${currentStatus}" to "${newStatus}"`
+      );
+    }
 
-  await orderDoc(tenantId, orderId).update({
-    status: newStatus,
-    statusChangedAt: now,
-    updatedAt: now,
+    if (data?.operationalDate) {
+      await assertCashCloseOpen(transaction, tenantId, data.operationalDate);
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    transaction.update(ref, {
+      status: newStatus,
+      statusChangedAt: now,
+      updatedAt: now,
+    });
   });
 
   logger.info("Order status updated", {
     tenantId,
     orderId,
-    from: currentStatus,
+    from: previousStatus,
     to: newStatus,
   });
 }

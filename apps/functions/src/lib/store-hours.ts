@@ -85,7 +85,9 @@ export const dayScheduleSchema = z
   });
 
 export const storeHoursConfigSchema = z.object({
-  timezone: z.string().refine(isValidTimeZone, "timezone must be a valid IANA timezone"),
+  // The operational-order and cash-close contracts currently support the
+  // Chile pilot timezone only. Keeping this explicit prevents split days.
+  timezone: z.literal(DEFAULT_STORE_TIMEZONE),
   closingWarningMinutes: z
     .number()
     .int()

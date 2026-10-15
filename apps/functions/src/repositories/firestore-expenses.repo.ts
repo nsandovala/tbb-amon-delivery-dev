@@ -2,6 +2,8 @@ import admin from "firebase-admin";
 import { getDb } from "../lib/firebase-admin";
 import { logger } from "../lib/logger";
 import type { CreateExpenseInput } from "../schemas/expense.schema";
+import { assertCashCloseOpen } from "../lib/cash-close-guard";
+import { getOperationalDate } from "../lib/operational-order";
 
 const EXPENSES_COLLECTION = "expenses";
 
@@ -35,19 +37,26 @@ export async function createExpense(
   }
 ): Promise<void> {
   const now = admin.firestore.FieldValue.serverTimestamp();
+  const occurredAt = input.occurredAt instanceof admin.firestore.Timestamp
+    ? input.occurredAt.toDate()
+    : new Date();
+  const operationalDate = getOperationalDate(occurredAt);
 
-  await expenseDoc(tenantId, expenseId).set({
-    id: expenseId,
-    tenantId,
-    category: input.category,
-    description: input.description,
-    amount: input.amount,
-    paymentMethod: input.paymentMethod,
-    status: "active",
-    ...(input.notes ? { notes: input.notes } : {}),
-    occurredAt: input.occurredAt,
-    createdAt: now,
-    updatedAt: now,
+  await getDb().runTransaction(async (transaction) => {
+    await assertCashCloseOpen(transaction, tenantId, operationalDate);
+    transaction.create(expenseDoc(tenantId, expenseId), {
+      id: expenseId,
+      tenantId,
+      category: input.category,
+      description: input.description,
+      amount: input.amount,
+      paymentMethod: input.paymentMethod,
+      status: "active",
+      ...(input.notes ? { notes: input.notes } : {}),
+      occurredAt: input.occurredAt,
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
   logger.info("Expense created", {

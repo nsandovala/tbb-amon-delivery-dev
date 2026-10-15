@@ -122,7 +122,8 @@ export async function observeStoreStatus(tenantId: string): Promise<StoreStatus>
 }
 
 export async function getPublicStoreStatus(tenantId: string): Promise<PublicStoreStatus> {
-  return toPublicStoreStatus(await observeStoreStatus(tenantId));
+  const snapshot = await readStoreSnapshot(tenantId, plainReader, new Date());
+  return toPublicStoreStatus(snapshot.status);
 }
 
 export async function getStoreControl(tenantId: string) {
@@ -214,11 +215,11 @@ export async function setStoreOperation(
     const type: StoreEventType =
       input.action === "close"
         ? "store_closed"
-        : reopening
-          ? "store_reopened"
-          : input.action === "open"
-            ? "store_opened"
-            : "schedule_resumed";
+        : input.action === "resume_schedule"
+          ? "schedule_resumed"
+          : reopening
+            ? "store_reopened"
+            : "store_opened";
 
     tx.set(
       storeRefs(tenantId).operation,

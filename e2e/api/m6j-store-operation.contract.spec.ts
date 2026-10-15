@@ -181,6 +181,22 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     expect(event.metadata.previousConfig.days.monday.open).toBe("22:30");
   });
 
+  test("el estado público es lectura pura y mantiene un timezone soportado", async () => {
+    const before = (await control()).events.length;
+    const publicStatus = await status();
+    expect(publicStatus.timezone).toBe("America/Santiago");
+    expect((await control()).events.length).toBe(before);
+
+    const invalidTimezone = await api.post("updateStoreHours", {
+      headers: bearer(adminToken),
+      data: {
+        tenantId,
+        config: { ...defaultConfig, timezone: "America/New_York" },
+      },
+    });
+    expect(invalidTimezone.status()).toBe(400);
+  });
+
   test("cierre anticipado manual bloquea web y POS inmediatamente", async () => {
     const res = await operate("close", "Se acabó el pan");
     expect(res.status(), await res.text()).toBe(200);
@@ -233,6 +249,9 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     const next = (await res.json()).data.status;
     expect(["scheduled_open", "scheduled_closed", "closing"]).toContain(next.state);
     expect(next.override).toBeNull();
+
+    const resumed = (await control()).events.find((e: { type: string }) => e.type === "schedule_resumed");
+    expect(resumed).toMatchObject({ source: "manual", metadata: { action: "resume_schedule" } });
 
     // Reabrimos manualmente para que el resto de la suite no dependa de la hora real.
     expect((await operate("open", "continuar QA")).status()).toBe(200);
@@ -395,6 +414,18 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       const reopen = await operate("open", "quiero vender más");
       expect(reopen.status()).toBe(409);
       expect((await reopen.json()).error.code).toBe("CASH_ALREADY_CLOSED");
+
+      const retroactiveExpense = await api.post("createExpense", {
+        data: {
+          tenantId,
+          category: "supplies",
+          description: "Intento posterior al cierre",
+          amount: 1000,
+          paymentMethod: "cash",
+        },
+      });
+      expect(retroactiveExpense.status()).toBe(409);
+      expect((await retroactiveExpense.json()).error.code).toBe("CONFLICT");
     });
 
     test("auditoría conserva toda la secuencia con actor, origen y estados", async () => {
