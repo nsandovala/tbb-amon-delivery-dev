@@ -68,3 +68,22 @@ export type {
 export type {
   Customer,
 } from "./types/customer.js";
+
+export {
+  STORE_STATES,
+  STORE_ACCEPTING_STATES,
+  STORE_WEEKDAYS,
+} from "./types/store-operation.js";
+
+export type {
+  StoreState,
+  StoreWeekday,
+  StoreDaySchedule,
+  StoreHoursConfig,
+  StoreActor,
+  StoreOverride,
+  StoreEventType,
+  StoreEvent,
+  CashBucket,
+  CashClose,
+} from "./types/store-operation.js";

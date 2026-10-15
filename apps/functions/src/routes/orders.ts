@@ -87,7 +87,11 @@ function handleError(err: unknown, res: { status: (code: number) => { json: (bod
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       ok: false,
-      error: { code: err.code, message: err.message },
+      error: {
+        code: err.code,
+        message: err.message,
+        ...(err.details !== undefined ? { details: err.details } : {}),
+      },
     });
     return;
   }
