@@ -31,3 +31,40 @@ export function getOrderOperatorTitle(
     ? `${getHumanOrderLabel(order)} · ${customerName}`
     : getHumanOrderLabel(order);
 }
+
+type OrderItemLike = {
+  productId?: string;
+  productName?: string;
+  qty?: number;
+};
+
+export type OrderItemLine = {
+  key: string;
+  name: string;
+  qty: number;
+};
+
+export function prettifyProductId(productId?: string): string {
+  if (!productId) return "Producto";
+  return productId
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+/**
+ * Name precedence: the snapshot persisted on the order line (what was actually sold),
+ * then the live catalog, then a prettified productId. Never invents data.
+ */
+export function getOrderItemLines(
+  items: OrderItemLike[] | undefined,
+  catalogNames: Record<string, string> = {}
+): OrderItemLine[] {
+  return (items ?? []).map((item, index) => ({
+    key: `${item.productId ?? "item"}-${index}`,
+    name:
+      item.productName?.trim() ||
+      (item.productId ? catalogNames[item.productId] : undefined) ||
+      prettifyProductId(item.productId),
+    qty: item.qty ?? 0,
+  }));
+}

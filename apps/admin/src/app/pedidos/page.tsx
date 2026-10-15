@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { useLiveOrders } from "../../hooks/use-live-orders";
 import { updateOrderStatusApi } from "../../lib/api/orders";
+import { OrderItemsSummary } from "../../components/order-items-summary";
 import { db } from "../../lib/firebase/client";
 import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
 import {
   getHumanOrderLabel,
+  getOrderItemLines,
   getOrderOperatorTitle,
+  prettifyProductId,
 } from "../../lib/orders";
 import {
   getOperationalDayStart,
@@ -143,13 +146,6 @@ function getItemCount(order: AdminOrder) {
   return order.items?.reduce((acc, item) => acc + (item.qty || 0), 0) ?? 0;
 }
 
-function prettifyProductId(productId?: string) {
-  if (!productId) return "Producto";
-  return productId
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function OrderCard({
   order,
   selected,
@@ -157,6 +153,7 @@ function OrderCard({
   onChangeStatus,
   updatingIds,
   nowTs,
+  catalogNames,
 }: {
   order: AdminOrder;
   selected: boolean;
@@ -164,6 +161,7 @@ function OrderCard({
   onChangeStatus: (orderId: string, nextStatus: OrderStatus) => Promise<void>;
   updatingIds: Set<string>;
   nowTs: number;
+  catalogNames: ProductNameMap;
 }) {
   const itemCount = getItemCount(order);
   const createdAt = toDate(order.createdAt);
@@ -228,6 +226,12 @@ function OrderCard({
             </p>
           </div>
         </div>
+
+        <OrderItemsSummary
+          items={order.items}
+          catalogNames={catalogNames}
+          notes={order.customer?.notes}
+        />
 
         {canCloseSale(order) ? (
           <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-3">
@@ -481,10 +485,7 @@ export default function OrdersPage() {
     }
   };
 
-  const resolveProductName = (productId?: string) => {
-    if (!productId) return "Producto";
-    return productNames[productId] || prettifyProductId(productId);
-  };
+  const selectedOrderItemLines = getOrderItemLines(selectedOrder?.items, productNames);
 
   const selectedOrderCreatedAt = toDate(selectedOrder?.createdAt);
 
@@ -631,6 +632,7 @@ export default function OrdersPage() {
                   onChangeStatus={handleChangeStatus}
                   updatingIds={updatingIds}
                   nowTs={nowTs}
+                  catalogNames={productNames}
                 />
               ))}
             </section>
@@ -739,7 +741,7 @@ export default function OrdersPage() {
                         >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-white">
-                              {resolveProductName(item.productId)}
+                              {selectedOrderItemLines[index]?.name}
                             </p>
                             <p className="text-xs text-neutral-500">
                               {item.qty} × {formatMoney(item.unitPrice)}
