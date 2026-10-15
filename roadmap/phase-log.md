@@ -693,3 +693,4 @@ git diff --check
 ### Próximo paso
 - Esperar revisión y checks de PR #71; solicitar aprobación explícita antes de fusionar.
 - Después del cierre, iniciar M6J: cierre de caja y horario fail-closed en `America/Santiago`.
+- Mini-sprint de hardening post-M6J: el cierre de caja bloquea todos los pedidos activos (web, WhatsApp y POS) para no dejar órdenes atrapadas después de una jornada inmutable; `createOrder` comparte el mismo instante capturado entre `operationalDate` y el guard de tienda; el cierre rechaza fechas calendario imposibles; y una actualización de horario conserva un cierre existente aunque la configuración anterior estuviera inválida. Pendiente validar en CI y abrir PR antes del Release Gate.
