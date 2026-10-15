@@ -64,6 +64,19 @@ Regresiones añadidas para los hallazgos P1/P2: endpoint público sin escrituras
 - QA manual de `/operacion`, `/pos` y checkout con emulador y usuario admin (`tools/set-admin-claim.mjs`).
 - Confirmar con operación los días activos de TBB y ajustar el horario desde `/operacion`.
 
+## 2026-10-15 — Mini-sprint hardening M6J: cierre de caja y frontera temporal
+
+### Correcciones de revisión del PR #73
+
+- El contrato Admin incorpora `ACTIVE_OTHER_ORDERS` y lo presenta como “Pedidos web/WhatsApp activos”. Los pedidos activos de cualquier canal bloquean el cierre y no se pueden saltar con override; los pagos `pending` siguen siendo el único bloqueo anulable mediante motivo auditado.
+- `createOrder` y `createPosSale` ahora reenvían el `capturedNow` del repositorio al guard de tienda. Así `operationalDate` y la evaluación de horario usan exactamente el mismo instante, incluso en los límites de horario o del corte de las 05:00.
+- La documentación canónica de `docs/architecture/store-operation-contract.md` quedó alineada con el contrato real: bloqueo de todos los pedidos activos, excepción limitada a pagos pendientes y diagrama de la frontera temporal.
+
+### Validación y Release Gate
+
+- Validar en CI el typecheck/build de Functions, Admin y Web, además de las suites unitarias y API del PR #73.
+- El emulador local existente no se reinicia durante este mini-sprint para preservar sus datos; la validación API definitiva debe ejecutarse con un proceso de Functions fresco.
+
 ## 2026-08-26 — M6H: QA checkout web + formulario cliente POS
 
 ### Qué cambió

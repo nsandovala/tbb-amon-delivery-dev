@@ -17,7 +17,8 @@ Storefront / POS
   -> service: valida payload, calcula totales
   -> createOrder() repo: runTransaction
        -> lee orderCounters/{operationalDate}
-       -> guard: assertStoreAcceptingOrders(tx)    ← lee storeHours, storeOperation, cashCloses/{día}
+       -> guard: assertStoreAcceptingOrders(tx, capturedNow)
+            ← usa el mismo instante para operationalDate y estado de tienda
             -> evaluateStoreStatus()  (lib/store-hours.ts, puro)
             -> !acceptingOrders → 409 STORE_CLOSED (nada se escribe)
        -> escribe counter + order
@@ -158,7 +159,7 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 |---|---|---|
 | `STORE_CONFIG_INVALID` | 409 | Acción manual con horario ausente/inválido |
 | `CASH_ALREADY_CLOSED` | 409 | Reabrir tras cierre de caja del día, o segundo cierre con otra `idempotencyKey` |
-| `CASH_CLOSE_BLOCKED` | 409 | Hay ventas POS activas o pagos `pending` y no hay `override` |
+| `CASH_CLOSE_BLOCKED` | 409 | Hay pedidos activos o pagos `pending` sin el override permitido |
 | `VALIDATION_ERROR` | 400 | Payload inválido, decimales, fecha futura |
 
 ### Idempotencia
@@ -172,8 +173,10 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 - `paymentMethod = "pending"` nunca suma a efectivo ni a transferencias; se informa como "ventas pendientes".
 - `cancelled` no suma en ninguna parte.
 - Efectivo esperado = ventas entregadas en efectivo − gastos activos pagados en efectivo.
-- Bloqueos (requieren override con motivo ≥ 5 caracteres, auditado): ventas `admin_pos` activas; pedidos no cancelados con pago `pending`.
-- Los pedidos web activos se informan como advertencia, no bloquean.
+- Todo pedido activo (`queued`, `preparing`, `ready` o `on_the_way`) bloquea el cierre, sin importar si proviene de POS, web o WhatsApp.
+- Los pedidos activos son bloqueos no anulables: deben llegar a un estado terminal (`delivered` o `cancelled`) antes de cerrar la caja.
+- Los pagos `pending` bloquean el cierre, pero pueden superarse con un override administrativo con motivo de al menos 5 caracteres; el override queda auditado.
+- Un pedido web/WhatsApp activo se muestra como bloqueo explícito, no como una simple advertencia.
 - El día se toma de `order.operationalDate` (pedidos legacy sin ese campo no se incluyen) y los gastos por `occurredAt` dentro de `[día 05:00, día+1 05:00)` local.
 
 ## Timezone

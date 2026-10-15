@@ -126,7 +126,7 @@ export async function handleCreateOrder(
     customerId: normalizedPhone,
     customerPhoneNormalized: normalizedPhone,
   }, {
-    guard: (tx) => assertStoreAcceptingOrders(tx, tenantId),
+    guard: (tx, now) => assertStoreAcceptingOrders(tx, tenantId, now),
   });
 
   // Upsert customer (non-blocking — order is already persisted)

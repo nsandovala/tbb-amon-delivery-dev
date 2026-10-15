@@ -124,7 +124,7 @@ export async function handleCreatePosSale(
     customerId: normalizedPhone ?? undefined,
     customerPhoneNormalized: normalizedPhone ?? undefined,
   }, {
-    guard: (tx) => assertStoreAcceptingOrders(tx, tenantId),
+    guard: (tx, now) => assertStoreAcceptingOrders(tx, tenantId, now),
   });
 
   if (normalizedPhone) {
