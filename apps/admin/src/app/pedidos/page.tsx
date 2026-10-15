@@ -231,6 +231,7 @@ function OrderCard({
           items={order.items}
           catalogNames={catalogNames}
           notes={order.customer?.notes}
+          status={order.status}
         />
 
         {canCloseSale(order) ? (

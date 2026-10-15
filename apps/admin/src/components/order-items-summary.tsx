@@ -4,6 +4,7 @@ type OrderItemsSummaryProps = {
   items?: { productId?: string; productName?: string; qty?: number }[];
   catalogNames?: Record<string, string>;
   notes?: string;
+  status?: "queued" | "preparing" | "ready" | "on_the_way" | "delivered" | "cancelled";
   /** "list": one line per product (kitchen card). "inline": single wrapped line (POS open sales). */
   variant?: "list" | "inline";
 };
@@ -21,6 +22,7 @@ export function OrderItemsSummary({
   items,
   catalogNames,
   notes,
+  status,
   variant = "list",
 }: OrderItemsSummaryProps) {
   const lines = getOrderItemLines(items, catalogNames);
@@ -41,12 +43,16 @@ export function OrderItemsSummary({
     );
   }
 
+  const heading = status === "delivered" || status === "cancelled"
+    ? "Detalle del pedido"
+    : "Preparar";
+
   return (
     <div
       className="rounded-xl border border-white/8 bg-black/20 p-3"
       data-testid="order-items-list"
     >
-      <p className="mb-1.5 text-xs uppercase tracking-[0.16em] text-neutral-500">Preparar</p>
+      <p className="mb-1.5 text-xs uppercase tracking-[0.16em] text-neutral-500">{heading}</p>
       {lines.length > 0 ? (
         <ul className="space-y-1">
           {lines.map((line) => (

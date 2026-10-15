@@ -593,3 +593,42 @@ git diff --check
 
 ### Próximo paso
 - M6J: auditoría de métricas, cierre de caja y distinción venta creada vs dinero recibido.
+
+## 2026-10-15 — M6I follow-up P2: etiquetas de pedidos terminales
+
+### Qué cambió
+- `OrderItemsSummary` recibe el estado del pedido.
+- Las tarjetas activas (`queued`, `preparing`, `ready`, `on_the_way`) mantienen el encabezado `Preparar`.
+- Las tarjetas `delivered` y `cancelled` muestran `Detalle del pedido` para no sugerir preparación duplicada o desperdicio.
+- Se añadió una regresión que cubre estados activos y terminales.
+
+### Por qué cambió
+- La revisión de PR #70 detectó que la vista `/pedidos` podía mostrar `Preparar` para pedidos ya entregados o cancelados cuando se usaban filtros amplios o terminales.
+- El encabezado debe describir la acción operativa real del estado visible.
+
+### Archivos modificados
+- `apps/admin/src/components/order-items-summary.tsx`
+- `apps/admin/src/app/pedidos/page.tsx`
+- `e2e/unit/m6i-clp-ordercards.spec.ts`
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- Ninguno. No cambian la máquina de estados, los documentos Firestore, los endpoints ni los flujos de cierre financiero.
+- Es una corrección de presentación basada en el estado ya persistido del pedido.
+
+### Validación
+```bash
+npx playwright test e2e/unit/m6i-clp-ordercards.spec.ts --config=playwright.config.ts
+git diff --check
+```
+
+- Resultado: 29/29 pruebas aprobadas y `git diff --check` OK.
+- `npm --workspace apps/admin run build` quedó inconcluso por falta de salida del proceso; no reportó error antes de ser interrumpido. La validación CI de la PR queda como fuente adicional.
+
+### Riesgos restantes
+- El build local de `apps/admin` debe repetirse si CI reporta una regresión de compilación.
+- El copy `Preparar` sigue dependiendo de que el estado del pedido sea válido; un estado desconocido usa el comportamiento activo por compatibilidad.
+
+### Próximo paso
+- Esperar revisión y checks de PR #71; solicitar aprobación explícita antes de fusionar.
+- Después del cierre, iniciar M6J: cierre de caja y horario fail-closed en `America/Santiago`.
