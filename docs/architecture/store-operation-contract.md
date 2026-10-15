@@ -183,6 +183,27 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 
 Toda la aritmética usa `Intl` con la timezone configurada (DST real de Chile): nunca la del proceso ni la del navegador. Las horas se devuelven como ISO con offset (`-03:00` verano, `-04:00` invierno). La UI admin corrige el reloj del dispositivo con el `localNow` del servidor.
 
+## Hardening post-M6J: frontera del cierre y del instante capturado
+
+### Motivo
+
+El cierre de caja es una frontera financiera inmutable: no debe dejar pedidos activos atrapados en estados no terminales ni evaluar una orden con un día operacional distinto del que se persiste. Por eso el backend bloquea todos los pedidos activos y conserva un único instante para calcular la fecha y el guard de tienda.
+
+### Contratos y archivos afectados
+
+- `CashCloseBlocker.code` incorpora `ACTIVE_OTHER_ORDERS`; el cliente Admin lo muestra como “Pedidos web/WhatsApp activos”.
+- `createOrder` y `createPosSale` reenvían `capturedNow` a `assertStoreAcceptingOrders`.
+- `apps/functions/src/lib/cash-close.ts` distingue bloqueos activos no anulables de `PENDING_PAYMENTS`, que sí admite override auditado.
+- `apps/admin/src/lib/api/store.ts` y `apps/admin/src/components/operation/cash-panel.tsx` mantienen el contrato y la etiqueta visibles para el operador.
+
+### Validación
+
+El PR debe pasar las suites unitarias y API, el build de Functions, los typechecks de Shared/Admin/Web y `git diff --check`. La validación API local debe usar un proceso de Functions fresco; no se reinicia el emulador existente durante este mini-sprint para preservar sus datos.
+
+### Riesgos y siguiente paso
+
+El cierre ahora requiere terminalizar pedidos activos antes del arqueo; esto es intencional y evita jornadas inmutables con órdenes atrapadas. Los pagos `pending` siguen requiriendo override con motivo auditado. Tras los checks verdes del PR, ejecutar el Release Gate y luego continuar con la revisión UX de Operación y Métricas.
+
 ## Validación
 
 ```bash
