@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { uniqueTenantId } from "../support/emulator-fixtures";
 
 /**
  * Capa 1 — Contrato de la API de expenses contra Firebase Emulator.
@@ -10,7 +11,8 @@ import { test, expect } from "@playwright/test";
  * así que el contrato se verifica sobre la respuesta de createExpense.
  */
 
-const TENANT = "tbb";
+// Tenant fixture aislado: la suite no escribe gastos de prueba en `tbb`.
+const TENANT = uniqueTenantId("expenses");
 
 const validExpense = {
   tenantId: TENANT,
@@ -21,7 +23,7 @@ const validExpense = {
 };
 
 test.describe("Expenses API contract emulator", () => {
-  test("createExpense retorna 201 con expenseId y tenant tbb", async ({ request }) => {
+  test("createExpense retorna 201 con expenseId y tenant solicitado", async ({ request }) => {
     const res = await request.post("createExpense", { data: validExpense });
     expect(res.status(), await res.text()).toBe(201);
 
@@ -37,7 +39,8 @@ test.describe("Expenses API contract emulator", () => {
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
-    expect(body.data.tenantId).toBe(TENANT);
+    // Único caso que escribe en el tenant piloto: verifica el default del backend.
+    expect(body.data.tenantId).toBe("tbb");
   });
 
   test("createExpense sin paymentMethod aplica default cash", async ({ request }) => {

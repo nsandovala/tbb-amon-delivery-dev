@@ -1,7 +1,68 @@
 # Phase Log
 
 ## Fase actual
-Preparación de integración ERP — cierre de R1/R2 del contrato financiero
+M6J — horario operativo fail-closed, operación manual auditada y cierre de caja
+
+## 2026-10-15 — M6J: horario operativo, apertura/cierre manual y cierre de caja
+
+### Qué cambió
+- Correcciones de revisión M6J: el cierre de caja ahora es una frontera financiera real; gastos y cambios de estado de pedidos leen `cashCloses/{operationalDate}` dentro de la misma transacción y se rechazan después del cierre. `getStoreStatus` público quedó en lectura pura, `resume_schedule` conserva su evento específico y la configuración acepta solo `America/Santiago`, único timezone soportado por la fecha operacional actual.
+- Horario editable por día en `tenants/{tenantId}/settings/storeHours` (inicial TBB: 17:30–22:30, `America/Santiago`, DST real vía Intl).
+- Evaluador puro `apps/functions/src/lib/store-hours.ts` con 6 estados (`scheduled_open`, `closing`, `manual_open`, `scheduled_closed`, `manual_closed`, `closed`) y fail-closed ante config ausente/inválida/no evaluable.
+- `createOrder` y `createPosSale` validan el estado dentro de la misma transacción del correlativo → `409 STORE_CLOSED`. Un cierre manual bloquea de inmediato; no se cancelan pedidos ni cambia la máquina de estados.
+- Override manual del día (`open` / `close` / `resume_schedule`) con motivo, actor y estados previo/nuevo en `storeEvents` (append-only). Cambios por horario se auditan con `source: "schedule"` al observarse.
+- Cierre de caja separado del cierre de tienda: `cashCloses/{operationalDate}` inmutable e idempotente (`idempotencyKey`), con efectivo esperado/contado, transferencias, pendientes, gastos activos y diferencias. `pending` nunca es dinero recibido. Ventas POS activas o pagos pendientes bloquean salvo override auditado.
+- Endpoints admin verifican ID token con claim `admin` (mismo claim que rules/AdminGuard).
+- Admin: nueva sala de control `/operacion` (estado verde/ámbar/rojo, hora oficial de la tienda, próxima apertura/cierre, acción manual, horario semanal, bitácora, caja en zona separada) y franja de estado en `/pos` y `/pedidos`.
+- Web: el checkout muestra “La tienda está cerrada” ante `STORE_CLOSED` (el backend sigue siendo quien decide).
+- Seed crea `settings/storeHours` solo si no existe.
+- Las suites API usan tenants fixture aislados (`e2e/support/emulator-fixtures.ts`); ya no escriben en `tbb`, salvo el test existente que verifica el tenant por defecto de `createExpense`.
+
+### Por qué cambió
+- TBB necesita aceptar pedidos solo en horario operativo y poder cerrar antes sin depender del frontend.
+- El cierre financiero debía registrarse sin confundir ventas creadas, pagos pendientes y dinero recibido.
+
+### Archivos modificados
+- Functions: `lib/store-hours.ts` (nuevo), `lib/cash-close.ts` (nuevo), `lib/admin-auth.ts` (nuevo), `lib/errors.ts`, `lib/firebase-admin.ts`, `repositories/firestore-store.repo.ts` (nuevo), `repositories/firestore-orders.repo.ts`, `services/store-operation.service.ts` (nuevo), `services/cash-close.service.ts` (nuevo), `services/orders.service.ts`, `services/pos.service.ts`, `routes/store.ts` (nuevo), `routes/orders.ts`, `routes/pos.ts`, `index.ts`
+- Shared: `types/store-operation.ts` (nuevo), `data/tbb/store-hours.ts` (nuevo), `index.ts`, `seed.ts`
+- Admin: `app/operacion/{layout,page}.tsx` (nuevos), `components/operation/*` (nuevos), `components/store-status-strip.tsx` (nuevo), `hooks/use-store-status.ts` (nuevo), `lib/api/store.ts` (nuevo), `lib/store-status.ts` (nuevo), `app/layout.tsx`, `app/pos/page.tsx`, `app/pedidos/page.tsx`
+- Web: `lib/api/orders.ts`, `components/cart/cart-summary.tsx`
+- Tests: `e2e/unit/m6j-store-hours.spec.ts`, `e2e/unit/m6j-control-room.spec.ts`, `e2e/api/m6j-store-operation.contract.spec.ts`, `e2e/support/emulator-fixtures.ts` (nuevos); `e2e/api/orders.contract.spec.ts`, `e2e/api/expenses.contract.spec.ts` (tenant fixture)
+- Docs: `docs/architecture/store-operation-contract.md` (nuevo), `contracts/api-contracts.md`, `contracts/firestore-collections.md`, `docs/architecture/customer-order-contract.md`, `roadmap/phase-log.md`
+
+### Contratos afectados
+- Mutaciones posteriores a un cierre de caja retornan `409 CONFLICT` y no alteran la jornada cerrada. `getStoreStatus` ya no escribe `storeEvents` ni `settings/storeOperation`.
+- `createOrder` / `createPosSale`: nuevo rechazo `409 STORE_CLOSED`. El payload y el documento de pedido no cambian.
+- Nuevos paths Firestore: `settings/storeHours`, `settings/storeOperation`, `storeEvents`, `cashCloses`. Rules sin cambios.
+- `AppError` acepta `details`; las rutas de orders/POS lo exponen en la respuesta de error.
+- Shop → ERP (`contracts/financial-events.md`): sin cambios.
+
+### Validación
+```bash
+npx playwright test e2e/unit --config=playwright.config.ts      # 78/78
+npx playwright test e2e/api --config=playwright.config.ts       # 38/38 contra emulador
+npm --workspace packages/shared run build                        # OK
+npm --workspace packages/shared run typecheck                    # OK
+npm --prefix apps/functions run build                            # OK
+./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit     # OK
+./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit       # OK
+git diff --check                                                 # OK
+```
+
+Regresiones añadidas para los hallazgos P1/P2: endpoint público sin escrituras, timezone no soportado, auditoría de `resume_schedule` y bloqueo de gasto posterior al cierre.
+
+### Riesgos restantes
+- Despliegue sin `settings/storeHours` = tienda cerrada (fail-closed intencional). Crear el horario antes de desplegar.
+- Los 7 días quedan activos por defecto; TBB debe confirmar los días de atención reales.
+- No hay flujo para saldar pagos `pending`: cerrar caja con pendientes siempre requiere override.
+- Endpoints existentes (`createPosSale`, `updateOrderStatus`, `createExpense`) siguen sin auth.
+- Los eventos de horario se registran al observarse (polling admin/storefront), no en el segundo exacto del borde.
+- QA visual en navegador pendiente (sin sesión admin en el emulador de Auth del navegador).
+- La protección de `updateOrderStatus` usa el `operationalDate` persistido en cada pedido; los pedidos legacy sin ese campo no pueden asociarse a una jornada cerrada por esta barrera y requieren migración/normalización antes de producción.
+
+### Próximo paso
+- QA manual de `/operacion`, `/pos` y checkout con emulador y usuario admin (`tools/set-admin-claim.mjs`).
+- Confirmar con operación los días activos de TBB y ajustar el horario desde `/operacion`.
 
 ## 2026-08-26 — M6H: QA checkout web + formulario cliente POS
 

@@ -4,6 +4,7 @@ import type { CreatePosSaleInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 import { ValidationError } from "../lib/errors";
+import { assertStoreAcceptingOrders } from "./store-operation.service";
 
 const DELIVERY_FEE = 1500;
 
@@ -122,6 +123,8 @@ export async function handleCreatePosSale(
     totals: { subtotal, delivery, total },
     customerId: normalizedPhone ?? undefined,
     customerPhoneNormalized: normalizedPhone ?? undefined,
+  }, {
+    guard: (tx) => assertStoreAcceptingOrders(tx, tenantId),
   });
 
   if (normalizedPhone) {

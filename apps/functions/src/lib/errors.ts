@@ -6,7 +6,8 @@ export class AppError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public code: string
+    public code: string,
+    public details?: unknown
   ) {
     super(message);
     this.name = "AppError";
@@ -31,5 +32,19 @@ export class ConflictError extends AppError {
   constructor(message: string) {
     super(message, 409, "CONFLICT");
     this.name = "ConflictError";
+  }
+}
+
+export class UnauthorizedError extends AppError {
+  constructor(message = "Admin authentication required") {
+    super(message, 401, "UNAUTHENTICATED");
+    this.name = "UnauthorizedError";
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message = "Admin privileges required") {
+    super(message, 403, "FORBIDDEN");
+    this.name = "ForbiddenError";
   }
 }

@@ -74,6 +74,7 @@ POS sale
 
 ## Reglas operativas
 
+- Desde M6J, `createOrder` y `createPosSale` rechazan con `409 STORE_CLOSED` si la tienda no acepta pedidos (horario, cierre manual, caja cerrada o configuración ausente/inválida). Ver `docs/architecture/store-operation-contract.md`.
 - `customerId` es el teléfono chileno normalizado.
 - Storefront exige nombre y teléfono válido; si `fulfillmentType === "delivery"`, también exige dirección no vacía.
 - El botón de confirmación del storefront permanece accionable para mostrar la causa exacta cuando la validación frontend falla; solo se deshabilita durante el envío.

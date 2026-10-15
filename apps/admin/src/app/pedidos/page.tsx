@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { StoreStatusStrip } from "@/components/store-status-strip";
 import { collection, getDocs } from "firebase/firestore";
 import { useLiveOrders } from "../../hooks/use-live-orders";
 import { updateOrderStatusApi } from "../../lib/api/orders";
@@ -503,6 +504,8 @@ export default function OrdersPage() {
   return (
     <main className="min-h-screen bg-[#0B0B0B] text-white">
       <div className="mx-auto max-w-[1600px] px-6 py-8">
+
+        <StoreStatusStrip />
 
         {/* Header + métricas */}
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">

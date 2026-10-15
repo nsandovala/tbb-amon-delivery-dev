@@ -1,42 +1,56 @@
 import { test, expect } from "@playwright/test";
+import { createOpenFixtureTenant, FIXTURE_PRODUCT } from "../support/emulator-fixtures";
 
 /**
  * Capa 1 — Contrato de la API de orders contra Firebase Emulator.
  *
  * Pre-req:
- * - npm run dev:emulators corriendo
- * - seed aplicado
+ * - npm run dev:emulators corriendo (Auth + Firestore + Functions)
+ *
+ * Desde M6J, createOrder/createPosSale exigen tienda abierta. La suite usa un
+ * tenant fixture aislado con horario válido y apertura manual, así no depende
+ * de la hora real ni modifica `tbb`.
  */
 
-const TENANT = "tbb";
+let TENANT = "";
 
-const validOrder = {
-  items: [{ productId: "vader-burger", qty: 1 }],
+const validOrder = () => ({
+  tenantId: TENANT,
+  items: [{ productId: FIXTURE_PRODUCT.id, qty: 1 }],
   customer: { name: "E2E Bot", phone: "+56912345678" },
   fulfillmentType: "pickup" as const,
   paymentMethod: "cash" as const,
-};
+});
 
-const validDeliveryOrder = {
-  ...validOrder,
+const validDeliveryOrder = () => ({
+  ...validOrder(),
   fulfillmentType: "delivery" as const,
   customer: {
-    ...validOrder.customer,
+    ...validOrder().customer,
     address: "Av. Brasil 1234",
   },
-};
+});
 
-const validPosSale = {
+const validPosSale = () => ({
   tenantId: TENANT,
-  items: [{ productId: "vader-burger", qty: 1 }],
+  items: [{ productId: FIXTURE_PRODUCT.id, qty: 1 }],
   customer: { name: "E2E POS", phone: "+56912345678" },
   fulfillmentType: "pickup" as const,
   paymentMethod: "cash" as const,
-};
+});
+
+test.beforeAll(async ({ playwright, baseURL }) => {
+  const api = await playwright.request.newContext({
+    baseURL,
+    extraHTTPHeaders: { "Content-Type": "application/json" },
+  });
+  TENANT = (await createOpenFixtureTenant(api, "orders")).tenantId;
+  await api.dispose();
+});
 
 test.describe("Orders API contract emulator", () => {
-  test("createOrder retorna 201 con orderId y tenant tbb", async ({ request }) => {
-    const res = await request.post("createOrder", { data: validOrder });
+  test("createOrder retorna 201 con orderId y tenant solicitado", async ({ request }) => {
+    const res = await request.post("createOrder", { data: validOrder() });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -49,7 +63,7 @@ test.describe("Orders API contract emulator", () => {
   });
 
   test("createOrder web delivery válido retorna 201", async ({ request }) => {
-    const res = await request.post("createOrder", { data: validDeliveryOrder });
+    const res = await request.post("createOrder", { data: validDeliveryOrder() });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -60,7 +74,7 @@ test.describe("Orders API contract emulator", () => {
   test("createOrder delivery sin teléfono retorna 400", async ({ request }) => {
     const res = await request.post("createOrder", {
       data: {
-        ...validDeliveryOrder,
+        ...validDeliveryOrder(),
         customer: { name: "E2E Bot", address: "Av. Brasil 1234" },
       },
     });
@@ -71,7 +85,7 @@ test.describe("Orders API contract emulator", () => {
   test("createOrder delivery sin dirección retorna 400", async ({ request }) => {
     const res = await request.post("createOrder", {
       data: {
-        ...validDeliveryOrder,
+        ...validDeliveryOrder(),
         customer: { name: "E2E Bot", phone: "+56912345678" },
       },
     });
@@ -80,7 +94,7 @@ test.describe("Orders API contract emulator", () => {
   });
 
   test("createOrder persiste pedido consultable con getOrder", async ({ request }) => {
-    const create = await request.post("createOrder", { data: validOrder });
+    const create = await request.post("createOrder", { data: validOrder() });
     expect(create.status(), await create.text()).toBe(201);
 
     const created = await create.json();
@@ -100,7 +114,7 @@ test.describe("Orders API contract emulator", () => {
   });
 
   test("createPosSale retorna 201 para venta POS", async ({ request }) => {
-    const res = await request.post("createPosSale", { data: validPosSale });
+    const res = await request.post("createPosSale", { data: validPosSale() });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -113,10 +127,10 @@ test.describe("Orders API contract emulator", () => {
   test("createPosSale delivery cobra fee y persiste en getOrder", async ({ request }) => {
     const res = await request.post("createPosSale", {
       data: {
-        ...validPosSale,
+        ...validPosSale(),
         fulfillmentType: "delivery",
         customer: {
-          ...validPosSale.customer,
+          ...validPosSale().customer,
           address: "Av. Brasil 1234",
         },
       },
@@ -140,14 +154,14 @@ test.describe("Orders API contract emulator", () => {
 
   test("createPosSale delivery sin dirección retorna 400", async ({ request }) => {
     const res = await request.post("createPosSale", {
-      data: { ...validPosSale, fulfillmentType: "delivery" },
+      data: { ...validPosSale(), fulfillmentType: "delivery" },
     });
 
     expect(res.status(), await res.text()).toBe(400);
   });
 
   test("createPosSale con cliente normal y teléfono retorna 201", async ({ request }) => {
-    const res = await request.post("createPosSale", { data: validPosSale });
+    const res = await request.post("createPosSale", { data: validPosSale() });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -160,7 +174,7 @@ test.describe("Orders API contract emulator", () => {
   });
 
   test("createPosSale sin fulfillmentType persiste pickup y delivery cero", async ({ request }) => {
-    const { fulfillmentType: _, ...posSaleWithoutFulfillment } = validPosSale;
+    const { fulfillmentType: _, ...posSaleWithoutFulfillment } = validPosSale();
     const res = await request.post("createPosSale", { data: posSaleWithoutFulfillment });
     expect(res.status(), await res.text()).toBe(201);
 
@@ -183,7 +197,7 @@ test.describe("Orders API contract emulator", () => {
     const res = await request.post("createPosSale", {
       data: {
         tenantId: TENANT,
-        items: [{ productId: "vader-burger", qty: 1 }],
+        items: [{ productId: FIXTURE_PRODUCT.id, qty: 1 }],
         customer: { name: "Cliente mostrador" },
         paymentMethod: "cash",
       },
@@ -207,7 +221,7 @@ test.describe("Orders API contract emulator", () => {
 
   test("createOrder con items vacíos retorna 400", async ({ request }) => {
     const res = await request.post("createOrder", {
-      data: { ...validOrder, items: [] },
+      data: { ...validOrder(), items: [] },
     });
 
     expect(res.status()).toBe(400);

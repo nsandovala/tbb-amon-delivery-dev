@@ -4,6 +4,7 @@ import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.
 import { logger } from "../lib/logger";
 import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 import { ValidationError } from "../lib/errors";
+import { assertStoreAcceptingOrders } from "./store-operation.service";
 
 const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
@@ -124,6 +125,8 @@ export async function handleCreateOrder(
     totals: { subtotal, delivery, total },
     customerId: normalizedPhone,
     customerPhoneNormalized: normalizedPhone,
+  }, {
+    guard: (tx) => assertStoreAcceptingOrders(tx, tenantId),
   });
 
   // Upsert customer (non-blocking — order is already persisted)

@@ -10,6 +10,7 @@ import { TBB_PRODUCTS } from "./data/tbb/products.js";
 import { TBB_MODIFIER_GROUPS, TBB_MODIFIERS } from "./data/tbb/modifiers.js";
 import { TBB_SETTINGS } from "./data/tbb/settings.js";
 import { TBB_ORDERS } from "./data/tbb/orders.js";
+import { TBB_STORE_HOURS } from "./data/tbb/store-hours.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -166,6 +167,31 @@ async function seedSettings() {
     });
 }
 
+/**
+ * M6J: create-only. Never overwrites a schedule edited from Admin → Operación.
+ * Without this doc the backend is fail-closed and rejects every order.
+ */
+async function seedStoreHours() {
+  const ref = db
+    .collection("tenants")
+    .doc(TBB_TENANT.id)
+    .collection("settings")
+    .doc("storeHours");
+
+  try {
+    await ref.create({
+      ...TBB_STORE_HOURS,
+      schemaVersion: 1,
+      updatedAt: now(),
+      updatedBy: { uid: "seed", email: null },
+    });
+    return "created";
+  } catch (err) {
+    if ((err as { code?: number }).code === 6) return "kept";
+    throw err;
+  }
+}
+
 async function seedOrders() {
   const batch = db.batch();
 
@@ -192,6 +218,7 @@ async function main() {
   await seedProducts();
   await seedModifiers();
   await seedSettings();
+  const storeHours = await seedStoreHours();
   await seedOrders();
 
   console.log("✅ Seed completo:", {
@@ -202,6 +229,7 @@ async function main() {
     modifierGroups: TBB_MODIFIER_GROUPS.length,
     modifiers: TBB_MODIFIERS.length,
     orders: TBB_ORDERS.length,
+    storeHours,
   });
 }
 

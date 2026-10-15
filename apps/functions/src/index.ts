@@ -1,6 +1,6 @@
 /**
  * @amon/functions — Entry point.
- * Exports Firebase Functions for orders, POS, and operating expenses.
+ * Exports Firebase Functions for orders, POS, operating expenses, store hours and cash close.
  *
  * Route → Service → Repository.
  * All writes go through Firestore Admin SDK.
@@ -10,6 +10,14 @@
 import { createOrder, getOrder } from "./routes/orders";
 import { updateOrderStatus, createPosSale } from "./routes/pos";
 import { createExpense } from "./routes/expenses";
+import {
+  getStoreStatus,
+  getStoreControl,
+  setStoreOperation,
+  updateStoreHours,
+  getCashCloseSummary,
+  closeCashSession,
+} from "./routes/store";
 
 export {
   // Orders
@@ -22,4 +30,12 @@ export {
 
   // Expenses
   createExpense,
+
+  // Store operation & cash close (M6J)
+  getStoreStatus,
+  getStoreControl,
+  setStoreOperation,
+  updateStoreHours,
+  getCashCloseSummary,
+  closeCashSession,
 };

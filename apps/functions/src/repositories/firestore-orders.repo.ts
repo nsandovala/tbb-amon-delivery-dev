@@ -9,6 +9,7 @@ import {
   getOperationalDate,
   type OperationalOrderMeta,
 } from "../lib/operational-order";
+import { assertCashCloseOpen } from "../lib/cash-close-guard";
 
 const ORDERS_COLLECTION = "orders";
 const ORDER_COUNTERS_COLLECTION = "orderCounters";
@@ -66,7 +67,14 @@ export async function createOrder(
     channel: string;
     customerId?: string;
     customerPhoneNormalized?: string;
-  }
+  },
+  options: {
+    /**
+     * Runs inside the same transaction, after the counter read and before any
+     * write. Used by M6J to reject orders while the store is closed.
+     */
+    guard?: (transaction: admin.firestore.Transaction) => Promise<unknown>;
+  } = {}
 ): Promise<OperationalOrderMeta> {
   const now = admin.firestore.FieldValue.serverTimestamp();
   const operationalDate = getOperationalDate();
@@ -74,6 +82,9 @@ export async function createOrder(
   const meta = await getDb().runTransaction(async (transaction) => {
     const counterRef = orderCounterDoc(tenantId, operationalDate);
     const counterSnap = await transaction.get(counterRef);
+    if (options.guard) {
+      await options.guard(transaction);
+    }
     const currentValue = (counterSnap.data()?.lastDisplayOrderNumber as number | undefined) ?? 0;
     const displayOrderNumber = currentValue + 1;
     const displayCode = formatDisplayCode(displayOrderNumber);
@@ -144,28 +155,38 @@ export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus
 ): Promise<void> {
-  const snap = await getOrder(tenantId, orderId);
-  const data = snap.data() as { status?: string } | undefined;
-  const currentStatus = data?.status as OrderStatus | undefined;
+  let previousStatus: OrderStatus | undefined;
+  await getDb().runTransaction(async (transaction) => {
+    const ref = orderDoc(tenantId, orderId);
+    const snap = await transaction.get(ref);
+    if (!snap.exists) throw new NotFoundError(`Order ${orderId}`);
 
-  if (currentStatus && isIllegalTransition(currentStatus, newStatus)) {
-    throw new ConflictError(
-      `Illegal transition from "${currentStatus}" to "${newStatus}"`
-    );
-  }
+    const data = snap.data() as { status?: string; operationalDate?: string } | undefined;
+    const currentStatus = data?.status as OrderStatus | undefined;
+    previousStatus = currentStatus;
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
+    if (currentStatus && isIllegalTransition(currentStatus, newStatus)) {
+      throw new ConflictError(
+        `Illegal transition from "${currentStatus}" to "${newStatus}"`
+      );
+    }
 
-  await orderDoc(tenantId, orderId).update({
-    status: newStatus,
-    statusChangedAt: now,
-    updatedAt: now,
+    if (data?.operationalDate) {
+      await assertCashCloseOpen(transaction, tenantId, data.operationalDate);
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    transaction.update(ref, {
+      status: newStatus,
+      statusChangedAt: now,
+      updatedAt: now,
+    });
   });
 
   logger.info("Order status updated", {
     tenantId,
     orderId,
-    from: currentStatus,
+    from: previousStatus,
     to: newStatus,
   });
 }
