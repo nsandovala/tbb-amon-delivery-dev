@@ -115,7 +115,9 @@ test.describe("OrderItemsSummary", () => {
   ];
 
   test("lista incluye los tres productos con cantidades y observación", () => {
-    const { text, testIds, tags } = flatten(OrderItemsSummary({ items, notes: "Sin cebolla" }));
+    const { text, testIds, tags } = flatten(
+      OrderItemsSummary({ items, notes: "Sin cebolla", status: "preparing" })
+    );
     expect(testIds).toContain("order-items-list");
     expect(tags.filter((t) => t === "li")).toHaveLength(3);
     for (const name of ["Burger Doble", "Papas Fritas", "Bebida 500"]) {
@@ -125,6 +127,17 @@ test.describe("OrderItemsSummary", () => {
     expect(text).toContain("1×");
     expect(text).toContain("3×");
     expect(text).toContain("Obs: Sin cebolla");
+    expect(text).toContain("Preparar");
+  });
+
+  test("usa título neutral para pedidos terminales", () => {
+    const delivered = flatten(OrderItemsSummary({ items, status: "delivered" }));
+    const cancelled = flatten(OrderItemsSummary({ items, status: "cancelled" }));
+
+    expect(delivered.text).toContain("Detalle del pedido");
+    expect(delivered.text).not.toContain("Preparar");
+    expect(cancelled.text).toContain("Detalle del pedido");
+    expect(cancelled.text).not.toContain("Preparar");
   });
 
   test("usa fallback de catálogo cuando falta el snapshot", () => {
