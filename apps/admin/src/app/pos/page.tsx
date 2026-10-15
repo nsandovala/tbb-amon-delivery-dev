@@ -13,6 +13,7 @@ import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
 import { db } from "../../lib/firebase/client";
 import { createPosSaleApi, updateOrderStatusApi } from "../../lib/api/orders";
 import { getHumanOrderLabel } from "../../lib/orders";
+import { OrderItemsSummary } from "../../components/order-items-summary";
 import { getOperationalDayStart } from "../../lib/time";
 import {
   Minus,
@@ -55,6 +56,7 @@ type PosOrder = {
   total?: number;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
   fulfillmentType?: "delivery" | "pickup";
+  items?: { productId?: string; productName?: string; qty?: number }[];
   customer?: {
     name?: string;
     phone?: string;
@@ -265,6 +267,11 @@ export default function PosPage() {
         (o) => o.channel === "admin_pos" && ACTIVE_POS_STATUSES.has(o.status ?? "")
       ),
     [todayOrders]
+  );
+
+  const catalogNames = useMemo(
+    () => Object.fromEntries(products.map((p) => [p.id, p.name])),
+    [products]
   );
 
   const totalSalesToday = useMemo(() => {
@@ -564,6 +571,11 @@ export default function PosPage() {
                           {sale.customer?.name ? (
                             <p className="text-[11px] text-neutral-500">{sale.customer.name}</p>
                           ) : null}
+                          <OrderItemsSummary
+                            items={sale.items}
+                            catalogNames={catalogNames}
+                            variant="inline"
+                          />
                           <p className="text-sm font-bold text-emerald-400">
                             {formatMoney(saleTotal)}
                           </p>

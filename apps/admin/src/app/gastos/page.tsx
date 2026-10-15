@@ -10,6 +10,7 @@ import {
   type ExpenseCategory,
   type ExpensePaymentMethod,
 } from "../../lib/firebase/queries/expenses";
+import { formatClp, parseClpAmount } from "../../lib/clp";
 import { toDate } from "../../lib/time";
 
 const tenantId = "tbb";
@@ -19,9 +20,7 @@ const PAYMENT_METHODS = Object.keys(
   EXPENSE_PAYMENT_METHOD_LABELS
 ) as ExpensePaymentMethod[];
 
-function formatMoney(value?: number) {
-  return `$${(value ?? 0).toLocaleString("es-CL")}`;
-}
+const formatMoney = formatClp;
 
 function getCurrentDateTimeLocalValue() {
   const now = new Date();
@@ -68,8 +67,9 @@ export default function GastosPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const parsedAmount = Number(amount);
-  const amountOk = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const amountResult = parseClpAmount(amount);
+  const amountOk = amountResult.ok;
+  const parsedAmount = amountResult.ok ? amountResult.value : 0;
   const descriptionOk = description.trim().length >= 2;
   const isFormValid = amountOk && descriptionOk;
 
@@ -212,12 +212,22 @@ export default function GastosPage() {
                   id="expense-amount"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="15000"
+                  placeholder="15000 o 15.000"
                   inputMode="numeric"
-                  type="number"
-                  min={1}
+                  autoComplete="off"
+                  type="text"
+                  aria-invalid={amount.trim() !== "" && !amountOk}
                   className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
                 />
+                {amountResult.ok ? (
+                  <p className="mt-1 text-[11px] text-emerald-300" data-testid="expense-amount-preview">
+                    Se registrará {formatMoney(amountResult.value)}
+                  </p>
+                ) : amount.trim() !== "" ? (
+                  <p className="mt-1 text-[11px] text-red-300" role="alert">
+                    {amountResult.message}
+                  </p>
+                ) : null}
               </div>
 
               <div>

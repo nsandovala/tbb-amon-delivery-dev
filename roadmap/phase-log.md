@@ -550,3 +550,46 @@ git status --short
   - cierre de venta POS intacto
   - gasto nuevo con fecha actual
   - copy final de métricas con `0` y con pendientes
+
+## 2026-10-15 — M6I integridad CLP + comandas operativas
+
+### Qué cambió
+- `/gastos`: el monto se interpreta con `parseClpAmount` (nuevo `apps/admin/src/lib/clp.ts`). Acepta `12000`, `12.000`, `1.200.000`; rechaza decimales/ambiguos (`12,50`, `12.5`), vacío, cero y negativos. El input pasó de `type="number"` a `type="text"` con `inputMode="numeric"`, con previsualización `Se registrará $12.000`.
+- `/pedidos`: la tarjeta muestra bloque "Preparar" con cada producto y cantidad (snapshot `item.productName`, luego catálogo, luego `productId`) y `customer.notes` como "Obs". El panel lateral usa el mismo resolvedor de nombres.
+- `/pos`: "Ventas sin cerrar" muestra el resumen de artículos en una línea.
+
+### Por qué cambió
+- QA manual: `12.000` se registró como `$12`. Causa: `<input type="number">` + `Number("12.000") === 12`; el backend persiste fielmente lo que recibe (`z.number().positive()`).
+- QA manual: la tarjeta solo decía `3 ítems`; el operador debía abrir el panel lateral para saber qué preparar.
+
+### Archivos modificados
+- `apps/admin/src/lib/clp.ts` (nuevo)
+- `apps/admin/src/components/order-items-summary.tsx` (nuevo)
+- `apps/admin/src/lib/orders.ts`
+- `apps/admin/src/app/gastos/page.tsx`
+- `apps/admin/src/app/pedidos/page.tsx`
+- `apps/admin/src/app/pos/page.tsx`
+- `e2e/unit/m6i-clp-ordercards.spec.ts` (nuevo, sin emulador)
+- `docs/agent-sessions/2026-10-15/codex-m6i-clp-ordercards.md`
+
+### Contratos afectados
+- Ninguno. Sin cambios en API, Functions, shared, Firestore, rules, máquina de estados ni Shop → ERP. Montos persistidos siguen siendo enteros CLP.
+- Gastos históricos mal registrados (p. ej. `$12`) NO se corrigen automáticamente.
+
+### Validación
+```bash
+npx playwright test e2e/unit --config=playwright.config.ts
+npm run build --workspace packages/shared
+npm run build --prefix apps/functions
+npx next build            # en apps/admin y apps/web
+node tools/test-rules-anon.mjs
+git diff --check
+```
+
+### Riesgos restantes
+- El backend de `createExpense` sigue aceptando decimales (`z.number().positive()`); la integridad CLP entera hoy depende del frontend.
+- No existe estructura de modificadores por ítem persistida; solo se muestran `customer.notes`.
+- QA visual/manual pendiente (sin sesión admin en emulador de Auth).
+
+### Próximo paso
+- M6J: auditoría de métricas, cierre de caja y distinción venta creada vs dinero recibido.
