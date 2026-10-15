@@ -12,6 +12,7 @@ import {
 import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
 import { db } from "../../lib/firebase/client";
 import { createPosSaleApi, updateOrderStatusApi } from "../../lib/api/orders";
+import { StoreStatusStrip } from "@/components/store-status-strip";
 import { getHumanOrderLabel } from "../../lib/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
 import { getOperationalDayStart } from "../../lib/time";
@@ -418,6 +419,8 @@ export default function PosPage() {
   return (
     <main className="min-h-screen bg-[#0B0B0B] text-white">
       <div className={["mx-auto max-w-[1600px] px-4 py-5", cart.length > 0 ? "pb-24 xl:pb-5" : ""].join(" ")}>
+
+        <StoreStatusStrip />
 
         {/* Header compacto */}
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">

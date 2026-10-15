@@ -47,7 +47,8 @@ async function apiFetch<T>(
       (process.env.NODE_ENV === "development"
         ? `HTTP ${res.status} ${res.statusText} for ${url}${raw ? ` :: ${raw.slice(0, 300)}` : ""}`
         : `HTTP ${res.status}`);
-    throw new Error(msg);
+    // `code` permite a la UI distinguir errores de negocio (ej. STORE_CLOSED, M6J).
+    throw Object.assign(new Error(msg), { code: data?.error?.code });
   }
 
   return (data as { ok: true; data: T }).data;

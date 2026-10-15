@@ -208,9 +208,13 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error desconocido";
-      toast.error("No pudimos crear tu pedido. Intenta nuevamente.", {
-        description: message,
-      });
+      const storeClosed = (err as { code?: string } | null)?.code === "STORE_CLOSED";
+      toast.error(
+        storeClosed
+          ? "La tienda está cerrada en este momento."
+          : "No pudimos crear tu pedido. Intenta nuevamente.",
+        { description: message }
+      );
     } finally {
       setIsSubmitting(false);
     }

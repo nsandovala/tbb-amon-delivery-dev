@@ -8,6 +8,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 
 const navItems = [
+  { label: "Operacion", href: "/operacion" },
   { label: "Pedidos", href: "/pedidos" },
   { label: "POS", href: "/pos" },
   { label: "Gastos", href: "/gastos" },
