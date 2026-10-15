@@ -84,6 +84,20 @@ Respuesta esperada:
 - `orderId`
 - `status`
 
+---
+
+### Horario operativo y cierre de caja (M6J)
+
+`createOrder` y `createPosSale` validan en backend, dentro de la transacción de creación,
+que la tienda acepte pedidos. Si no: `409 STORE_CLOSED` con estado, tipo de cierre
+(`schedule` | `manual` | `system`), horario configurado y próxima apertura.
+
+Endpoints nuevos: `getStoreStatus` (público), `getStoreControl`, `setStoreOperation`,
+`updateStoreHours`, `getCashCloseSummary`, `closeCashSession` (admin, `Authorization: Bearer <ID token>`
+con claim `admin`).
+
+Detalle completo: `docs/architecture/store-operation-contract.md`.
+
 ## Validaciones de negocio
 
 Backend debe validar:
@@ -92,6 +106,7 @@ Backend debe validar:
 - productos válidos
 - cantidades válidas
 - transición de estado válida
+- tienda aceptando pedidos (fail-closed si el horario falta o es inválido)
 - cálculo de totales desde datos confiables
 - timestamps del servidor
 
