@@ -96,6 +96,42 @@ function isWithinRange(value: Date | null, start: Date, end: Date) {
   return timestamp >= start.getTime() && timestamp <= end.getTime();
 }
 
+type TrendDay = {
+  key: string;
+  label: string;
+  sales: number;
+  orders: number;
+};
+
+function getTrendDays(orders: AdminOrder[], now: Date): TrendDay[] {
+  const operationalStart = getOperationalDayStart(now);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(operationalStart);
+    date.setDate(date.getDate() - (6 - index));
+    return date;
+  });
+
+  const totals = new Map<string, { sales: number; orders: number }>();
+  days.forEach((date) => totals.set(date.toLocaleDateString("en-CA"), { sales: 0, orders: 0 }));
+
+  orders.forEach((order) => {
+    if (order.status === "cancelled") return;
+    const createdAt = toDate(order.createdAt);
+    if (!createdAt) return;
+    const key = getOperationalDayStart(createdAt).toLocaleDateString("en-CA");
+    const total = totals.get(key);
+    if (!total) return;
+    total.sales += getOrderTotal(order);
+    total.orders += 1;
+  });
+
+  return days.map((date) => ({
+    key: date.toLocaleDateString("en-CA"),
+    label: date.toLocaleDateString("es-CL", { weekday: "short" }).replace(".", ""),
+    ...totals.get(date.toLocaleDateString("en-CA"))!,
+  }));
+}
+
 function getPeriodRange(period: MetricsPeriod, now: Date) {
   const end = now;
   const operationalStart = getOperationalDayStart(now);
@@ -237,6 +273,55 @@ function PaymentBreakdown({
   );
 }
 
+function SalesTrend({ days }: { days: TrendDay[] }) {
+  const maxSales = Math.max(...days.map((day) => day.sales), 1);
+  const average = days.reduce((sum, day) => sum + day.sales, 0) / days.length;
+  const best = days.reduce((current, day) => (day.sales > current.sales ? day : current), days[0]);
+  const weak = days.reduce((current, day) => (day.sales < current.sales ? day : current), days[0]);
+
+  return (
+    <section className="rounded-3xl border border-[#332e24] bg-[#0d0d0c] p-5 shadow-[inset_0_1px_rgba(255,255,255,0.025)]">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[#a99570]">Patrón de venta POS + web</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Días buenos y días a reforzar</h2>
+          <p className="mt-1 text-sm text-neutral-500">Ventas reales de los últimos 7 días operacionales.</p>
+        </div>
+        <div className="flex gap-3 text-[11px] text-neutral-500">
+          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#d6a85c]" /> Sobre promedio</span>
+          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#494943]" /> Bajo promedio</span>
+        </div>
+      </div>
+
+      <div className="mt-6 grid h-48 grid-cols-7 items-end gap-2 border-b border-white/10 px-1 pb-0 sm:gap-4">
+        {days.map((day) => {
+          const height = day.sales === 0 ? 5 : Math.max(9, Math.round((day.sales / maxSales) * 100));
+          const isBest = day.sales >= average && day.sales > 0;
+          return (
+            <div key={day.key} className="flex h-full flex-col items-center justify-end gap-2">
+              <span className="text-[10px] tabular-nums text-neutral-500">{day.orders ? formatMoney(day.sales) : "—"}</span>
+              <div className="flex h-full w-full items-end justify-center">
+                <div
+                  className={["w-full max-w-10 rounded-t-lg transition-all", isBest ? "bg-[#d6a85c]" : "bg-[#3d403a]"].join(" ")}
+                  style={{ height: `${height}%` }}
+                  title={`${day.label}: ${formatMoney(day.sales)} · ${day.orders} pedidos`}
+                />
+              </div>
+              <span className="text-[11px] capitalize text-neutral-400">{day.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-[#4d3d25] bg-[#17130d] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#a99570]">Mejor día</p><p className="mt-1 font-bold text-[#f0d296]">{best?.label ?? "—"} · {formatMoney(best?.sales)}</p></div>
+        <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Promedio diario</p><p className="mt-1 font-bold text-white">{formatMoney(average)}</p></div>
+        <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Día a reforzar</p><p className="mt-1 font-bold text-neutral-300">{weak?.label ?? "—"} · {formatMoney(weak?.sales)}</p></div>
+      </div>
+    </section>
+  );
+}
+
 export default function MetricasPage() {
   const { orders, loading: loadingOrders, error: ordersError } = useLiveOrders(tenantId);
   const { expenses, loading: loadingExpenses, error: expensesError } = useLiveExpenses(tenantId);
@@ -297,6 +382,7 @@ export default function MetricasPage() {
 
     const orderCount = validOrders.length;
     const averageTicket = orderCount > 0 ? grossSales / orderCount : 0;
+    const trendDays = getTrendDays(orders, new Date(nowTs));
 
     return {
       grossSales,
@@ -310,18 +396,19 @@ export default function MetricasPage() {
       expensePayments,
       channelSummary,
       openAdminPosOrders,
+      trendDays,
     };
-  }, [expenses, orders, periodRange.end, periodRange.start]);
+  }, [expenses, nowTs, orders, periodRange.end, periodRange.start]);
 
   const loading = loadingOrders || loadingExpenses;
   const error = ordersError ?? expensesError;
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="metrics" className="min-h-screen bg-[#050505] text-white">
       <div className="mx-auto max-w-[1500px] px-4 py-6">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-400/80">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[#d6a85c]">
               Radar operativo
             </p>
             <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
@@ -354,7 +441,7 @@ export default function MetricasPage() {
                 className={[
                   "shrink-0 rounded-full border px-4 py-2 text-left transition-all",
                   active
-                    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300 shadow-[0_0_0_1px_rgba(0,255,156,0.05),0_0_18px_rgba(0,255,156,0.08)]"
+                    ? "border-[#806438] bg-[#211b11] text-[#f0d296] shadow-[inset_3px_0_#d6a85c]"
                     : "border-white/10 bg-white/[0.03] text-neutral-400 hover:border-white/20 hover:text-white",
                 ].join(" ")}
               >
@@ -442,6 +529,8 @@ export default function MetricasPage() {
                 icon={ShoppingBag}
               />
             </section>
+
+            <SalesTrend days={metrics.trendDays} />
 
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_380px]">
               <PaymentBreakdown

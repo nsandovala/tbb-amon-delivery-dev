@@ -502,7 +502,7 @@ export default function OrdersPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="orders" className="min-h-screen bg-[#050505] text-white">
       <div className="mx-auto max-w-[1600px] px-6 py-8">
 
         <StoreStatusStrip />

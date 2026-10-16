@@ -417,7 +417,7 @@ export default function PosPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="pos" className="min-h-screen bg-[#050505] text-white">
       <div className={["mx-auto max-w-[1600px] px-4 py-5", cart.length > 0 ? "pb-24 xl:pb-5" : ""].join(" ")}>
 
         <StoreStatusStrip />

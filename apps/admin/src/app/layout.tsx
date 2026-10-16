@@ -39,15 +39,15 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="min-h-screen bg-[#0B0B0B] text-white antialiased">
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(0,255,156,0.07),transparent_32%),#0B0B0B]">
+        <div className="min-h-screen bg-[#050505]">
           {isLogin ? (
             children
           ) : (
             <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <aside className="border-b border-white/6 bg-[#0D0D0D]/92 backdrop-blur-xl lg:border-b-0 lg:border-r">
+              <aside className="border-b border-[#29261f] bg-[#080808]/96 backdrop-blur-xl lg:border-b-0 lg:border-r">
                 <div className="flex h-full flex-col px-5 py-6">
                   <div className="mb-8">
-                    <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-400/75">
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-[#d6a85c]">
                       AMON Delivery
                     </p>
                     <h1 className="mt-2 text-2xl font-black tracking-tight text-white">
@@ -71,7 +71,7 @@ export default function RootLayout({
                           className={[
                             "flex items-center rounded-2xl border px-4 py-3 text-sm font-medium transition-all",
                             isActive
-                              ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300 shadow-[0_0_0_1px_rgba(0,255,156,0.05),0_0_18px_rgba(0,255,156,0.08)]"
+                              ? "border-[#806438] bg-[#211b11] text-[#f0d296] shadow-[inset_3px_0_#d6a85c]"
                               : "border-white/6 bg-white/[0.02] text-neutral-400 hover:border-white/12 hover:bg-white/[0.04] hover:text-white",
                           ].join(" ")}
                         >
