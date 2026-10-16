@@ -80,6 +80,7 @@ export const STORE_EVENT_LABELS: Record<string, string> = {
   store_reopened: "Reapertura",
   schedule_resumed: "Vuelve al horario",
   hours_updated: "Horario editado",
+  special_date_updated: "Fecha especial actualizada",
   cash_closed: "Cierre de caja",
 };
 

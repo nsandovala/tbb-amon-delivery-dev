@@ -40,6 +40,7 @@ Lectura pública
 | `tenants/{tenantId}/settings/storeOperation` | `override` vigente + `lastObservedState` | Functions |
 | `tenants/{tenantId}/storeEvents/{eventId}` | Auditoría append-only (`tx.create`) | Functions |
 | `tenants/{tenantId}/cashCloses/{operationalDate}` | Cierre de caja inmutable (`tx.create`) | `closeCashSession` |
+| `tenants/{tenantId}/storeExceptions/{YYYY-MM-DD}` | Excepción de atención para una fecha local | Functions admin |
 
 `firestore.rules` **no cambió**: `settings` sigue legible solo por admin; `storeEvents` y `cashCloses` quedan bajo el deny global y se leen únicamente vía Functions admin. Los documentos de `orders` no cambian.
 
@@ -117,7 +118,13 @@ Nunca se actualizan ni se borran. Los eventos `schedule` se registran **al obser
 | `manual_closed` | no | rojo | Cerrada por admin |
 | `closed` | no | rojo | Fail-closed (`CONFIG_MISSING`, `CONFIG_INVALID`, `OVERRIDE_INVALID`, `EVALUATION_ERROR`) o jornada cerrada en caja (`CASH_CLOSED`) |
 
-Precedencia: config inválida/ausente → caja cerrada del día → override manual del día → horario.
+Precedencia: config inválida/ausente → caja cerrada del día → override manual del día → excepción de fecha → horario semanal.
+
+### Excepciones de fecha
+
+El admin puede definir hoy o una fecha futura con modo `closed`, `regular_hours` o `custom_hours` (apertura/cierre `HH:MM` del mismo día). `regular_hours` solo se permite si el horario semanal de ese día está habilitado. `customerMessage` es opcional y se limita a 160 caracteres. Los feriados no se importan automáticamente: cada operador registra las fechas que correspondan a su tienda.
+
+Las excepciones se guardan como `tenants/{tenantId}/storeExceptions/{YYYY-MM-DD}` y cada cambio genera `special_date_updated` en la bitácora. `getStoreStatus` expone la excepción actual y hasta 12 próximas fechas dentro de 90 días, sin metadatos internos; la tienda las muestra a clientes. `createOrder` y `createPosSale` leen las excepciones dentro de la transacción y aplican la misma precedencia antes de escribir un pedido.
 
 ## Endpoints
 
@@ -127,6 +134,8 @@ Precedencia: config inválida/ausente → caja cerrada del día → override man
 | `getStoreControl?tenantId=` | GET | admin | Estado completo, config, `defaultConfig`, últimos 25 eventos |
 | `setStoreOperation` | POST | admin | `{ action: "open" \| "close" \| "resume_schedule", reason? }` |
 | `updateStoreHours` | POST/PUT | admin | `{ config, reason? }` → 400 si es inválido |
+| `updateStoreDateException` | POST/PUT | admin | `{ exception: { date, mode, open?, close?, customerMessage? }, reason? }` |
+| `deleteStoreDateException` | POST | admin | `{ date, reason? }` elimina una excepción hoy o futura |
 | `getCashCloseSummary?tenantId=&operationalDate=` | GET | admin | Resumen del día (default: día en curso) |
 | `closeCashSession` | POST | admin | `{ countedCash, transfersConfirmed, idempotencyKey, operationalDate?, observation?, override?: { reason } }` |
 

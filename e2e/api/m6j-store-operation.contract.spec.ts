@@ -121,6 +121,14 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     });
     expect(staff.status()).toBe(403);
 
+    for (const [path, data] of [
+      ["updateStoreDateException", { tenantId, exception: { date: "2026-12-25", mode: "closed" } }],
+      ["deleteStoreDateException", { tenantId, date: "2026-12-25" }],
+    ] as const) {
+      expect((await api.post(path, { data })).status()).toBe(401);
+      expect((await api.post(path, { headers: bearer(nonAdminToken), data })).status()).toBe(403);
+    }
+
     for (const path of [`getStoreControl?tenantId=${tenantId}`, `getCashCloseSummary?tenantId=${tenantId}`]) {
       expect((await api.get(path)).status()).toBe(401);
     }
@@ -197,6 +205,39 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       },
     });
     expect(invalidTimezone.status()).toBe(400);
+  });
+
+  test("excepción de fecha queda visible al cliente y bloquea web y POS", async () => {
+    const current = await status();
+    const date = current.localNow.slice(0, 10);
+    const save = await api.post("updateStoreDateException", {
+      headers: bearer(adminToken),
+      data: { tenantId, exception: { date, mode: "closed", customerMessage: "Cerrado por feriado" } },
+    });
+    expect(save.status(), await save.text()).toBe(200);
+    expect((await save.json()).data.status.reasonCode).toBe("SPECIAL_DATE_CLOSED");
+
+    const publicStatus = await status();
+    expect(publicStatus.acceptingOrders).toBe(false);
+    expect(publicStatus.reasonCode).toBe("SPECIAL_DATE_CLOSED");
+    expect(publicStatus.specialDate).toMatchObject({ date, mode: "closed", customerMessage: "Cerrado por feriado" });
+    expect(publicStatus.specialDate).not.toHaveProperty("createdBy");
+    expect(publicStatus.upcomingSpecialDates.find((entry: { date: string }) => entry.date === date))
+      .toMatchObject({ date, mode: "closed", customerMessage: "Cerrado por feriado" });
+    await expectBothChannelsRejected("SPECIAL_DATE_CLOSED");
+
+    const controlData = await control();
+    expect(controlData.specialDates.find((entry: { date: string }) => entry.date === date))
+      .toMatchObject({ date, mode: "closed", createdBy: { email: adminEmail } });
+    expect(controlData.events.some((event: { type: string; metadata?: { date?: string } }) =>
+      event.type === "special_date_updated" && event.metadata?.date === date
+    )).toBe(true);
+
+    const remove = await api.post("deleteStoreDateException", {
+      headers: bearer(adminToken), data: { tenantId, date },
+    });
+    expect(remove.status(), await remove.text()).toBe(200);
+    expect((await status()).specialDate).toBeNull();
   });
 
   test("cierre anticipado manual bloquea web y POS inmediatamente", async () => {

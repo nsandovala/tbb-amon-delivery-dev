@@ -28,6 +28,30 @@ const evaluate = (now: string, extra: Partial<Parameters<typeof evaluateStoreSta
   evaluateStoreStatus({ now: at(now), config, ...extra });
 
 test.describe("Horario programado 17:30–22:30 America/Santiago", () => {
+  test("fecha especial cerrada prevalece sobre el horario semanal", () => {
+    const status = evaluate("2026-10-15T20:30:00Z", {
+      dateExceptions: { "2026-10-15": { date: "2026-10-15", mode: "closed", customerMessage: "Cerrado por inventario" } },
+    });
+    expect(status.acceptingOrders).toBe(false);
+    expect(status.reasonCode).toBe("SPECIAL_DATE_CLOSED");
+    expect(status.specialDate?.customerMessage).toBe("Cerrado por inventario");
+    expect(status.message).toContain("Cerrado por inventario");
+  });
+
+  test("horario especial reemplaza el semanal y se respeta en apertura/cierre", () => {
+    const extra = { dateExceptions: { "2026-10-15": { date: "2026-10-15", mode: "custom_hours", open: "11:00", close: "13:00" } } };
+    expect(evaluate("2026-10-15T14:00:00Z", extra).acceptingOrders).toBe(true);
+    expect(evaluate("2026-10-15T16:00:00Z", extra).acceptingOrders).toBe(false);
+  });
+
+  test("excepción inválida de la fecha actual falla cerrado", () => {
+    const status = evaluate("2026-10-15T20:30:00Z", {
+      dateExceptions: { "2026-10-15": { date: "2026-02-30", mode: "closed" } },
+    });
+    expect(status.acceptingOrders).toBe(false);
+    expect(status.reasonCode).toBe("SPECIAL_DATE_INVALID");
+  });
+
   test("apertura exacta 17:30:00 acepta pedidos", () => {
     const status = evaluate("2026-10-15T20:30:00Z");
     expect(status.state).toBe("scheduled_open");

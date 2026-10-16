@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { StoreApiError, updateStoreHoursApi, type StoreHoursConfig, type Weekday } from "@/lib/api/store";
+import { StoreApiError, updateStoreHoursApi, type StoreDateException, type StoreHoursConfig, type Weekday } from "@/lib/api/store";
 import { isValidScheduleTime } from "@/lib/schedule";
 import { WEEKDAY_LABELS, WEEKDAY_ORDER } from "@/lib/store-status";
+import { SpecialDatesEditor } from "./special-dates-editor";
 
 function toMinutes(value: string): number {
   const [hours, minutes] = value.split(":").map(Number);
@@ -37,11 +38,15 @@ function validate(config: StoreHoursConfig): string[] {
 export function ScheduleEditor({
   config,
   defaultConfig,
+  specialDates,
+  today,
   updatedBy,
   onSaved,
 }: {
   config: StoreHoursConfig | null;
   defaultConfig: StoreHoursConfig;
+  specialDates: StoreDateException[];
+  today: string;
   updatedBy: string | null;
   onSaved: () => Promise<void> | void;
 }) {
@@ -218,17 +223,12 @@ export function ScheduleEditor({
         </div>
       )}
 
-      <section className="mt-5 border-t border-white/10 pt-4" aria-labelledby="special-dates-title">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 id="special-dates-title" className="ops-text text-sm font-semibold text-white">¿Abrirás en feriados o fechas especiales?</h3>
-            <p className="ops-muted mt-1 max-w-2xl text-xs leading-5 text-neutral-400">
-              Aún no se puede programar esa decisión. Falta guardar por fecha si abrirás, cerrarás o usarás otro horario, y comunicarlo a los clientes antes de aceptar pedidos.
-            </p>
-          </div>
-          <span className="rounded-sm border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">Por configurar</span>
-        </div>
-      </section>
+      <SpecialDatesEditor
+        exceptions={specialDates}
+        config={config}
+        today={today}
+        onChanged={onSaved}
+      />
 
       {message && (
         <p role="status" className={["mt-3 border-l-2 pl-3 text-sm", message.ok ? "border-emerald-400 text-emerald-300" : "border-red-400 text-red-300"].join(" ")}>

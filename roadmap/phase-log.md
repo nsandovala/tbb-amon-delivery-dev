@@ -106,6 +106,26 @@ git diff --check
 - Falta una revisión visual real de `/operacion` en navegador, escritorio y móvil.
 - Este es el primer incremento del sprint; revisar después la jerarquía de caja/bitácora. Métricas va después de cerrar Operaciones y Home después de Métricas.
 
+## 2026-10-16 — Excepciones de fechas en Operaciones
+
+### Qué cambió
+- Se añadieron excepciones por fecha para permanecer cerrado, operar con el horario semanal o usar horas especiales, con mensaje opcional a clientes.
+- Functions guarda las excepciones en `tenants/{tenantId}/storeExceptions/{YYYY-MM-DD}`, las audita y las aplica dentro del guard transaccional de pedidos Web y POS.
+- El Admin permite crear, editar y eliminar excepciones de hoy y fechas futuras. La tienda informa la atención de hoy y las próximas fechas configuradas.
+- Se documentó que feriados se ingresan manualmente por local; no hay importación automática del calendario nacional.
+
+### Alcance de cierre
+- Con esta capacidad queda cubierta la pasada funcional de calendario dentro de Operaciones. Proveedores y tareas quedan para después, según el orden acordado; el agendamiento de pedidos se mantiene en backlog.
+- No se despliega a Firebase. Revisar el cambio local y confirmar el proyecto Firebase piloto antes de cualquier despliegue.
+
+### Validación
+- `npm --prefix apps/functions run build`: OK.
+- `npm --workspace apps/admin run build`: OK.
+- `npm --workspace apps/web run build`: OK.
+- `npx playwright test e2e/unit/m6j-store-hours.spec.ts --config=playwright.config.ts`: 44/44 OK.
+- `e2e/api/m6j-store-operation.contract.spec.ts`: no ejecutable en este entorno porque el emulador Firestore `127.0.0.1:8080` no estaba levantado; se dejó cobertura para auth, persistencia, respuesta pública y rechazo Web/POS.
+- `git diff --check`: OK.
+
 ## Fase actual
 M6J — horario operativo fail-closed, operación manual auditada y cierre de caja
 

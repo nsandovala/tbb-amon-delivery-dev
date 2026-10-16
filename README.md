@@ -12,7 +12,7 @@ El tenant piloto es **TBB — The Best Burger (Receta de la Abuela)**, en Valpar
 - **Datos compartidos** (`packages/shared`): tipos, contratos y seed local.
 - **Desarrollo local**: emuladores de Authentication, Firestore y Functions.
 
-La sección **Operación** tiene un ciclo de polish de UI aprobado para modo claro y oscuro. Incluye identidad de tienda/local y operador, horario semanal, estado de tienda, caja y bitácora. Feriados/excepciones, proveedores y tareas todavía no tienen contrato de datos ni persistencia; se muestran como pendientes de configuración. El agendamiento de pedidos por hora solicitada está en backlog.
+La sección **Operación** tiene un ciclo de polish de UI aprobado para modo claro y oscuro. Incluye identidad de tienda/local y operador, horario semanal, excepciones de fechas configurables, estado de tienda, caja y bitácora. Las excepciones se guardan por fecha y se aplican al aceptar pedidos; no se precarga automáticamente un calendario nacional de feriados. Proveedores y tareas siguen pendientes. El agendamiento de pedidos por hora solicitada está en backlog.
 
 El siguiente orden de producto acordado es: **Operaciones → Métricas → Home**. Las ventas del seed son datos de demostración. La revisión del diseño en navegador local forma parte de la validación del sprint; este repositorio no se despliega automáticamente a producción.
 

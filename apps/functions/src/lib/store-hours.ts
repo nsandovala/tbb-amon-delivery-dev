@@ -48,16 +48,24 @@ export type StoreReasonCode =
   | "BEFORE_OPENING"
   | "AFTER_CLOSING"
   | "DAY_DISABLED"
+  | "SPECIAL_DATE_CLOSED"
   | "MANUAL_OPEN"
   | "MANUAL_CLOSE"
   | "CASH_CLOSED"
   | "CONFIG_MISSING"
   | "CONFIG_INVALID"
+  | "SPECIAL_DATE_INVALID"
   | "OVERRIDE_INVALID"
   | "EVALUATION_ERROR";
 
 const HHMM_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function isCalendarDate(value: string): boolean {
+  if (!DATE_REGEX.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
 
 export function hhmmToMinutes(value: string): number {
   const [hours, minutes] = value.split(":").map(Number);
@@ -107,6 +115,24 @@ export const storeHoursConfigSchema = z.object({
 
 export type DaySchedule = z.infer<typeof dayScheduleSchema>;
 export type StoreHoursConfig = z.infer<typeof storeHoursConfigSchema>;
+
+/** Una excepción aplica a una fecha calendario local y prevalece sobre el horario semanal. */
+export const storeDateExceptionSchema = z.object({
+  date: z.string().refine(isCalendarDate, "Usa una fecha calendario válida (AAAA-MM-DD)."),
+  mode: z.enum(["closed", "regular_hours", "custom_hours"]),
+  open: z.string().regex(HHMM_REGEX).optional(),
+  close: z.string().regex(HHMM_REGEX).optional(),
+  customerMessage: z.string().trim().max(160).optional().transform((value) => value || undefined),
+}).superRefine((exception, ctx) => {
+  if (exception.mode === "custom_hours") {
+    if (!exception.open || !exception.close) {
+      ctx.addIssue({ code: "custom", message: "Indica la hora de apertura y cierre." });
+    } else if (hhmmToMinutes(exception.close) <= hhmmToMinutes(exception.open)) {
+      ctx.addIssue({ code: "custom", path: ["close"], message: "El cierre debe ser posterior a la apertura." });
+    }
+  }
+});
+export type StoreDateException = z.infer<typeof storeDateExceptionSchema>;
 
 export const storeActorSchema = z.object({
   uid: z.string().min(1),
@@ -227,6 +253,11 @@ function formatLocalDate(date: LocalDate): string {
   return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
 }
 
+export function formatLocalDateKey(date: Date, timeZone: string): string {
+  const parts = getLocalParts(date, timeZone);
+  return formatLocalDate({ year: parts.year, month: parts.month, day: parts.day });
+}
+
 function parseLocalDate(value: string): LocalDate {
   const [year, month, day] = value.split("-").map(Number);
   return { year, month, day };
@@ -311,6 +342,7 @@ export type StoreStatus = {
   weekday: Weekday | null;
   operationalDate: string | null;
   today: (DaySchedule & { weekday: Weekday }) | null;
+  specialDate: StoreDateException | null;
   nextOpenAt: string | null;
   nextCloseAt: string | null;
   override: StoreOverride | null;
@@ -326,6 +358,8 @@ export type EvaluateStoreStatusInput = {
   override?: unknown;
   /** Día operacional ya cerrado en caja (`cashCloses/{operationalDate}`), si existe. */
   cashClosedOperationalDate?: string | null;
+  /** Excepciones por fecha, indexadas por fecha local YYYY-MM-DD. */
+  dateExceptions?: Record<string, unknown>;
 };
 
 const WEEKDAY_LABELS: Record<Weekday, string> = {
@@ -351,7 +385,7 @@ function describeLocalMoment(target: Date, now: Date, timeZone: string): string 
 
 function failClosed(
   now: Date,
-  reasonCode: "CONFIG_MISSING" | "CONFIG_INVALID" | "OVERRIDE_INVALID" | "EVALUATION_ERROR",
+  reasonCode: "CONFIG_MISSING" | "CONFIG_INVALID" | "SPECIAL_DATE_INVALID" | "OVERRIDE_INVALID" | "EVALUATION_ERROR",
   timezone: string,
   configErrors?: string[]
 ): StoreStatus {
@@ -370,6 +404,7 @@ function failClosed(
   const messages: Record<typeof reasonCode, string> = {
     CONFIG_MISSING: "Tienda cerrada: no existe configuración de horario.",
     CONFIG_INVALID: "Tienda cerrada: la configuración de horario es inválida.",
+    SPECIAL_DATE_INVALID: "Tienda cerrada: la excepción de horario de esta fecha es inválida.",
     OVERRIDE_INVALID: "Tienda cerrada: el estado manual registrado es inválido.",
     EVALUATION_ERROR: "Tienda cerrada: no fue posible evaluar el horario.",
   };
@@ -386,6 +421,7 @@ function failClosed(
     weekday,
     operationalDate: null,
     today: null,
+    specialDate: null,
     nextOpenAt: null,
     nextCloseAt: null,
     override: null,
@@ -430,7 +466,21 @@ export function evaluateStoreStatus(input: EvaluateStoreStatusInput): StoreStatu
     const local = getLocalParts(now, tz);
     const localDate: LocalDate = { year: local.year, month: local.month, day: local.day };
     const operationalDate = getOperationalDateFor(now, tz);
-    const daySchedule = config.days[local.weekday];
+    const localDateKey = formatLocalDate(localDate);
+    const rawSpecialDate = input.dateExceptions?.[localDateKey];
+    const specialDateResult = rawSpecialDate === undefined
+      ? null
+      : storeDateExceptionSchema.safeParse(rawSpecialDate);
+    if (specialDateResult && !specialDateResult.success) {
+      return failClosed(now, "SPECIAL_DATE_INVALID", tz);
+    }
+    const specialDate = specialDateResult?.success ? specialDateResult.data : null;
+    const weeklySchedule = config.days[local.weekday];
+    const daySchedule: DaySchedule = specialDate?.mode === "closed"
+      ? { ...weeklySchedule, enabled: false }
+      : specialDate?.mode === "custom_hours"
+        ? { enabled: true, open: specialDate.open!, close: specialDate.close! }
+        : weeklySchedule;
     const today = { weekday: local.weekday, ...daySchedule };
     const nowSeconds = local.hour * 3600 + local.minute * 60 + local.second;
     const openSeconds = hhmmToMinutes(daySchedule.open) * 60;
@@ -457,6 +507,7 @@ export function evaluateStoreStatus(input: EvaluateStoreStatusInput): StoreStatu
       weekday: local.weekday,
       operationalDate,
       today,
+      specialDate,
       override,
       configValid: true,
     };
@@ -464,7 +515,17 @@ export function evaluateStoreStatus(input: EvaluateStoreStatusInput): StoreStatu
     const findNextOpen = (): Date | null => {
       for (let offset = 0; offset <= 8; offset++) {
         const candidateDate = addDays(localDate, offset);
-        const schedule = config.days[weekdayOf(candidateDate)];
+        const candidateDateKey = formatLocalDate(candidateDate);
+        const candidateSpecialRaw = input.dateExceptions?.[candidateDateKey];
+        const candidateSpecial = candidateSpecialRaw === undefined
+          ? null
+          : storeDateExceptionSchema.safeParse(candidateSpecialRaw);
+        if (candidateSpecial && !candidateSpecial.success) continue;
+        if (candidateSpecial?.success && candidateSpecial.data.mode === "closed") continue;
+        const weekly = config.days[weekdayOf(candidateDate)];
+        const schedule: DaySchedule = candidateSpecial?.success && candidateSpecial.data.mode === "custom_hours"
+          ? { enabled: true, open: candidateSpecial.data.open!, close: candidateSpecial.data.close! }
+          : weekly;
         if (!schedule.enabled) continue;
         const openAt = zonedWallTimeToUtc(candidateDate, hhmmToMinutes(schedule.open), tz);
         if (openAt.getTime() <= now.getTime()) continue;
@@ -540,16 +601,19 @@ export function evaluateStoreStatus(input: EvaluateStoreStatusInput): StoreStatu
         acceptingOrders: true,
         source: "schedule",
         reasonCode: closingSoon ? "CLOSING_SOON" : "WITHIN_SCHEDULE",
-        message: closingSoon
-          ? `Cierra pronto: ${daySchedule.close}.`
-          : `Abierta según horario hasta las ${daySchedule.close}.`,
+        message: [
+          closingSoon ? `Cierra pronto: ${daySchedule.close}.` : `Abierta según horario hasta las ${daySchedule.close}.`,
+          specialDate?.customerMessage,
+        ].filter(Boolean).join(" "),
         nextOpenAt: null,
         nextCloseAt: formatLocalIso(closeAt, tz),
       };
     }
 
-    const reasonCode: StoreReasonCode = !daySchedule.enabled
-      ? "DAY_DISABLED"
+    const reasonCode: StoreReasonCode = specialDate?.mode === "closed"
+      ? "SPECIAL_DATE_CLOSED"
+      : !daySchedule.enabled
+        ? "DAY_DISABLED"
       : nowSeconds < openSeconds
         ? "BEFORE_OPENING"
         : "AFTER_CLOSING";
@@ -560,7 +624,13 @@ export function evaluateStoreStatus(input: EvaluateStoreStatusInput): StoreStatu
       acceptingOrders: false,
       source: "schedule",
       reasonCode,
-      message: `Cerrada según horario. ${describeNextOpen()}`,
+      message: [
+        specialDate?.mode === "closed"
+          ? specialDate.customerMessage || "Cerrada por fecha especial."
+          : "Cerrada según horario.",
+        specialDate?.mode !== "closed" ? specialDate?.customerMessage : undefined,
+        describeNextOpen(),
+      ].filter(Boolean).join(" "),
       nextOpenAt: nextOpenIso(),
       nextCloseAt: null,
     };
@@ -572,9 +642,13 @@ export function evaluateStoreStatus(input: EvaluateStoreStatusInput): StoreStatu
 /** Respuesta pública: sin actor, sin motivo interno ni errores de config. */
 export type PublicStoreStatus = Omit<StoreStatus, "override" | "configErrors"> & {
   override: { mode: StoreOverride["mode"] } | null;
+  upcomingSpecialDates: StoreDateException[];
 };
 
-export function toPublicStoreStatus(status: StoreStatus): PublicStoreStatus {
+export function toPublicStoreStatus(
+  status: StoreStatus,
+  upcomingSpecialDates: StoreDateException[] = []
+): PublicStoreStatus {
   const { override, configErrors: _configErrors, ...rest } = status;
-  return { ...rest, override: override ? { mode: override.mode } : null };
+  return { ...rest, override: override ? { mode: override.mode } : null, upcomingSpecialDates };
 }

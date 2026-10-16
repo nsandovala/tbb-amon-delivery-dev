@@ -39,6 +39,18 @@ export type StoreHoursConfig = {
   days: Record<Weekday, DaySchedule>;
 };
 
+export type StoreDateException = {
+  date: string;
+  mode: "closed" | "regular_hours" | "custom_hours";
+  open?: string;
+  close?: string;
+  customerMessage?: string;
+  createdAt?: string | null;
+  createdBy?: StoreActor | null;
+  updatedAt?: string | null;
+  updatedBy?: StoreActor | null;
+};
+
 export type StoreActor = { uid: string; email?: string | null };
 
 export type StoreStatus = {
@@ -53,6 +65,7 @@ export type StoreStatus = {
   weekday: Weekday | null;
   operationalDate: string | null;
   today: (DaySchedule & { weekday: Weekday }) | null;
+  specialDate: Omit<StoreDateException, "createdAt" | "createdBy" | "updatedAt" | "updatedBy"> | null;
   nextOpenAt: string | null;
   nextCloseAt: string | null;
   override: {
@@ -88,6 +101,12 @@ export type StoreControl = {
   configUpdatedBy: StoreActor | null;
   defaultConfig: StoreHoursConfig;
   events: StoreEvent[];
+  specialDates: StoreDateException[];
+};
+
+export type PublicStoreStatus = Omit<StoreStatus, "override"> & {
+  override: { mode: "open" | "closed" } | null;
+  upcomingSpecialDates: Array<Omit<StoreDateException, "createdAt" | "createdBy" | "updatedAt" | "updatedBy">>;
 };
 
 export type CashBucket = { count: number; total: number };
@@ -190,8 +209,8 @@ async function storeFetch<T>(
 const tenantQuery = `tenantId=${STORE_TENANT_ID}`;
 
 /** Público: el mismo estado que ve el storefront. Sin token. */
-export function fetchStoreStatus(): Promise<StoreStatus> {
-  return storeFetch<StoreStatus>(`getStoreStatus?${tenantQuery}`, { admin: false });
+export function fetchStoreStatus(): Promise<PublicStoreStatus> {
+  return storeFetch<PublicStoreStatus>(`getStoreStatus?${tenantQuery}`, { admin: false });
 }
 
 export function fetchStoreControl(): Promise<StoreControl> {
@@ -215,6 +234,23 @@ export function updateStoreHoursApi(
   return storeFetch(`updateStoreHours`, {
     method: "POST",
     body: JSON.stringify({ tenantId: STORE_TENANT_ID, config, reason: reason || undefined }),
+  });
+}
+
+export function updateStoreDateExceptionApi(
+  exception: Omit<StoreDateException, "createdAt" | "createdBy" | "updatedAt" | "updatedBy">,
+  reason?: string
+): Promise<{ changed: boolean; status: StoreStatus }> {
+  return storeFetch("updateStoreDateException", {
+    method: "POST",
+    body: JSON.stringify({ tenantId: STORE_TENANT_ID, exception, reason: reason || undefined }),
+  });
+}
+
+export function deleteStoreDateExceptionApi(date: string, reason?: string): Promise<{ changed: boolean }> {
+  return storeFetch("deleteStoreDateException", {
+    method: "POST",
+    body: JSON.stringify({ tenantId: STORE_TENANT_ID, date, reason: reason || undefined }),
   });
 }
 

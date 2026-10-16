@@ -115,6 +115,8 @@ export default function OperacionPage() {
                 <ScheduleEditor
                   config={control.config}
                   defaultConfig={control.defaultConfig}
+                  specialDates={control.specialDates}
+                  today={control.status.localNow.slice(0, 10)}
                   updatedBy={control.configUpdatedBy?.email ?? control.configUpdatedBy?.uid ?? null}
                   onSaved={refresh}
                 />
@@ -141,7 +143,7 @@ export default function OperacionPage() {
             </div>
 
             <p className="ops-muted mt-4 text-[10px] text-neutral-500">
-              Próxima mejora operativa: excepciones por feriados y fechas especiales. Los horarios semanales actuales siguen aplicándose hasta configurar esa capacidad.
+              Las fechas sin una excepción configurada siguen el horario semanal. Las excepciones guardadas quedan visibles para clientes y se aplican al aceptar pedidos.
             </p>
           </>
         )}
