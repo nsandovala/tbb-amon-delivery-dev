@@ -89,6 +89,7 @@ export type PublicStoreAvailability = {
   acceptingOrders: boolean;
   timezone: string;
   localNow: string;
+  override: { mode: "open" | "closed" } | null;
   specialDate: PublicStoreDateException | null;
   upcomingSpecialDates: PublicStoreDateException[];
 };

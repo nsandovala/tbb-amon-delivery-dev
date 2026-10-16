@@ -196,15 +196,15 @@ export function serializeFirestore(value: unknown): unknown {
 export async function listUpcomingStoreDateExceptions(
   tenantId: string,
   fromDate: string,
-  throughDate: string,
-  limit = 12
+  throughDate?: string,
+  limit?: number
 ): Promise<Array<StoreDateException & Record<string, unknown>>> {
-  const snapshot = await storeRefs(tenantId).dateExceptions
+  let query = storeRefs(tenantId).dateExceptions
     .orderBy(admin.firestore.FieldPath.documentId())
-    .startAt(fromDate)
-    .endAt(throughDate)
-    .limit(limit)
-    .get();
+    .startAt(fromDate);
+  if (throughDate) query = query.endAt(throughDate);
+  if (limit !== undefined) query = query.limit(limit);
+  const snapshot = await query.get();
   return snapshot.docs.map((doc) => ({
     date: doc.id,
     ...serializeFirestore(doc.data()) as Record<string, unknown>,

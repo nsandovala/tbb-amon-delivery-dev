@@ -240,6 +240,47 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     expect((await status()).specialDate).toBeNull();
   });
 
+  test("el panel administra todas las excepciones futuras, incluso fuera del año y sobre 100", async () => {
+    const listingTenantId = await createFixtureTenant(api, "special-date-list");
+    const initialControl = await api.get(`getStoreControl?tenantId=${listingTenantId}`, {
+      headers: bearer(adminToken),
+    });
+    expect(initialControl.status(), await initialControl.text()).toBe(200);
+    const listingDefaultConfig = (await initialControl.json()).data.defaultConfig;
+    const hours = await api.post("updateStoreHours", {
+      headers: bearer(adminToken),
+      data: { tenantId: listingTenantId, config: listingDefaultConfig },
+    });
+    expect(hours.status(), await hours.text()).toBe(200);
+
+    const today = (await status()).localNow.slice(0, 10);
+    const futureDates = Array.from({ length: 101 }, (_, index) => {
+      const date = new Date(`${today}T12:00:00.000Z`);
+      date.setUTCDate(date.getUTCDate() + 400 + index);
+      return date.toISOString().slice(0, 10);
+    });
+    for (let index = 0; index < 100; index += 10) {
+      await Promise.all(futureDates.slice(index, index + 10).map((date) =>
+        writeFixtureDoc(api, `tenants/${listingTenantId}/storeExceptions/${date}`, { mode: "closed" })
+      ));
+    }
+    const lastDate = futureDates[100];
+    const savedException = await api.post("updateStoreDateException", {
+      headers: bearer(adminToken),
+      data: { tenantId: listingTenantId, exception: { date: lastDate, mode: "closed" } },
+    });
+    expect(savedException.status(), await savedException.text()).toBe(200);
+
+    const controlResponse = await api.get(`getStoreControl?tenantId=${listingTenantId}`, {
+      headers: bearer(adminToken),
+    });
+    expect(controlResponse.status(), await controlResponse.text()).toBe(200);
+    const listed = (await controlResponse.json()).data.specialDates as Array<{ date: string }>;
+    expect(listed).toHaveLength(101);
+    expect(listed.map((entry) => entry.date)).toContain(lastDate);
+    expect(listed[listed.length - 1]?.date).toBe(lastDate);
+  });
+
   test("cierre anticipado manual bloquea web y POS inmediatamente", async () => {
     const res = await operate("close", "Se acabó el pan");
     expect(res.status(), await res.text()).toBe(200);

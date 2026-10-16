@@ -147,10 +147,9 @@ export async function getStoreControl(tenantId: string) {
   ]);
 
   const fromDate = formatLocalDateKey(new Date(), snapshot.timezone);
-  const throughDateValue = new Date(`${fromDate}T12:00:00.000Z`);
-  throughDateValue.setUTCDate(throughDateValue.getUTCDate() + 365);
-  const throughDate = throughDateValue.toISOString().slice(0, 10);
-  const specialDates = await listUpcomingStoreDateExceptions(tenantId, fromDate, throughDate, 100);
+  // Admin debe poder volver a encontrar cualquier excepción que el backend
+  // acepta guardar, aunque esté a más de un año o existan más de 100 fechas.
+  const specialDates = await listUpcomingStoreDateExceptions(tenantId, fromDate);
 
   const parsed = snapshot.hoursRaw ? parseStoreHoursConfig(snapshot.hoursRaw) : null;
 
