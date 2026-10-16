@@ -1,42 +1,29 @@
-# Sprint: Operations polish
+# Sprint: Polish de Operaciones
 
-## Goal
+## Diseño aprobado — 2026-10-16
 
-Make `/operacion` trustworthy at a glance and practical during a live shift. Preserve the existing store-hours, manual override, audit, and cash-close contracts. This is a UI/UX sprint; it does not deploy or change Firebase data.
+Nelson aprobó la dirección visual de la pantalla `/operacion` en modo claro y oscuro. El diseño identifica claramente qué tienda está activa y quién la opera, y organiza horario, estado, caja y bitácora como una herramienta de trabajo.
 
-Sequence agreed for the product:
+## Entrega de este incremento
 
-1. Operations polish.
-2. Metrics design and data presentation.
-3. Home visual direction and redesign.
+- Se muestra el tenant y local activos con su ubicación, junto con el correo del usuario autenticado.
+- Claro/oscuro se cambia desde Operaciones y la selección se conserva en el navegador. El modo oscuro es el predeterminado.
+- Las fechas visibles usan formato `DD/MM/AAAA`; los contratos y valores ISO no cambian.
+- El horario semanal usa filas compactas, con estado y controles editables por día. Se eliminó la escala anterior de marcas horarias superpuestas.
+- Caja muestra un resumen compacto y deja el arqueo en un detalle expandible. La bitácora queda debajo y puede mostrar hasta 25 eventos recibidos desde la API.
+- Proveedores, tareas y fechas especiales tienen estados vacíos. No hay API ni persistencia para administrarlos todavía, así que no se muestran registros inventados.
+- Agendar pedidos a una hora elegida por el cliente queda en backlog.
 
-Metrics and Home remain outside this sprint. Their current design is not approved. Seeded sales visible in local screenshots are demo data and are not treated as production values.
+## Límites
 
-## Calendar acceptance criteria
+- La razón social y una identidad independiente por sucursal no existen aún en el modelo del tenant; la pantalla usa nombre, comuna y ciudad disponibles.
+- El tema seleccionado se guarda en el navegador actual, no en el perfil del usuario.
+- Esta entrega es de UI/UX. No cambia contratos de Functions, datos de Firebase, reglas, configuración de tienda, pedidos o delivery.
+- No incluye el rediseño de Métricas ni Home. El orden acordado es Operaciones, luego Métricas y finalmente Home.
+- El seed local contiene ventas de demostración, no cifras reales.
+- No se despliega a Firebase. El proyecto destino de Firebase debe confirmarse antes de preparar un despliegue.
 
-- Show the complete local day from 00:00 through 24:00. The visual interval must use the same scale as the time inputs.
-- Keep opening and closing inputs visible and independently editable; never place them inside a clipped time block.
-- Make closed days explicit and disable their time inputs without discarding the saved times.
-- Keep the weekly view readable at mobile and desktop widths, with keyboard-operable controls and accessible labels.
-- Validate the same-day interval and close-warning range before saving. Preserve the existing no-overnight-hours contract.
-- Keep save, discard, audit reason, and server refresh behavior intact.
-
-## Current implementation
-
-- Replaced the 08:00–24:00 calendar scale with an accurate 00:00–24:00 weekly timeline.
-- Separated the visual interval from the editable time controls and made day status explicit.
-- Reduced oversized card and control radii across the Operations page to give the status, schedule, cash, and audit sections a more precise control-room feel.
-- Added pure timeline math and regression cases for midnight, default business hours, late-night hours, invalid times, and overnight intervals.
-- Corrected a stale cash-close unit expectation: the architecture contract and implementation both block active Web/WhatsApp orders, but one unit test still described them as warnings.
-
-## Scope boundaries
-
-- No backend, API, Firestore, auth, store hours configuration, delivery, or order flow changes.
-- No automatic changes to seeded data or store settings.
-- No Metrics or Home edits in this sprint.
-- No deployment. The Firebase destination has not been confirmed.
-
-## Validation
+## Validación
 
 ```bash
 npm --workspace apps/admin run build
@@ -44,8 +31,11 @@ npx playwright test e2e/unit/m6j-control-room.spec.ts e2e/unit/m6j-store-hours.s
 git diff --check
 ```
 
-## Remaining work
+Build, typecheck y las suites unitarias enfocadas pasan. La revisión del usuario en navegador local sigue siendo la validación visual final para diferentes tamaños de pantalla.
 
-- Complete visual review of the full `/operacion` page at desktop and mobile widths.
-- Continue operations hierarchy and cash-panel polish after the calendar review.
-- Keep Metrics and Home queued in that order after Operations is accepted.
+## Próximos pasos de producto
+
+1. Revisar esta versión de Operaciones en local en escritorio y móvil.
+2. Diseñar y validar Métricas con datos de demostración claramente identificados.
+3. Rediseñar Home después de cerrar Operaciones y Métricas.
+4. Definir contratos para calendario de fechas especiales, proveedores y tareas cuando se priorice su persistencia.

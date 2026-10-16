@@ -55,3 +55,91 @@ a {
 [data-admin-surface="expenses"] button[class*="hover:bg-emerald"]:hover {
   background-color: #e2bd73 !important;
 }
+
+/* Theme tokens scoped to Operations; other Admin screens keep their current theme. */
+[data-admin-surface="operations"] {
+  --ops-bg: #050505;
+  --ops-surface: #101010;
+  --ops-raised: #17191a;
+  --ops-text: #f5f5f5;
+  --ops-muted: #a3a3a3;
+  --ops-line: rgb(255 255 255 / 0.12);
+}
+
+[data-admin-surface="operations"][data-theme="light"] {
+  color-scheme: light;
+  --ops-bg: #f4f5f1;
+  --ops-surface: #ffffff;
+  --ops-raised: #f7f8f6;
+  --ops-text: #202821;
+  --ops-muted: #727b73;
+  --ops-line: #e1e6df;
+  background: var(--ops-bg) !important;
+  color: var(--ops-text) !important;
+}
+
+[data-admin-surface="operations"] .ops-surface {
+  background-color: var(--ops-surface);
+  border-color: var(--ops-line);
+}
+
+[data-admin-surface="operations"] .ops-text { color: var(--ops-text); }
+[data-admin-surface="operations"] .ops-muted { color: var(--ops-muted); }
+[data-admin-surface="operations"] .ops-subtle { background-color: var(--ops-raised); }
+[data-admin-surface="operations"] .ops-badge { border-color: var(--ops-line); }
+
+[data-admin-surface="operations"][data-theme="light"] [class*="bg-[#"],
+[data-admin-surface="operations"][data-theme="light"] [class*="bg-black/"] {
+  background-color: var(--ops-raised) !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] [class*="border-white"],
+[data-admin-surface="operations"][data-theme="light"] [class*="divide-white"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--ops-line) !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .text-white,
+[data-admin-surface="operations"][data-theme="light"] .text-neutral-100,
+[data-admin-surface="operations"][data-theme="light"] .text-neutral-200,
+[data-admin-surface="operations"][data-theme="light"] .text-neutral-300 {
+  color: #263129 !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .text-neutral-400,
+[data-admin-surface="operations"][data-theme="light"] .text-neutral-500,
+[data-admin-surface="operations"][data-theme="light"] .text-neutral-600 {
+  color: #727b73 !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .text-emerald-100,
+[data-admin-surface="operations"][data-theme="light"] .text-emerald-200,
+[data-admin-surface="operations"][data-theme="light"] .text-emerald-300,
+[data-admin-surface="operations"][data-theme="light"] .text-emerald-400 {
+  color: #176e49 !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .text-amber-100,
+[data-admin-surface="operations"][data-theme="light"] .text-amber-200,
+[data-admin-surface="operations"][data-theme="light"] .text-amber-300 {
+  color: #815812 !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .text-red-100,
+[data-admin-surface="operations"][data-theme="light"] .text-red-200,
+[data-admin-surface="operations"][data-theme="light"] .text-red-300 {
+  color: #a12c2c !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .text-sky-50,
+[data-admin-surface="operations"][data-theme="light"] .text-sky-100,
+[data-admin-surface="operations"][data-theme="light"] .text-sky-200,
+[data-admin-surface="operations"][data-theme="light"] .text-sky-300 {
+  color: #176381 !important;
+}
+
+[data-admin-surface="operations"][data-theme="light"] .ops-input {
+  color-scheme: light;
+  background-color: #fff !important;
+  color: #202821 !important;
+  border-color: var(--ops-line) !important;
+}

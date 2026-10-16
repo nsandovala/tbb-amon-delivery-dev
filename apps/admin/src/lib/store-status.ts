@@ -93,16 +93,33 @@ export function formatStoreClock(nowMs: number, timeZone: string): { time: strin
       second: "2-digit",
       hourCycle: "h23",
     }).format(nowMs);
-    const date = new Intl.DateTimeFormat("es-CL", {
+    const dateParts = new Intl.DateTimeFormat("es-CL", {
       timeZone,
       weekday: "long",
       day: "2-digit",
-      month: "short",
-    }).format(nowMs);
+      month: "2-digit",
+      year: "numeric",
+    }).formatToParts(nowMs);
+    const part = (type: Intl.DateTimeFormatPartTypes) => dateParts.find((item) => item.type === type)?.value ?? "";
+    const date = `${part("weekday")}, ${part("day")}/${part("month")}/${part("year")}`;
     return { time, date };
   } catch {
     return { time: "--:--:--", date: "" };
   }
+}
+
+/** ISO operational date (YYYY-MM-DD) rendered for Chilean users as DD/MM/YYYY. */
+export function formatOperationalDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+}
+
+/** ISO timestamp rendered in local calendar order without shifting its wall-clock date. */
+export function formatLocalDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]} ${match[4]}` : value;
 }
 
 /** "HH:MM" de un ISO con offset, en la timezone de la tienda. */

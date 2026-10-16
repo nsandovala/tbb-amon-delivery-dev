@@ -1,5 +1,54 @@
 # Phase Log
 
+## 2026-10-16 — Revisión visual aprobada: Operaciones
+
+### Qué cambió
+- `/operacion` ahora identifica el tenant/local y ubicación leyendo el documento real `tenants/tbb`; identifica al operador con el correo de la sesión Firebase y el rol admin ya verificado por `AdminGuard`.
+- Se añadió selector de modo claro/oscuro, con preferencia local persistida en el navegador y modo oscuro como valor inicial.
+- Se reemplazó el eje horario que se superponía por una tabla semanal legible y adaptable, con apertura/cierre editables por día y estado explícito de cerrado.
+- Caja queda compacta y plegada inicialmente; la bitácora está inmediatamente debajo, muestra cinco movimientos recientes y permite expandir hasta los 25 que entrega el endpoint actual.
+- Fechas operacionales y de bitácora se presentan como `DD/MM/AAAA`; los contratos y valores internos ISO no cambian.
+- Se añadieron estados vacíos explícitos para feriados/excepciones, proveedores y acciones por hacer. No se simulan registros que todavía no existen.
+
+### Por qué cambió
+- Nelson aprobó el mockup y pidió saber en todo momento qué tienda está operando y quién tiene la sesión activa.
+- Las etiquetas de horas del eje anterior se solapaban en pantallas reales; la tabla expresa el horario sin una escala ilegible.
+- La caja y la bitácora deben ocupar una columna compacta y el calendario debe ser la superficie principal.
+
+### Archivos modificados
+- `apps/admin/src/app/operacion/page.tsx`
+- `apps/admin/src/app/globals.css`
+- `apps/admin/src/components/operation/{store-panel,cash-panel,schedule-editor,audit-log}.tsx`
+- `apps/admin/src/lib/{store-status,schedule}.ts`
+- `e2e/unit/m6j-control-room.spec.ts`
+- `roadmap/phase-log.md`
+- `roadmap/sprint-operations-polish.md`
+
+### Contratos afectados
+- Ningún contrato de Functions, Firestore, autenticación, horario o cierre de caja cambia.
+- `operationalDate` y `atLocal` conservan ISO en backend; solo cambia su formato de presentación.
+- El tenant no contiene razón social separada: la UI muestra el nombre real del tenant y su comuna/ciudad; no inventa un nombre legal.
+- No hay modelo persistente/API para feriados, proveedores ni tareas. Sus secciones quedan como estados vacíos honestos hasta diseñar esos módulos.
+- El endpoint actual limita la bitácora a 25 eventos; expandir la UI revela ese máximo, no pagina histórico.
+
+### Validación
+```bash
+./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit
+npm --workspace apps/admin run build
+npx playwright test e2e/unit/m6j-control-room.spec.ts e2e/unit/m6j-store-hours.spec.ts --config=playwright.config.ts
+git diff --check
+```
+
+- Typecheck de Admin: OK.
+- Build de Admin: OK.
+- Unitarias de Operaciones/horario: 51/51 OK.
+- Revisión visual de escritorio/móvil en navegador: pendiente.
+
+### Riesgos y siguiente paso
+- El modo claro se limita al área de Operaciones; la navegación global de Admin mantiene el tema existente.
+- Feriados/excepciones, proveedores y tareas requieren contrato de datos/API antes de volverse editables.
+- El cambio se publica en la rama de revisión autorizada para que Nelson haga QA visual local de ambos temas y anchos móvil/desktop. No desplegar: el proyecto Firebase destino sigue sin confirmarse.
+
 ## 2026-10-16 — Inicio del sprint de polish de Operaciones
 
 ### Qué cambió

@@ -1,13 +1,15 @@
 import { test, expect } from "@playwright/test";
 import {
   formatCountdown,
+  formatLocalDateTime,
+  formatOperationalDate,
   formatStoreClock,
   formatStoreTime,
   getNextTransition,
   getStoreTone,
   parseCountedClp,
 } from "../../apps/admin/src/lib/store-status";
-import { getScheduleTrackStyle, isValidScheduleTime } from "../../apps/admin/src/lib/schedule";
+import { isValidScheduleTime } from "../../apps/admin/src/lib/schedule";
 
 /**
  * M6J — semántica visual de la sala de control (sin emulador).
@@ -45,6 +47,12 @@ test.describe("Reloj y transiciones", () => {
     expect(formatCountdown(null, now)).toBeNull();
   });
 
+  test("fechas operativas y bitácora usan formato DD/MM/AAAA", () => {
+    expect(formatOperationalDate("2026-10-16")).toBe("16/10/2026");
+    expect(formatLocalDateTime("2026-10-16T17:30:00-03:00")).toBe("16/10/2026 17:30");
+    expect(formatOperationalDate(null)).toBe("—");
+  });
+
   test("muestra cierre si recibe pedidos y apertura si no", () => {
     const times = { nextOpenAt: "open", nextCloseAt: "close" };
     expect(getNextTransition({ acceptingOrders: true, ...times })).toEqual({ label: "Cierra", at: "close" });
@@ -67,25 +75,10 @@ test.describe("Efectivo contado", () => {
 });
 
 test.describe("Vista del horario semanal", () => {
-  test("ubica los turnos sobre una escala completa de 00:00 a 24:00", () => {
-    expect(getScheduleTrackStyle("00:00", "06:00")).toEqual({ left: 0, width: 25 });
-    expect(getScheduleTrackStyle("17:30", "22:30")).toEqual({
-      left: (1050 / 1440) * 100,
-      width: (300 / 1440) * 100,
-    });
-    expect(getScheduleTrackStyle("23:00", "23:59")).toEqual({
-      left: (1380 / 1440) * 100,
-      width: (59 / 1440) * 100,
-    });
-  });
-
-  test("no dibuja horas inválidas ni intervalos que cruzan medianoche", () => {
+  test("acepta horas válidas y rechaza 24:00", () => {
     expect(isValidScheduleTime("00:00")).toBe(true);
     expect(isValidScheduleTime("23:59")).toBe(true);
     expect(isValidScheduleTime("24:00")).toBe(false);
     expect(isValidScheduleTime("25:99")).toBe(false);
-    expect(getScheduleTrackStyle("24:00", "01:00")).toBeNull();
-    expect(getScheduleTrackStyle("12:00", "12:00")).toBeNull();
-    expect(getScheduleTrackStyle("22:00", "06:00")).toBeNull();
   });
 });
