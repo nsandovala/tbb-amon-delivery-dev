@@ -321,7 +321,7 @@ test.describe("Cierre de caja", () => {
     ]);
   });
 
-  test("ventas POS activas bloquean; pedidos web activos solo advierten", () => {
+  test("ventas POS y pedidos web activos bloquean el cierre", () => {
     const summary = summarizeCashDay({
       operationalDate: "2026-10-15",
       orders: [
@@ -330,7 +330,7 @@ test.describe("Cierre de caja", () => {
       ],
       expenses: [],
     });
-    expect(summary.blockers.map((blocker) => blocker.code)).toEqual(["ACTIVE_POS_SALES"]);
+    expect(summary.blockers.map((blocker) => blocker.code)).toEqual(["ACTIVE_POS_SALES", "ACTIVE_OTHER_ORDERS"]);
     expect(summary.activeOtherOrders.count).toBe(1);
     // Ninguna está entregada: todavía no es dinero en caja.
     expect(summary.expectedCash).toBe(0);

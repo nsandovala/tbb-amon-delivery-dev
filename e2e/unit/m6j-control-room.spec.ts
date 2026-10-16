@@ -7,6 +7,7 @@ import {
   getStoreTone,
   parseCountedClp,
 } from "../../apps/admin/src/lib/store-status";
+import { getScheduleTrackStyle, isValidScheduleTime } from "../../apps/admin/src/lib/schedule";
 
 /**
  * M6J — semántica visual de la sala de control (sin emulador).
@@ -62,5 +63,29 @@ test.describe("Efectivo contado", () => {
     expect(parseCountedClp("12,50").ok).toBe(false);
     expect(parseCountedClp("-100").ok).toBe(false);
     expect(parseCountedClp("abc").ok).toBe(false);
+  });
+});
+
+test.describe("Vista del horario semanal", () => {
+  test("ubica los turnos sobre una escala completa de 00:00 a 24:00", () => {
+    expect(getScheduleTrackStyle("00:00", "06:00")).toEqual({ left: 0, width: 25 });
+    expect(getScheduleTrackStyle("17:30", "22:30")).toEqual({
+      left: (1050 / 1440) * 100,
+      width: (300 / 1440) * 100,
+    });
+    expect(getScheduleTrackStyle("23:00", "23:59")).toEqual({
+      left: (1380 / 1440) * 100,
+      width: (59 / 1440) * 100,
+    });
+  });
+
+  test("no dibuja horas inválidas ni intervalos que cruzan medianoche", () => {
+    expect(isValidScheduleTime("00:00")).toBe(true);
+    expect(isValidScheduleTime("23:59")).toBe(true);
+    expect(isValidScheduleTime("24:00")).toBe(false);
+    expect(isValidScheduleTime("25:99")).toBe(false);
+    expect(getScheduleTrackStyle("24:00", "01:00")).toBeNull();
+    expect(getScheduleTrackStyle("12:00", "12:00")).toBeNull();
+    expect(getScheduleTrackStyle("22:00", "06:00")).toBeNull();
   });
 });

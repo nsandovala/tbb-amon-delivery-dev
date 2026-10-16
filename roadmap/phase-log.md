@@ -1,5 +1,44 @@
 # Phase Log
 
+## 2026-10-16 — Inicio del sprint de polish de Operaciones
+
+### Qué cambió
+- `/operacion`: primera pasada del editor de horario semanal. La escala ahora cubre 00:00–24:00, los campos de apertura/cierre quedan fuera de la barra de disponibilidad y los días cerrados desactivan sus campos sin borrar sus horas.
+- La validación visual rechaza horas fuera de rango, intervalos sin duración y avisos de cierre fuera de 0–120 minutos antes de llamar a Functions.
+- Se alineó una expectativa de prueba de cierre de caja con el contrato vigente: pedidos web/WhatsApp activos también bloquean el cierre.
+
+### Por qué cambió
+- La vista anterior comenzaba a las 08:00 aunque el contrato acepta horas desde 00:00. Además, los campos de hora dentro de una barra corta podían quedar recortados.
+- El usuario indicó que Operaciones requiere polish y que el calendario actual no satisface la expectativa. Métricas y Home siguen sin aprobación y están planificados para sprints posteriores.
+
+### Archivos modificados
+- `apps/admin/src/components/operation/schedule-editor.tsx`
+- `apps/admin/src/lib/schedule.ts` (nuevo)
+- `e2e/unit/m6j-control-room.spec.ts`
+- `e2e/unit/m6j-store-hours.spec.ts`
+- `roadmap/sprint-operations-polish.md` (nuevo)
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- Ninguno. Se preserva el endpoint `updateStoreHours`, el contrato de horario y la regla de no cruzar medianoche.
+- Sin cambios a Firebase, seed, autenticación, ventas o despliegue.
+
+### Validación
+```bash
+npm --workspace apps/admin run build
+npx playwright test e2e/unit/m6j-control-room.spec.ts e2e/unit/m6j-store-hours.spec.ts --config=playwright.config.ts
+git diff --check
+```
+
+- Build de Admin: OK.
+- Pruebas de horario y sala de control: 51/51 OK.
+- `git diff --check`: OK.
+- El primer pase de pruebas detectó una expectativa obsoleta sobre pedidos web activos; se alineó con el bloqueo definido en el contrato y se volvió a ejecutar la suite.
+
+### Riesgos y siguiente paso
+- Falta una revisión visual real de `/operacion` en navegador, escritorio y móvil.
+- Este es el primer incremento del sprint; revisar después la jerarquía de caja/bitácora. Métricas va después de cerrar Operaciones y Home después de Métricas.
+
 ## Fase actual
 M6J — horario operativo fail-closed, operación manual auditada y cierre de caja
 
