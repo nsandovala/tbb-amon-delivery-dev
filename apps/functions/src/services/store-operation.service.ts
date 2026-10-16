@@ -67,9 +67,10 @@ function buildClosedMessage(status: StoreStatus): string {
  */
 export async function assertStoreAcceptingOrders(
   tx: admin.firestore.Transaction,
-  tenantId: string
+  tenantId: string,
+  now = new Date()
 ): Promise<StoreStatus> {
-  const snapshot = await readStoreSnapshot(tenantId, transactionReader(tx), new Date());
+  const snapshot = await readStoreSnapshot(tenantId, transactionReader(tx), now);
   if (!snapshot.status.acceptingOrders) {
     const parsed = snapshot.hoursRaw ? parseStoreHoursConfig(snapshot.hoursRaw) : null;
     throw new StoreClosedError(snapshot.status, parsed?.ok ? parsed.config.days : null);
@@ -288,12 +289,17 @@ export async function updateStoreHours(
     const previous = snapshot.status;
 
     const overrideParse = storeOverrideSchema.safeParse(snapshot.operation.override ?? null);
+    let existingClosedDate: string | null = null;
+    const previousOperationalDate = snapshot.operation.lastObservedOperationalDate;
+    if (previousOperationalDate) {
+      const closeSnap = await transactionReader(tx)(storeRefs(tenantId).cashClose(previousOperationalDate));
+      if (closeSnap.exists) existingClosedDate = previousOperationalDate;
+    }
     const next = evaluateStoreStatus({
       now,
       config,
       override: overrideParse.success ? overrideParse.data : null,
-      cashClosedOperationalDate:
-        previous.reasonCode === "CASH_CLOSED" ? previous.operationalDate : null,
+      cashClosedOperationalDate: existingClosedDate,
     });
 
     const refs = storeRefs(tenantId);

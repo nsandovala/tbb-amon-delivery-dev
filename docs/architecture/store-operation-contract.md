@@ -17,7 +17,8 @@ Storefront / POS
   -> service: valida payload, calcula totales
   -> createOrder() repo: runTransaction
        -> lee orderCounters/{operationalDate}
-       -> guard: assertStoreAcceptingOrders(tx)    ← lee storeHours, storeOperation, cashCloses/{día}
+       -> guard: assertStoreAcceptingOrders(tx, capturedNow)
+            ← usa el mismo instante para operationalDate y estado de tienda
             -> evaluateStoreStatus()  (lib/store-hours.ts, puro)
             -> !acceptingOrders → 409 STORE_CLOSED (nada se escribe)
        -> escribe counter + order
@@ -158,7 +159,7 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 |---|---|---|
 | `STORE_CONFIG_INVALID` | 409 | Acción manual con horario ausente/inválido |
 | `CASH_ALREADY_CLOSED` | 409 | Reabrir tras cierre de caja del día, o segundo cierre con otra `idempotencyKey` |
-| `CASH_CLOSE_BLOCKED` | 409 | Hay ventas POS activas o pagos `pending` y no hay `override` |
+| `CASH_CLOSE_BLOCKED` | 409 | Hay pedidos activos o pagos `pending` sin el override permitido |
 | `VALIDATION_ERROR` | 400 | Payload inválido, decimales, fecha futura |
 
 ### Idempotencia
@@ -172,13 +173,36 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 - `paymentMethod = "pending"` nunca suma a efectivo ni a transferencias; se informa como "ventas pendientes".
 - `cancelled` no suma en ninguna parte.
 - Efectivo esperado = ventas entregadas en efectivo − gastos activos pagados en efectivo.
-- Bloqueos (requieren override con motivo ≥ 5 caracteres, auditado): ventas `admin_pos` activas; pedidos no cancelados con pago `pending`.
-- Los pedidos web activos se informan como advertencia, no bloquean.
+- Todo pedido activo (`queued`, `preparing`, `ready` o `on_the_way`) bloquea el cierre, sin importar si proviene de POS, web o WhatsApp.
+- Los pedidos activos son bloqueos no anulables: deben llegar a un estado terminal (`delivered` o `cancelled`) antes de cerrar la caja.
+- Los pagos `pending` bloquean el cierre, pero pueden superarse con un override administrativo con motivo de al menos 5 caracteres; el override queda auditado.
+- Un pedido web/WhatsApp activo se muestra como bloqueo explícito, no como una simple advertencia.
 - El día se toma de `order.operationalDate` (pedidos legacy sin ese campo no se incluyen) y los gastos por `occurredAt` dentro de `[día 05:00, día+1 05:00)` local.
 
 ## Timezone
 
 Toda la aritmética usa `Intl` con la timezone configurada (DST real de Chile): nunca la del proceso ni la del navegador. Las horas se devuelven como ISO con offset (`-03:00` verano, `-04:00` invierno). La UI admin corrige el reloj del dispositivo con el `localNow` del servidor.
+
+## Hardening post-M6J: frontera del cierre y del instante capturado
+
+### Motivo
+
+El cierre de caja es una frontera financiera inmutable: no debe dejar pedidos activos atrapados en estados no terminales ni evaluar una orden con un día operacional distinto del que se persiste. Por eso el backend bloquea todos los pedidos activos y conserva un único instante para calcular la fecha y el guard de tienda.
+
+### Contratos y archivos afectados
+
+- `CashCloseBlocker.code` incorpora `ACTIVE_OTHER_ORDERS`; el cliente Admin lo muestra como “Pedidos web/WhatsApp activos”.
+- `createOrder` y `createPosSale` reenvían `capturedNow` a `assertStoreAcceptingOrders`.
+- `apps/functions/src/lib/cash-close.ts` distingue bloqueos activos no anulables de `PENDING_PAYMENTS`, que sí admite override auditado.
+- `apps/admin/src/lib/api/store.ts` y `apps/admin/src/components/operation/cash-panel.tsx` mantienen el contrato y la etiqueta visibles para el operador.
+
+### Validación
+
+El PR debe pasar las suites unitarias y API, el build de Functions, los typechecks de Shared/Admin/Web y `git diff --check`. La validación API local debe usar un proceso de Functions fresco; no se reinicia el emulador existente durante este mini-sprint para preservar sus datos.
+
+### Riesgos y siguiente paso
+
+El cierre ahora requiere terminalizar pedidos activos antes del arqueo; esto es intencional y evita jornadas inmutables con órdenes atrapadas. Los pagos `pending` siguen requiriendo override con motivo auditado. Tras los checks verdes del PR, ejecutar el Release Gate y luego continuar con la revisión UX de Operación y Métricas.
 
 ## Validación
 

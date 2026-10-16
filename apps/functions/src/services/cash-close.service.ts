@@ -26,6 +26,15 @@ import {
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+function isRealOperationalDate(value: string): boolean {
+  if (!DATE_REGEX.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
 export const closeCashSessionInputSchema = z.object({
   tenantId: z.string().min(1).optional(),
   operationalDate: z.string().regex(DATE_REGEX).optional(),
@@ -48,7 +57,7 @@ async function resolveOperationalDate(tenantId: string, requested: string | unde
   const current = getOperationalDateFor(now, snapshot.timezone);
   const operationalDate = requested ?? current;
 
-  if (!DATE_REGEX.test(operationalDate) || Number.isNaN(Date.parse(`${operationalDate}T12:00:00Z`))) {
+  if (!isRealOperationalDate(operationalDate)) {
     throw new ValidationError("operationalDate must be YYYY-MM-DD");
   }
   if (operationalDate > current) {
@@ -148,6 +157,17 @@ export async function closeCashSession(
     });
     const store = await readStoreSnapshot(tenantId, transactionReader(tx), now);
 
+    const activeOrderBlockers = summary.blockers.filter((blocker) =>
+      blocker.code === "ACTIVE_POS_SALES" || blocker.code === "ACTIVE_OTHER_ORDERS"
+    );
+    if (activeOrderBlockers.length > 0) {
+      throw new AppError(
+        "No se puede cerrar caja: hay pedidos activos. Llévalos a un estado terminal antes del cierre; el override no puede dejar pedidos atrapados.",
+        409,
+        "CASH_CLOSE_BLOCKED",
+        { blockers: summary.blockers, nonOverridableBlockers: activeOrderBlockers, summary }
+      );
+    }
     if (summary.blockers.length > 0 && !input.override) {
       throw new AppError(
         "No se puede cerrar caja: hay ventas POS activas o pagos pendientes. Ciérralas o registra un override administrativo con motivo.",
