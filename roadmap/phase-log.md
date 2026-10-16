@@ -4,6 +4,7 @@
 
 ### Qué cambió
 - `/operacion`: primera pasada del editor de horario semanal. La escala ahora cubre 00:00–24:00, los campos de apertura/cierre quedan fuera de la barra de disponibilidad y los días cerrados desactivan sus campos sin borrar sus horas.
+- Se redujeron los radios grandes de tarjetas y controles en la sala de operaciones para dar jerarquía más nítida a estado, horario, caja y bitácora.
 - La validación visual rechaza horas fuera de rango, intervalos sin duración y avisos de cierre fuera de 0–120 minutos antes de llamar a Functions.
 - Se alineó una expectativa de prueba de cierre de caja con el contrato vigente: pedidos web/WhatsApp activos también bloquean el cierre.
 
@@ -13,6 +14,8 @@
 
 ### Archivos modificados
 - `apps/admin/src/components/operation/schedule-editor.tsx`
+- `apps/admin/src/components/operation/{store-panel,cash-panel,audit-log}.tsx`
+- `apps/admin/src/app/operacion/page.tsx`
 - `apps/admin/src/lib/schedule.ts` (nuevo)
 - `e2e/unit/m6j-control-room.spec.ts`
 - `e2e/unit/m6j-store-hours.spec.ts`
