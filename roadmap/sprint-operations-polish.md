@@ -25,6 +25,7 @@ Metrics and Home remain outside this sprint. Their current design is not approve
 
 - Replaced the 08:00–24:00 calendar scale with an accurate 00:00–24:00 weekly timeline.
 - Separated the visual interval from the editable time controls and made day status explicit.
+- Reduced oversized card and control radii across the Operations page to give the status, schedule, cash, and audit sections a more precise control-room feel.
 - Added pure timeline math and regression cases for midnight, default business hours, late-night hours, invalid times, and overnight intervals.
 - Corrected a stale cash-close unit expectation: the architecture contract and implementation both block active Web/WhatsApp orders, but one unit test still described them as warnings.
 
