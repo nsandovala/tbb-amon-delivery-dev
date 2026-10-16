@@ -16,17 +16,20 @@ export function describeStoreSpecialDate(exception: PublicStoreDateException): s
 export function getCurrentStoreSpecialDateNotice(
   availability: PublicStoreAvailability
 ): StoreSpecialDateNotice | null {
+  // A cash close is terminal for the current business day and takes priority
+  // over both the configured exception and any manual open/close override.
+  if (availability.state === "closed") {
+    return {
+      title: "Atención de hoy",
+      message: "La tienda está cerrada y no está recibiendo pedidos.",
+    };
+  }
+
   if (availability.override?.mode === "open") {
     if (availability.acceptingOrders) {
       return {
         title: "Apertura excepcional",
         message: "Hoy abrimos de forma excepcional y estamos recibiendo pedidos.",
-      };
-    }
-    if (availability.state === "closed") {
-      return {
-        title: "Atención de hoy",
-        message: "La tienda está cerrada y no está recibiendo pedidos.",
       };
     }
   }

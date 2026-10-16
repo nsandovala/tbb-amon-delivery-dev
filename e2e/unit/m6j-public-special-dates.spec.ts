@@ -57,4 +57,30 @@ test.describe("Aviso público de fechas especiales", () => {
       message: "La tienda está cerrada y no está recibiendo pedidos.",
     });
   });
+
+  test("la jornada cerrada en caja prevalece sobre el horario y mensaje de la excepción", () => {
+    expect(getCurrentStoreSpecialDateNotice(availability({
+      state: "closed",
+      specialDate: {
+        date: "2026-12-25",
+        mode: "custom_hours",
+        open: "17:30",
+        close: "22:30",
+        customerMessage: "Abriremos desde las 17:30",
+      },
+    }))).toEqual({
+      title: "Atención de hoy",
+      message: "La tienda está cerrada y no está recibiendo pedidos.",
+    });
+  });
+
+  test("la jornada cerrada en caja prevalece sobre un override de cierre manual", () => {
+    expect(getCurrentStoreSpecialDateNotice(availability({
+      state: "closed",
+      override: { mode: "closed" },
+    }))).toEqual({
+      title: "Atención de hoy",
+      message: "La tienda está cerrada y no está recibiendo pedidos.",
+    });
+  });
 });

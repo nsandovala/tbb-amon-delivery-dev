@@ -1,4 +1,22 @@
+Warning: truncated output (original token count: 12656)
+Total output lines: 901
+
 # Phase Log
+
+## 2026-10-16 — M6J follow-up: precedencia pública de cierre de caja
+
+### Qué cambió
+- El aviso público de fechas especiales ahora prioriza el estado terminal `closed` antes de evaluar overrides manuales o el horario configurado.
+- Se añadieron regresiones para cierre de caja sin override, con override de cierre y sobre horario especial con mensaje al cliente.
+
+### Por qué cambió
+- La revisión de PR #75 encontró que el aviso podía presentar horario o mensaje de una excepción aunque el cierre de caja ya rechazara todos los pedidos.
+
+### Validación
+- Las seis pruebas específicas del aviso público pasan. Quedan pendientes las pruebas locales completas del usuario y los checks actualizados de GitHub Actions.
+
+### Release gate
+- Sin merge ni despliegue. Ejecutar las pruebas locales antes de continuar con el estudio de UX de métricas.
 
 ## 2026-10-16 — Mini sprint: correcciones de revisión de fechas especiales
 
@@ -247,205 +265,7 @@ Regresiones añadidas para los hallazgos P1/P2: endpoint público sin escrituras
 - Checkout web mantiene `Confirmar pedido` accionable para explicar validaciones y usa el proxy same-origin local por defecto en desarrollo cuando no hay Functions base URL explícita.
 - Backend y shared rechazan con `400` un `createOrder` delivery sin dirección; teléfonos delivery inválidos ahora producen `ValidationError` (`400`) en vez de un error genérico (`500`).
 - POS reemplaza la sincronización reactiva defectuosa del nombre por modos explícitos `counter`/`details`.
-- Borrar nombre o teléfono en pickup ya no repone `Cliente mostrador` dentro del input ni bloquea la venta; el payload conserva un nombre operativo y solo envía teléfono en modo con datos.
-- Se agregaron contratos E2E para los seis casos mínimos M6H.
-
-### Por qué cambió
-
-- M6F introdujo un efecto dependiente de `customerName` que reescribía el mismo estado al vaciar el campo.
-- El checkout ocultaba el diagnóstico detrás de un botón nativamente deshabilitado.
-- El contrato backend no aplicaba la regla de dirección obligatoria a delivery web, aunque la UI sí la previsualizaba.
-- La selección del proxy local dependía enteramente de env y podía recaer en una URL cross-origin bloqueada por PNA/CORS.
-
-### Archivos modificados
-
-- `apps/web/src/components/cart/cart-summary.tsx`
-- `apps/web/src/lib/api/orders.ts`
-- `apps/admin/src/app/pos/page.tsx`
-- `apps/functions/src/schemas/order.shared.ts`
-- `apps/functions/src/services/orders.service.ts`
-- `apps/functions/src/services/pos.service.ts`
-- `packages/shared/src/schemas/order.schema.ts`
-- `e2e/api/orders.contract.spec.ts`
-- `docs/architecture/customer-order-contract.md`
-- `roadmap/phase-log.md`
-- `docs/agent-sessions/2026-08-26/codex-m6h-checkout-pos-form.md`
-
-### Contratos afectados
-
-- `createOrder`: delivery requiere nombre, teléfono y dirección; validaciones de cliente retornan `400`.
-- `createPosSale`: pickup mostrador no requiere teléfono ni crea customer; delivery exige nombre, teléfono y dirección.
-- Customer upsert POS: se mantiene únicamente cuando el teléfono normaliza.
-- Order numbering: pedidos nuevos conservan `displayOrderNumber`, `displayCode` y `operationalDate` generados por backend.
-
-### Validación
-
-```bash
-npm run build --workspace packages/shared   # OK
-npm run build --prefix apps/functions       # OK
-npm run build --workspace apps/admin        # OK
-npm run build --workspace apps/web          # OK adicional
-npm run test:e2e:api                        # OK, 22/22
-node tools/test-rules-anon.mjs               # OK, 6/6
-```
-
-Smoke HTTP local: `/tienda/tbb`, `/pos`, `/pedidos`, `/gastos` y `/metricas` respondieron `200`.
-Smoke por proxy same-origin: pedido web delivery `201` (`Pedido #009`), web pickup `201` (`#010`), POS mostrador `201` (`#011`) y `Cerrar venta` dejó la POS en `delivered`.
-
-### Riesgos restantes
-
-- El navegador integrado no estuvo disponible; queda pendiente repetir visualmente los ocho pasos. Los flujos HTTP/proxy equivalentes sí pasaron contra emulator.
-- `startOfDay` del POS continúa congelado al montar el componente; no cambió en M6H.
-- Firestore rules no fueron modificadas.
-- 2MUCH, ERP/outbox, catálogo, clientes y configuración permanecieron congelados.
-
-### Siguiente paso
-
-- Ejecutar QA visual/manual con navegador disponible y aprobar commit M6H si los ocho pasos pasan.
-
-## 2026-07-12 — R1/R2: cierre de venta presencial y máquina de estados
-
-### Módulo
-Preparación para congelar `contracts/financial-events.md`. No se implementó outbox ni ERP.
-
-### Archivos modificados
-- `contracts/order-status.md` — corrige la tabla de transiciones inválidas y declara `ILLEGAL_TRANSITIONS` (backend) como única fuente de enforcement.
-- `apps/admin/src/app/pedidos/page.tsx` — botón "Cerrar venta" para órdenes `channel === "admin_pos"` en estado activo.
-- `apps/admin/src/app/pos/page.tsx` — panel "Ventas sin cerrar" con contador y cierre de un clic.
-- `contracts/financial-events.md` — cierra R1 (§3.0.1) y R2 (§4.2) en el checklist de congelamiento.
-
-Sin cambios en Functions, `paymentStatus`, Firestore rules, `/gastos` ni `/metricas`.
-
-### Hallazgo raíz
-La máquina de estados vivía en **tres lugares que se contradecían**:
-
-| Fuente | `delivered → cancelled` | `queued → delivered` |
-|---|---|---|
-| `order.shared.ts` (backend, el que valida) | legal | legal |
-| `pedidos/page.tsx` (allowlist de UI) | bloqueado | bloqueado |
-| `contracts/order-status.md` (doc) | "inválido" | "inválido" |
-
-`ILLEGAL_TRANSITIONS.queued = []` significa que **cualquier salto hacia adelante ya era legal**.
-El documento estaba equivocado, no el código.
-
-### Decisión R1 — cierre manual, no auto-`delivered`
-Se descartó que `createPosSale` cree la orden en `delivered`, porque: rompe la cola de cocina (el
-POS alimenta `/pedidos`), el POS también crea pedidos `delivery` (marcaría como entregada comida
-que no salió del camión), le rompe el significado a `occurred_at` para el ERP, y reconoce ingreso
-antes de que el producto exista.
-
-La modificación mínima resultó ser **solo de UI**: la transición ya era legal, faltaba el
-afordance. Botón "Cerrar venta" en `/pedidos` y `/pos`, filtrado por `channel === "admin_pos"`
-para que un pedido web no pueda cerrarse saltándose la cocina.
-
-### Decisión R2 — solo documentación
-`delivered → cancelled` ya era legal en el backend. Se corrigió el doc. **No** se agregó botón de
-anulación: emitir `order.cancelled` no sirve hasta que exista el consumidor ERP.
-
-### Contratos afectados
-- `contracts/order-status.md` — corregido para reflejar el backend real (no cambia comportamiento).
-- `contracts/financial-events.md` — R1/R2 cerrados; sigue **sin congelar** por R3.
-- Sin cambios en el contrato de orders, schemas ni Functions.
-
-### Validaciones ejecutadas
-```bash
-npm --workspace apps/admin run build   # OK (/pedidos 6.62 kB, /pos 8.09 kB)
-npm --prefix apps/functions run build  # OK
-npm run test:e2e:api                   # 16 passed
-node tools/test-rules-anon.mjs         # 6/6
-git diff --check                       # limpio
-```
-Verificado contra el emulador (no solo por lectura de código):
-- `createPosSale` → orden `queued` / `admin_pos`
-- `PATCH updateOrderStatus` `queued → delivered` → **200**, `statusChangedAt` estampado
-- `delivered → cancelled` → **200** (confirma R2)
-- `cancelled → preparing` → **409**
-
-### Riesgos restantes
-- **El operador puede olvidar cerrar la venta.** Es el costo de elegir cierre manual: una venta sin
-  cerrar es plata que la contabilidad nunca verá. El panel ámbar con contador lo hace difícil de
-  ignorar, no imposible. La alerta Sentinel *"órdenes `admin_pos` activas > N horas"* queda como
-  **condición bloqueante** para congelar el ERP.
-- El cierre de un clic salta `preparing`/`ready`, así que esos contadores en `/pedidos` dejan de
-  representar el trabajo real del camión.
-- El backend permite `queued → delivered` para cualquier canal vía API directa (no hay ruta de UI).
-  Es el status quo, no un riesgo nuevo.
-- **R3 abierto:** `paymentStatus` sigue muerto (se escribe `"pending"` al crear y nada lo actualiza).
-  `delivered` prueba entrega, no cobro.
-
-### Siguiente paso
-Cerrar R3 y la alerta Sentinel antes de congelar el contrato ERP.
-
-## 2026-07-12 — M6C: pantalla admin `/gastos`
-
-### Módulo
-Registro de gastos operativos TBB/Foodtruck en `apps/admin`. Cierra el frontend del
-endpoint `createExpense` entregado en `23fc424`.
-
-### Archivos modificados
-- `apps/admin/src/lib/api/expenses.ts` — nuevo. `createExpenseApi` contra la Function `createExpense`, con el mismo patrón emulator/`NEXT_PUBLIC_FUNCTIONS_BASE_URL` que `lib/api/orders.ts`.
-- `apps/admin/src/lib/firebase/queries/expenses.ts` — nuevo. Tipo `AdminExpense` + labels de categoría y método de pago.
-- `apps/admin/src/hooks/use-live-expenses.ts` — nuevo. Lectura live de `tenants/tbb/expenses`.
-- `apps/admin/src/app/gastos/layout.tsx` — nuevo. Protege la ruta con `AdminGuard`.
-- `apps/admin/src/app/gastos/page.tsx` — nuevo. Formulario (category, description, amount, paymentMethod, occurredAt opcional, notes opcional) + listado de últimos gastos.
-- `apps/admin/src/app/layout.tsx` — activa el link real "Gastos" en el nav.
-
-### Decisión
-El formulario **no escribe directo a Firestore**: llama a la Function `createExpense`,
-que es el único write path (las rules niegan writes de cliente sobre `expenses`).
-El listado **sí lee directo** Firestore, porque las rules ya restringen `read` a admin.
-El listado ordena por `occurredAt` y no por `createdAt`, porque el operador puede
-backdatear un gasto que registra tarde y `createdAt` no reflejaría la línea de tiempo real.
-
-Sin hard delete, sin anulación y sin dashboard de métricas: quedan fuera de M6C.
-
-### Contratos afectados
-- Ninguno nuevo. Consume el contrato existente de `createExpense` (`apps/functions/src/schemas/expense.schema.ts`) sin modificarlo.
-- Sin cambios en Firestore rules, schemas, Functions, storefront, POS ni pedidos (salvo el link de navegación).
-
-### Validaciones ejecutadas
-```bash
-npm --workspace apps/admin run build   # OK (/gastos 4.83 kB)
-npm --prefix apps/functions run build  # OK
-npm run test:e2e:api                   # 16 passed (orders + expenses)
-node tools/test-rules-anon.mjs         # 6/6
-git diff --check                       # limpio
-```
-
-### Hallazgo de entorno (no es bug de código)
-La primera corrida de `test:e2e:api` falló 9/16: **todos** los tests que escriben en
-Firestore colgaban ~60s, mientras los de validación (400/405) pasaban. Causa: la
-instancia del emulador Firestore había quedado trabada en el arranque (aceptaba TCP en
-8080 pero no servía; `firestore-debug.log` en 0 bytes). No es Java 25 — el JAR corre
-bien standalone con los mismos args. Se resolvió matando el stack de emuladores y
-reiniciando limpio + `npm run seed` (los tests de orders necesitan catálogo sembrado).
-Si `test:e2e:api` vuelve a fallar solo en los happy-path, sospechar primero del emulador.
-
-### Riesgos restantes
-- `apiFetch` quedó duplicado entre `lib/api/orders.ts` y `lib/api/expenses.ts`. No se
-  extrajo a un helper común para no tocar el path de POS/pedidos en esta fase.
-- La lista está capada a 50 gastos y sin filtro por fecha/categoría: suficiente para
-  marcha blanca, insuficiente cuando el volumen crezca.
-- No hay edición, anulación ni borrado de gastos: un gasto mal cargado solo se puede
-  corregir desde backend.
-
-### Siguiente paso
-Validación manual de Nelson en `/gastos` con sesión admin (claim `admin: true`).
-
-## 2026-06-11 — Catálogo TBB sincronizado con menú de marcha blanca
-
-### Módulo
-Seed de catálogo TBB (`packages/shared/src/data/tbb`) para storefront y POS.
-
-### Archivos modificados
-- `packages/shared/src/data/tbb/products.ts` — sincroniza productos, combos, promociones y precios con el menú final de marcha blanca.
-- `packages/shared/src/data/tbb/categories.ts` — agrega categoría de combos y renombra categorías visibles manteniendo IDs operativos.
-
-### Decisión
-La fuente comercial final de TBB debe quedar en el seed de Firestore, porque storefront y POS leen productos desde `tenants/tbb/products`. No se tocó lógica de Functions, Admin, Web, reglas ni estilos.
-
-### Contratos afectados
-- Catálogo seedado de productos y categorías para `tenants/tbb/products` y `tenants/tbb/categories`.
+- Borrar nombre o teléfono en pickup ya no repone `Cliente mostrador` dentro del input ni bloquea la venta; el payload conserva un nombre operativo y solo envía teléfono en mo…2656 tokens truncated…s para `tenants/tbb/products` y `tenants/tbb/categories`.
 - Sin cambios en contrato de orders, customers, estados, delivery fee ni reglas.
 
 ### Validaciones ejecutadas
@@ -870,3 +690,17 @@ git diff --check
 - Esperar revisión y checks de PR #71; solicitar aprobación explícita antes de fusionar.
 - Después del cierre, iniciar M6J: cierre de caja y horario fail-closed en `America/Santiago`.
 - Mini-sprint de hardening post-M6J: el cierre de caja bloquea todos los pedidos activos (web, WhatsApp y POS) para no dejar órdenes atrapadas después de una jornada inmutable; `createOrder` comparte el mismo instante capturado entre `operationalDate` y el guard de tienda; el cierre rechaza fechas calendario imposibles; y una actualización de horario conserva un cierre existente aunque la configuración anterior estuviera inválida. Pendiente validar en CI y abrir PR antes del Release Gate.
+## 2026-10-16 — M6J follow-up: precedencia pública de cierre de caja
+
+### Qué cambió
+- El aviso público de fechas especiales ahora prioriza el estado terminal `closed` antes de evaluar overrides manuales o el horario configurado.
+- Se añadieron regresiones para cierre de caja sin override, con override de cierre y sobre horario especial con mensaje al cliente.
+
+### Por qué cambió
+- La revisión de PR #75 encontró que el aviso podía presentar horario o mensaje de una excepción aunque el cierre de caja ya rechazara todos los pedidos.
+
+### Validación
+- Pendiente ejecutar pruebas locales del usuario y recibir los checks actualizados de GitHub Actions.
+
+### Release gate
+- Sin merge ni despliegue. Ejecutar las pruebas locales antes de continuar con el estudio de UX de métricas.

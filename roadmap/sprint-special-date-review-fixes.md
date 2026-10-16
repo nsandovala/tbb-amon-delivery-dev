@@ -8,18 +8,20 @@
 
 ## Objetivo
 
-Cerrar los dos comentarios P2 de Bot-GPT sobre el PR #74 sin ampliar el alcance de Operaciones.
+Cerrar los comentarios P2 de Bot-GPT sobre el PR #74 y la revisión del PR #75, sin ampliar el alcance de Operaciones.
 
 ## Cambios
 
 1. **Estado público efectivo:** la tarjeta de fechas informa apertura manual, cierre manual o jornada ya cerrada en caja antes de presentar la excepción de calendario. Los mensajes de clientes asociados a la decisión anterior no se reutilizan cuando un override la reemplaza.
 2. **Excepciones administrables:** `getStoreControl` consulta toda fecha futura persistida, sin corte anual ni límite de 100. El endpoint público mantiene su ventana acotada a 90 días y 12 fechas.
+3. **Cierre de caja prioritario:** el estado terminal `closed` se procesa antes de cualquier override. El aviso público no anuncia horario ni mensaje de excepción cuando la caja ya cerró la jornada.
 
 ## Criterios de aceptación
 
 - Una fecha configurada como cerrada y abierta manualmente indica claramente que la tienda está recibiendo pedidos.
 - Un cierre manual sobre una fecha con horario especial no anuncia el horario como vigente.
 - Una jornada cerrada en caja no se presenta como abierta aunque exista un override de apertura.
+- Una jornada cerrada en caja tampoco anuncia un horario especial ni se etiqueta como cierre manual si hay un override de cierre.
 - Más de 100 excepciones futuras, incluidas las que estén a más de un año, aparecen en el panel tras volver a cargar.
 - Los controles de pedidos web/POS y la precedencia backend no cambian.
 
