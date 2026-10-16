@@ -38,26 +38,29 @@ a {
   text-decoration: none;
 }
 
-/* POS y pedidos conservan su flujo actual; el dorado solo reemplaza el acento visual. */
+/* El dorado es acento de foco/acción. Las superficies siguen siendo oscuras. */
 [data-admin-surface="pos"] [class*="text-emerald-400"],
 [data-admin-surface="pos"] [class*="text-emerald-300"],
 [data-admin-surface="orders"] [class*="text-emerald-400"],
-[data-admin-surface="orders"] [class*="text-emerald-300"] {
+[data-admin-surface="orders"] [class*="text-emerald-300"],
+[data-admin-surface="expenses"] [class*="text-emerald-400"],
+[data-admin-surface="expenses"] [class*="text-emerald-300"] {
   color: #d6a85c !important;
 }
 
 [data-admin-surface="pos"] [class*="border-emerald-400"],
-[data-admin-surface="orders"] [class*="border-emerald-400"] {
+[data-admin-surface="orders"] [class*="border-emerald-400"],
+[data-admin-surface="expenses"] [class*="border-emerald-400"] {
   border-color: rgb(214 168 92 / 0.35) !important;
 }
 
-[data-admin-surface="pos"] [class*="bg-emerald-400"],
-[data-admin-surface="orders"] [class*="bg-emerald-400"] {
-  background-color: rgb(214 168 92 / 0.12) !important;
-}
-
 [data-admin-surface="pos"] button[class*="bg-emerald-400"],
-[data-admin-surface="orders"] button[class*="bg-emerald-400"] {
+[data-admin-surface="orders"] button[class*="bg-emerald-400"],
+[data-admin-surface="expenses"] button[class*="bg-emerald-400"] {
   background-color: #d6a85c !important;
   color: #171108 !important;
+}
+
+[data-admin-surface="expenses"] button[class*="hover:bg-emerald"]:hover {
+  background-color: #e2bd73 !important;
 }

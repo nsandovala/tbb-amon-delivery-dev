@@ -210,17 +210,21 @@ function StatCard({
   icon: LucideIcon;
 }) {
   return (
-    <article className="overflow-hidden rounded-3xl border border-white/10 bg-[#101010]">
-      <div className="flex items-start justify-between gap-3 border-b border-white/6 px-5 py-4">
+    <article className="group relative rounded-2xl border border-white/10 bg-[#0c0f0f]/80 transition-colors hover:border-[#6f5934] focus-within:border-[#6f5934]">
+      <div className="flex items-start justify-between gap-3 border-b border-white/6 px-4 py-3.5">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">{label}</p>
-          <p className={["mt-2 text-3xl font-black tracking-tight", accent].join(" ")}>{value}</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{label}</p>
+          <p className={["mt-1.5 text-2xl font-semibold tracking-tight", accent].join(" ")}>{value}</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <Icon className={["h-5 w-5", accent].join(" ")} />
+        <div className="rounded-xl border border-white/10 bg-white/[0.025] p-2.5">
+          <Icon className="h-4 w-4 text-[#d6a85c]" />
         </div>
       </div>
-      <p className="px-5 py-3 text-sm text-neutral-500">{detail}</p>
+      <p className="px-4 py-2.5 text-xs text-neutral-500">{detail}</p>
+      <div className="pointer-events-none absolute right-3 top-14 z-10 w-64 translate-y-1 rounded-xl border border-[#6f5934] bg-[#11100d]/95 p-3 opacity-0 shadow-2xl backdrop-blur-md transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-[#d6a85c]">Cómo leer esta métrica</p>
+        <p className="mt-1 text-xs leading-5 text-neutral-300">{detail}</p>
+      </div>
     </article>
   );
 }
@@ -486,14 +490,14 @@ export default function MetricasPage() {
                 label="Ventas brutas"
                 value={formatMoney(metrics.grossSales)}
                 detail={`Canceladas fuera del KPI: ${metrics.cancelledOrders}`}
-                accent="text-emerald-300"
+                accent="text-white"
                 icon={ArrowUpRight}
               />
               <StatCard
                 label="Gastos activos"
                 value={formatMoney(metrics.totalExpenses)}
                 detail="Solo gastos con status active dentro de la ventana."
-                accent="text-orange-300"
+                accent="text-neutral-200"
                 icon={ArrowDownLeft}
               />
               <StatCard
@@ -501,7 +505,7 @@ export default function MetricasPage() {
                 value={formatMoney(metrics.netOperational)}
                 detail="Ventas brutas menos gastos activos."
                 accent={
-                  metrics.netOperational >= 0 ? "text-cyan-300" : "text-red-300"
+                  metrics.netOperational >= 0 ? "text-cyan-200" : "text-red-300"
                 }
                 icon={Coins}
               />
@@ -510,7 +514,7 @@ export default function MetricasPage() {
                 value={formatMoney(metrics.estimatedCash)}
                 detail="Ventas cash menos gastos cash."
                 accent={
-                  metrics.estimatedCash >= 0 ? "text-amber-200" : "text-red-300"
+                  metrics.estimatedCash >= 0 ? "text-[#d6a85c]" : "text-red-300"
                 }
                 icon={Wallet}
               />
@@ -518,7 +522,7 @@ export default function MetricasPage() {
                 label="Ticket promedio"
                 value={formatMoney(metrics.averageTicket)}
                 detail="Promedio sobre pedidos no cancelados."
-                accent="text-violet-300"
+                accent="text-neutral-200"
                 icon={ReceiptText}
               />
               <StatCard
