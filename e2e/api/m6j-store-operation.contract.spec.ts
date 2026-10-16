@@ -381,7 +381,8 @@ test.describe("M6J store operation + cash close (emulator)", () => {
         await patchFixtureDoc(api, `tenants/${tenantId}/orders/${orderId}`, { status: "delivered" });
       }
 
-      const expectedCash = deliveredSale.total - 2000;
+      const expectedCash =
+        deliveredSale.total + FIXTURE_PRODUCT.price + FIXTURE_PRODUCT.price * 2 - 2000;
       const res = await api.post("closeCashSession", {
         headers: bearer(adminToken),
         data: {
@@ -404,7 +405,8 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       expect(close.pendingSales.count).toBe(1);
       expect(close.activeExpenses).toEqual({ count: 1, total: 2000 });
       expect(close.override.reason).toContain("transferencia");
-      expect(close.override.blockers.length).toBe(3);
+      expect(close.override.blockers).toHaveLength(1);
+      expect(close.override.blockers[0].code).toBe("PENDING_PAYMENTS");
       expect(close.closedBy.email).toBe(adminEmail);
       expect(close.closedAtLocal).toMatch(LOCAL_ISO);
       expect(close.observation).toBe("Faltan 500 en monedas");
