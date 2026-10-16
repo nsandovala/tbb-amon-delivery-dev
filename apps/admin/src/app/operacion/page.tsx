@@ -42,7 +42,7 @@ function JourneyStrip({
   ];
 
   return (
-    <section className="mb-6 rounded-2xl border border-white/10 bg-[#0c0f0f]/85 p-4">
+    <section className="mb-6 rounded-md border border-white/10 bg-[#0c0f0f]/85 p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[10px] uppercase tracking-[0.22em] text-[#d6a85c]">Ruta de la jornada</p>
@@ -52,7 +52,7 @@ function JourneyStrip({
       </div>
       <div className="grid gap-2 md:grid-cols-4">
         {steps.map((step) => (
-          <div key={step.label} className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3">
+          <div key={step.label} className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">{step.label}</p>
               <span className={[
@@ -88,13 +88,13 @@ export default function OperacionPage() {
         </header>
 
         {!control ? (
-          <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-neutral-400">
+          <p className="rounded-md border border-white/10 bg-white/[0.03] p-6 text-sm text-neutral-400">
             {error ? `No se pudo cargar la operación: ${error}` : "Cargando estado operativo…"}
           </p>
         ) : (
           <>
             {error && (
-              <p role="alert" className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">
+              <p role="alert" className="mb-4 rounded-md border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">
                 Última actualización falló ({error}). Mostrando el último estado conocido.
               </p>
             )}
