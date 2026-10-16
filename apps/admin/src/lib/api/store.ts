@@ -93,7 +93,7 @@ export type StoreControl = {
 export type CashBucket = { count: number; total: number };
 
 export type CashCloseBlocker = CashBucket & {
-  code: "ACTIVE_POS_SALES" | "PENDING_PAYMENTS";
+  code: "ACTIVE_POS_SALES" | "ACTIVE_OTHER_ORDERS" | "PENDING_PAYMENTS";
   orderIds: string[];
   displayCodes: string[];
 };

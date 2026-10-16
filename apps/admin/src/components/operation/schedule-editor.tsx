@@ -23,6 +23,15 @@ function validate(config: StoreHoursConfig): string[] {
   return errors;
 }
 
+function calendarOffset(time: string) {
+  const minutes = toMinutes(time);
+  return Math.max(0, Math.min(100, ((minutes - 8 * 60) / (16 * 60)) * 100));
+}
+
+function calendarHeight(open: string, close: string) {
+  return Math.max(12, calendarOffset(close) - calendarOffset(open));
+}
+
 export function ScheduleEditor({
   config,
   defaultConfig,
@@ -88,41 +97,39 @@ export function ScheduleEditor({
         {!config && <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-200">Sin horario guardado</span>}
       </div>
 
-      <div className="mt-4 divide-y divide-white/5">
-        {WEEKDAY_ORDER.map((day) => {
-          const schedule = draft.days[day];
-          return (
-            <div key={day} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-2 sm:grid-cols-[140px_auto_auto_1fr]">
-              <label className="flex items-center gap-2 text-sm font-semibold text-white">
-                <input
-                  type="checkbox"
-                  checked={schedule.enabled}
-                  onChange={(event) => updateDay(day, { enabled: event.target.checked })}
-                />
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-white/8 bg-[#0a0e12] p-3">
+        <div className="min-w-[680px]">
+          <div className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] gap-1">
+            <div />
+            {WEEKDAY_ORDER.map((day) => (
+              <div key={day} className="rounded-lg border border-white/8 bg-white/[0.025] px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300">
                 {WEEKDAY_LABELS[day]}
-              </label>
-              <input
-                type="time"
-                step={60}
-                aria-label={`${WEEKDAY_LABELS[day]} apertura`}
-                value={schedule.open}
-                disabled={!schedule.enabled}
-                onChange={(event) => updateDay(day, { open: event.target.value })}
-                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm tabular-nums text-white disabled:opacity-30 [color-scheme:dark]"
-              />
-              <input
-                type="time"
-                step={60}
-                aria-label={`${WEEKDAY_LABELS[day]} cierre`}
-                value={schedule.close}
-                disabled={!schedule.enabled}
-                onChange={(event) => updateDay(day, { close: event.target.value })}
-                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm tabular-nums text-white disabled:opacity-30 [color-scheme:dark]"
-              />
-              <span className="hidden text-xs text-neutral-500 sm:block">{schedule.enabled ? "" : "Sin atención"}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1 grid grid-cols-[48px_repeat(7,minmax(0,1fr))] gap-1">
+            <div className="relative h-64 text-[10px] text-neutral-600">
+              {[8, 12, 16, 20, 24].map((hour) => <span key={hour} className="absolute -translate-y-1/2" style={{ top: `${((hour - 8) / 16) * 100}%` }}>{String(hour).padStart(2, "0")}:00</span>)}
             </div>
-          );
-        })}
+            {WEEKDAY_ORDER.map((day) => {
+              const schedule = draft.days[day];
+              return (
+                <div key={day} className="relative h-64 overflow-hidden rounded-lg border border-white/8 bg-[#0d1217]">
+                  {[25, 50, 75].map((position) => <span key={position} className="absolute inset-x-0 border-t border-white/5" style={{ top: `${position}%` }} />)}
+                  <label className="absolute right-1 top-1 z-10 flex items-center gap-1 text-[9px] text-neutral-500">
+                    <input type="checkbox" checked={schedule.enabled} onChange={(event) => updateDay(day, { enabled: event.target.checked })} />
+                  </label>
+                  {schedule.enabled ? (
+                    <div className="absolute inset-x-1 z-[1] rounded-md border border-[#8c713f] bg-[#8c713f]/20 p-1.5" style={{ top: `${calendarOffset(schedule.open)}%`, height: `${calendarHeight(schedule.open, schedule.close)}%` }}>
+                      <input type="time" step={60} aria-label={`${WEEKDAY_LABELS[day]} apertura`} value={schedule.open} onChange={(event) => updateDay(day, { open: event.target.value })} className="w-full rounded border border-[#8c713f]/50 bg-[#0b0f12]/85 px-1 py-0.5 text-[10px] tabular-nums text-[#d8bd82] [color-scheme:dark]" />
+                      <input type="time" step={60} aria-label={`${WEEKDAY_LABELS[day]} cierre`} value={schedule.close} onChange={(event) => updateDay(day, { close: event.target.value })} className="mt-1 w-full rounded border border-[#8c713f]/50 bg-[#0b0f12]/85 px-1 py-0.5 text-[10px] tabular-nums text-[#d8bd82] [color-scheme:dark]" />
+                    </div>
+                  ) : <span className="absolute inset-0 flex items-center justify-center text-[10px] text-neutral-600">Sin atención</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <label className="mt-3 flex items-center gap-2 text-xs text-neutral-400">

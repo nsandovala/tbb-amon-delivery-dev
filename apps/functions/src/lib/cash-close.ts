@@ -6,7 +6,7 @@
  * - `paymentMethod = "pending"` nunca es dinero recibido: va a "ventas pendientes".
  * - `cancelled` no suma en ninguna parte.
  * - Efectivo esperado = ventas entregadas en efectivo − gastos activos pagados en efectivo.
- * - Bloquean el cierre: ventas POS activas y pagos pendientes (salvo override auditado).
+ * - Bloquean el cierre: cualquier pedido activo y pagos pendientes (salvo override auditado).
  */
 
 export const ACTIVE_ORDER_STATUSES = ["queued", "preparing", "ready", "on_the_way"] as const;
@@ -29,7 +29,10 @@ export type CashCloseExpense = {
 
 export type CashBucket = { count: number; total: number };
 
-export type CashCloseBlockerCode = "ACTIVE_POS_SALES" | "PENDING_PAYMENTS";
+export type CashCloseBlockerCode =
+  | "ACTIVE_POS_SALES"
+  | "ACTIVE_OTHER_ORDERS"
+  | "PENDING_PAYMENTS";
 
 export type CashCloseBlocker = CashBucket & {
   code: CashCloseBlockerCode;
@@ -103,6 +106,7 @@ export function summarizeCashDay(input: {
     displayCodes: rows.map((order) => order.displayCode ?? order.id.slice(0, 6)),
   });
   if (activePos.length > 0) blockers.push(toBlocker("ACTIVE_POS_SALES", activePos));
+  if (activeOther.length > 0) blockers.push(toBlocker("ACTIVE_OTHER_ORDERS", activeOther));
   if (pending.length > 0) blockers.push(toBlocker("PENDING_PAYMENTS", pending));
 
   return {

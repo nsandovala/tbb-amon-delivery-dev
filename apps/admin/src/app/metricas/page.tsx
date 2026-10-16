@@ -96,6 +96,52 @@ function isWithinRange(value: Date | null, start: Date, end: Date) {
   return timestamp >= start.getTime() && timestamp <= end.getTime();
 }
 
+type TrendDay = {
+  key: string;
+  label: string;
+  sales: number;
+  orders: number;
+  products: { name: string; qty: number }[];
+};
+
+function getTrendDays(orders: AdminOrder[], now: Date): TrendDay[] {
+  const operationalStart = getOperationalDayStart(now);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(operationalStart);
+    date.setDate(date.getDate() - (6 - index));
+    return date;
+  });
+
+  const totals = new Map<string, { sales: number; orders: number; products: Map<string, number> }>();
+  days.forEach((date) => totals.set(date.toLocaleDateString("en-CA"), { sales: 0, orders: 0, products: new Map() }));
+
+  orders.forEach((order) => {
+    if (order.status === "cancelled") return;
+    const createdAt = toDate(order.createdAt);
+    if (!createdAt) return;
+    const key = getOperationalDayStart(createdAt).toLocaleDateString("en-CA");
+    const total = totals.get(key);
+    if (!total) return;
+    total.sales += getOrderTotal(order);
+    total.orders += 1;
+    order.items?.forEach((item) => {
+      const name = item.productName || item.productId || "Producto sin nombre";
+      total.products.set(name, (total.products.get(name) ?? 0) + (item.qty ?? 0));
+    });
+  });
+
+  return days.map((date) => ({
+    key: date.toLocaleDateString("en-CA"),
+    label: date.toLocaleDateString("es-CL", { weekday: "short" }).replace(".", ""),
+    sales: totals.get(date.toLocaleDateString("en-CA"))!.sales,
+    orders: totals.get(date.toLocaleDateString("en-CA"))!.orders,
+    products: Array.from(totals.get(date.toLocaleDateString("en-CA"))!.products.entries())
+      .map(([name, qty]) => ({ name, qty }))
+      .sort((left, right) => right.qty - left.qty)
+      .slice(0, 3),
+  }));
+}
+
 function getPeriodRange(period: MetricsPeriod, now: Date) {
   const end = now;
   const operationalStart = getOperationalDayStart(now);
@@ -174,17 +220,17 @@ function StatCard({
   icon: LucideIcon;
 }) {
   return (
-    <article className="overflow-hidden rounded-3xl border border-white/10 bg-[#101010]">
-      <div className="flex items-start justify-between gap-3 border-b border-white/6 px-5 py-4">
+    <article className="rounded-2xl border border-white/10 bg-[#0c0f0f]/80 transition-colors hover:border-white/20">
+      <div className="flex items-start justify-between gap-3 border-b border-white/6 px-4 py-3.5">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">{label}</p>
-          <p className={["mt-2 text-3xl font-black tracking-tight", accent].join(" ")}>{value}</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{label}</p>
+          <p className={["mt-1.5 text-2xl font-semibold tracking-tight", accent].join(" ")}>{value}</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <Icon className={["h-5 w-5", accent].join(" ")} />
+        <div className="rounded-xl border border-white/10 bg-white/[0.025] p-2.5">
+          <Icon className="h-4 w-4 text-[#d6a85c]" />
         </div>
       </div>
-      <p className="px-5 py-3 text-sm text-neutral-500">{detail}</p>
+      <p className="px-4 py-2.5 text-xs text-neutral-500">{detail}</p>
     </article>
   );
 }
@@ -233,6 +279,65 @@ function PaymentBreakdown({
           </div>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+function SalesTrend({ days }: { days: TrendDay[] }) {
+  const maxSales = Math.max(...days.map((day) => day.sales), 1);
+  const average = days.reduce((sum, day) => sum + day.sales, 0) / days.length;
+  const best = days.reduce((current, day) => (day.sales > current.sales ? day : current), days[0]);
+  const weak = days.reduce((current, day) => (day.sales < current.sales ? day : current), days[0]);
+
+  return (
+    <section className="rounded-3xl border border-[#332e24] bg-[#0d0d0c] p-5 shadow-[inset_0_1px_rgba(255,255,255,0.025)]">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[#a99570]">Patrón de venta POS + web</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Días buenos y días a reforzar</h2>
+          <p className="mt-1 text-sm text-neutral-500">Ventas reales de los últimos 7 días operacionales.</p>
+          <p className="mt-3 text-xs text-neutral-400">
+            Mejor: <span className="font-semibold text-[#c4a46a]">{best?.label ?? "—"} · {formatMoney(best?.sales)}</span>
+            <span className="mx-2 text-neutral-700">·</span>
+            Reforzar: <span className="font-semibold text-neutral-300">{weak?.label ?? "—"} · {formatMoney(weak?.sales)}</span>
+          </p>
+        </div>
+        <div className="flex gap-3 text-[11px] text-neutral-500">
+          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#d6a85c]" /> Sobre promedio</span>
+          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#494943]" /> Bajo promedio</span>
+        </div>
+      </div>
+
+      <div className="mt-6 grid h-48 grid-cols-7 items-end gap-2 border-b border-white/10 px-1 pb-0 sm:gap-4">
+        {days.map((day) => {
+          const height = day.sales === 0 ? 5 : Math.max(9, Math.round((day.sales / maxSales) * 100));
+          const isBest = day.sales >= average && day.sales > 0;
+          return (
+            <div key={day.key} className="flex h-full flex-col items-center justify-end gap-2">
+              <span className="text-[10px] tabular-nums text-neutral-500">{day.orders ? formatMoney(day.sales) : "—"}</span>
+              <div className="flex h-full w-full items-end justify-center">
+                <div className="group/bar relative flex h-full w-full max-w-10 items-end justify-center">
+                  <div
+                    className={["w-full rounded-t-lg transition-all", isBest ? "bg-[#c4a46a]" : "bg-[#3d403a]"].join(" ")}
+                    style={{ height: `${height}%` }}
+                  />
+                  <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 w-56 -translate-x-1/2 translate-y-1 rounded-xl border border-[#5b4a2e] bg-[#11100d]/95 p-3 text-left opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover/bar:translate-y-0 group-hover/bar:opacity-100">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-[#c4a46a]">{day.label} · resumen operacional</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{formatMoney(day.sales)} · {day.orders} pedidos</p>
+                    <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-neutral-500">Más vendidos</p>
+                    {day.products.length > 0 ? day.products.map((product) => (
+                      <p key={product.name} className="mt-1 flex justify-between gap-3 text-xs text-neutral-300"><span className="truncate">{product.name}</span><span className="shrink-0 text-[#c4a46a]">{product.qty}x</span></p>
+                    )) : <p className="mt-1 text-xs text-neutral-500">Sin ventas registradas</p>}
+                  </div>
+                </div>
+              </div>
+              <span className="text-[11px] capitalize text-neutral-400">{day.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-xs text-neutral-500">Promedio diario: {formatMoney(average)} · Las barras muestran ventas y cantidad de pedidos.</p>
     </section>
   );
 }
@@ -297,6 +402,7 @@ export default function MetricasPage() {
 
     const orderCount = validOrders.length;
     const averageTicket = orderCount > 0 ? grossSales / orderCount : 0;
+    const trendDays = getTrendDays(orders, new Date(nowTs));
 
     return {
       grossSales,
@@ -310,18 +416,19 @@ export default function MetricasPage() {
       expensePayments,
       channelSummary,
       openAdminPosOrders,
+      trendDays,
     };
-  }, [expenses, orders, periodRange.end, periodRange.start]);
+  }, [expenses, nowTs, orders, periodRange.end, periodRange.start]);
 
   const loading = loadingOrders || loadingExpenses;
   const error = ordersError ?? expensesError;
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="metrics" className="min-h-screen bg-[#050505] text-white">
       <div className="mx-auto max-w-[1500px] px-4 py-6">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-400/80">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[#d6a85c]">
               Radar operativo
             </p>
             <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
@@ -354,7 +461,7 @@ export default function MetricasPage() {
                 className={[
                   "shrink-0 rounded-full border px-4 py-2 text-left transition-all",
                   active
-                    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300 shadow-[0_0_0_1px_rgba(0,255,156,0.05),0_0_18px_rgba(0,255,156,0.08)]"
+                    ? "border-[#806438] bg-[#211b11] text-[#f0d296] shadow-[inset_3px_0_#d6a85c]"
                     : "border-white/10 bg-white/[0.03] text-neutral-400 hover:border-white/20 hover:text-white",
                 ].join(" ")}
               >
@@ -399,14 +506,14 @@ export default function MetricasPage() {
                 label="Ventas brutas"
                 value={formatMoney(metrics.grossSales)}
                 detail={`Canceladas fuera del KPI: ${metrics.cancelledOrders}`}
-                accent="text-emerald-300"
+                accent="text-white"
                 icon={ArrowUpRight}
               />
               <StatCard
                 label="Gastos activos"
                 value={formatMoney(metrics.totalExpenses)}
                 detail="Solo gastos con status active dentro de la ventana."
-                accent="text-orange-300"
+                accent="text-neutral-200"
                 icon={ArrowDownLeft}
               />
               <StatCard
@@ -414,7 +521,7 @@ export default function MetricasPage() {
                 value={formatMoney(metrics.netOperational)}
                 detail="Ventas brutas menos gastos activos."
                 accent={
-                  metrics.netOperational >= 0 ? "text-cyan-300" : "text-red-300"
+                  metrics.netOperational >= 0 ? "text-cyan-200" : "text-red-300"
                 }
                 icon={Coins}
               />
@@ -423,7 +530,7 @@ export default function MetricasPage() {
                 value={formatMoney(metrics.estimatedCash)}
                 detail="Ventas cash menos gastos cash."
                 accent={
-                  metrics.estimatedCash >= 0 ? "text-amber-200" : "text-red-300"
+                  metrics.estimatedCash >= 0 ? "text-[#d6a85c]" : "text-red-300"
                 }
                 icon={Wallet}
               />
@@ -431,7 +538,7 @@ export default function MetricasPage() {
                 label="Ticket promedio"
                 value={formatMoney(metrics.averageTicket)}
                 detail="Promedio sobre pedidos no cancelados."
-                accent="text-violet-300"
+                accent="text-neutral-200"
                 icon={ReceiptText}
               />
               <StatCard
@@ -442,6 +549,8 @@ export default function MetricasPage() {
                 icon={ShoppingBag}
               />
             </section>
+
+            <SalesTrend days={metrics.trendDays} />
 
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_380px]">
               <PaymentBreakdown

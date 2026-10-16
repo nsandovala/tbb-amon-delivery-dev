@@ -123,7 +123,7 @@ export default function GastosPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="expenses" className="min-h-screen bg-[#050505] text-white">
       <div className="mx-auto max-w-[1400px] px-4 py-5">
 
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">

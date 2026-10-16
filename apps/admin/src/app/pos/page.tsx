@@ -417,7 +417,7 @@ export default function PosPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="pos" className="min-h-screen bg-[#050505] text-white">
       <div className={["mx-auto max-w-[1600px] px-4 py-5", cart.length > 0 ? "pb-24 xl:pb-5" : ""].join(" ")}>
 
         <StoreStatusStrip />
@@ -528,8 +528,8 @@ export default function PosPage() {
                         className={[
                           "shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-all",
                           cartItem
-                            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                            : "border-white/10 bg-white/[0.04] text-neutral-300 hover:border-emerald-400/20 hover:bg-emerald-400/[0.04] hover:text-white",
+                            ? "border-[#8c713f] bg-[#8c713f]/15 text-[#d8bd82]"
+                            : "border-[#8c713f]/70 bg-[#8c713f]/10 text-[#d8bd82] hover:border-[#c4a46a] hover:bg-[#8c713f]/20 hover:text-[#f0d296]",
                         ].join(" ")}
                       >
                         {cartItem ? `×${cartItem.quantity}` : "+"}
@@ -656,7 +656,7 @@ export default function PosPage() {
                       </span>
                       <button
                         onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                        className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-1.5 text-emerald-300"
+                        className="rounded-lg border border-[#8c713f]/70 bg-[#8c713f]/10 p-1.5 text-[#d8bd82] hover:bg-[#8c713f]/20"
                       >
                         <Plus className="h-3 w-3" />
                       </button>

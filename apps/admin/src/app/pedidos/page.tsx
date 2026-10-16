@@ -177,7 +177,7 @@ function OrderCard({
       className={[
         "w-full rounded-2xl border p-4 text-left transition-all",
         selected
-          ? "border-emerald-400/25 bg-emerald-400/[0.06] shadow-[0_0_0_1px_rgba(0,255,156,0.06),0_0_24px_rgba(0,255,156,0.08)]"
+          ? "border-[#806438] bg-[#0d0d0d] shadow-[0_0_0_1px_rgba(128,100,56,0.28)]"
           : "border-white/10 bg-[#101010] hover:border-white/16 hover:bg-[#121212]",
       ].join(" ")}
     >
@@ -236,7 +236,7 @@ function OrderCard({
         />
 
         {canCloseSale(order) ? (
-          <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-3">
+          <div className="rounded-xl border border-[#806438]/50 bg-[#17130d]/60 p-3">
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-emerald-300/80">
               Venta presencial
             </p>
@@ -252,7 +252,7 @@ function OrderCard({
                 "w-full rounded-xl py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all",
                 isUpdating
                   ? "cursor-not-allowed bg-white/[0.06] text-neutral-500"
-                  : "bg-emerald-400 text-black hover:bg-emerald-300",
+                  : "bg-[#c4a46a] text-[#171108] hover:bg-[#d2b476]",
               ].join(" ")}
             >
               {isUpdating ? "Cerrando..." : "Cerrar venta"}
@@ -502,7 +502,7 @@ export default function OrdersPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main data-admin-surface="orders" className="min-h-screen bg-[#050505] text-white">
       <div className="mx-auto max-w-[1600px] px-6 py-8">
 
         <StoreStatusStrip />

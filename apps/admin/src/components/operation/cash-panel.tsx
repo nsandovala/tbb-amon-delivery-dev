@@ -14,6 +14,7 @@ import { parseCountedClp } from "@/lib/store-status";
 
 const BLOCKER_COPY = {
   ACTIVE_POS_SALES: "Ventas POS sin cerrar",
+  ACTIVE_OTHER_ORDERS: "Pedidos web/WhatsApp activos",
   PENDING_PAYMENTS: "Pagos pendientes (no es dinero recibido)",
 } as const;
 

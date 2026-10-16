@@ -73,17 +73,18 @@ export async function createOrder(
      * Runs inside the same transaction, after the counter read and before any
      * write. Used by M6J to reject orders while the store is closed.
      */
-    guard?: (transaction: admin.firestore.Transaction) => Promise<unknown>;
+    guard?: (transaction: admin.firestore.Transaction, now: Date) => Promise<unknown>;
   } = {}
 ): Promise<OperationalOrderMeta> {
+  const capturedNow = new Date();
   const now = admin.firestore.FieldValue.serverTimestamp();
-  const operationalDate = getOperationalDate();
+  const operationalDate = getOperationalDate(capturedNow);
 
   const meta = await getDb().runTransaction(async (transaction) => {
     const counterRef = orderCounterDoc(tenantId, operationalDate);
     const counterSnap = await transaction.get(counterRef);
     if (options.guard) {
-      await options.guard(transaction);
+      await options.guard(transaction, capturedNow);
     }
     const currentValue = (counterSnap.data()?.lastDisplayOrderNumber as number | undefined) ?? 0;
     const displayOrderNumber = currentValue + 1;

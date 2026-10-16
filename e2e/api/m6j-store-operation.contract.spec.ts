@@ -27,6 +27,8 @@ test.describe("M6J store operation + cash close (emulator)", () => {
   let adminEmail: string;
   let nonAdminToken: string;
   let defaultConfig: Record<string, unknown>;
+  let activeWebOrderId: string;
+  let activePosOrderId: string;
 
   const webOrder = (paymentMethod = "cash") => ({
     tenantId,
@@ -229,8 +231,10 @@ test.describe("M6J store operation + cash close (emulator)", () => {
 
     const web = await api.post("createOrder", { data: webOrder() });
     expect(web.status(), await web.text()).toBe(201);
+    activeWebOrderId = (await web.json()).data.orderId;
     const pos = await api.post("createPosSale", { data: posSale() });
     expect(pos.status(), await pos.text()).toBe(201);
+    activePosOrderId = (await pos.json()).data.orderId;
 
     const reopened = (await control()).events.find((e: { type: string }) => e.type === "store_reopened");
     expect(reopened).toMatchObject({
@@ -259,6 +263,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
 
   test.describe("cierre de caja", () => {
     let deliveredSale: { orderId: string; total: number };
+    let pendingSaleOrderId: string;
     const idempotencyKey = `m6j-${Date.now()}`;
 
     test("resumen separa efectivo, pendientes y bloqueos", async () => {
@@ -268,6 +273,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       expect(pending.status(), await pending.text()).toBe(201);
 
       const cashOrderId: string = (await cash.json()).data.orderId;
+      pendingSaleOrderId = (await pending.json()).data.orderId;
       deliveredSale = { orderId: cashOrderId, total: FIXTURE_PRODUCT.price * 2 };
       // Fixture: entrega la venta directo en el tenant aislado
       // (updateOrderStatus solo opera sobre el tenant piloto).
@@ -304,12 +310,13 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       // La venta pending NO es dinero recibido.
       expect(s.pendingSales.count).toBe(1);
       expect(s.pendingSales.total).toBe(FIXTURE_PRODUCT.price * 2);
+      // Todo pedido activo bloquea el cierre para no dejarlo atrapado después.
+      expect(s.activeOtherOrders.count).toBe(1);
       expect(s.blockers.map((b: { code: string }) => b.code).sort()).toEqual([
+        "ACTIVE_OTHER_ORDERS",
         "ACTIVE_POS_SALES",
         "PENDING_PAYMENTS",
       ]);
-      // El pedido web activo advierte pero no bloquea.
-      expect(s.activeOtherOrders.count).toBe(1);
     });
 
     test("sin override no cierra en silencio con ventas activas o pendientes", async () => {
@@ -320,7 +327,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       expect(res.status(), await res.text()).toBe(409);
       const body = await res.json();
       expect(body.error.code).toBe("CASH_CLOSE_BLOCKED");
-      expect(body.error.details.blockers.length).toBe(2);
+      expect(body.error.details.blockers.length).toBe(3);
     });
 
     test("payload inválido y fecha futura retornan 400", async () => {
@@ -341,9 +348,39 @@ test.describe("M6J store operation + cash close (emulator)", () => {
         },
       });
       expect(future.status()).toBe(400);
+
+      const impossible = await api.post("closeCashSession", {
+        headers: bearer(adminToken),
+        data: {
+          tenantId,
+          operationalDate: "2026-02-30",
+          countedCash: 0,
+          transfersConfirmed: 0,
+          idempotencyKey,
+        },
+      });
+      expect(impossible.status()).toBe(400);
     });
 
     test("override auditado cierra caja y calcula diferencia", async () => {
+      const blockedOverride = await api.post("closeCashSession", {
+        headers: bearer(adminToken),
+        data: {
+          tenantId,
+          countedCash: 0,
+          transfersConfirmed: 0,
+          override: { reason: "Intento controlado con pedidos activos" },
+          idempotencyKey: `${idempotencyKey}-active`,
+        },
+      });
+      expect(blockedOverride.status(), await blockedOverride.text()).toBe(409);
+      expect((await blockedOverride.json()).error.details.nonOverridableBlockers.length).toBe(2);
+
+      // La prueba del override financiero continúa solo después de terminalizar pedidos.
+      for (const orderId of [activeWebOrderId, activePosOrderId, pendingSaleOrderId]) {
+        await patchFixtureDoc(api, `tenants/${tenantId}/orders/${orderId}`, { status: "delivered" });
+      }
+
       const expectedCash = deliveredSale.total - 2000;
       const res = await api.post("closeCashSession", {
         headers: bearer(adminToken),
@@ -367,7 +404,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       expect(close.pendingSales.count).toBe(1);
       expect(close.activeExpenses).toEqual({ count: 1, total: 2000 });
       expect(close.override.reason).toContain("transferencia");
-      expect(close.override.blockers.length).toBe(2);
+      expect(close.override.blockers.length).toBe(3);
       expect(close.closedBy.email).toBe(adminEmail);
       expect(close.closedAtLocal).toMatch(LOCAL_ISO);
       expect(close.observation).toBe("Faltan 500 en monedas");
