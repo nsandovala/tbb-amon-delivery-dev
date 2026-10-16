@@ -9,9 +9,10 @@ Nelson aprobó la dirección visual de la pantalla `/operacion` en modo claro y 
 - Se muestra el tenant y local activos con su ubicación, junto con el correo del usuario autenticado.
 - Claro/oscuro se cambia desde Operaciones y la selección se conserva en el navegador. El modo oscuro es el predeterminado.
 - Las fechas visibles usan formato `DD/MM/AAAA`; los contratos y valores ISO no cambian.
+- Tras la primera revisión local, el modo claro se ajustó a superficies nieve mate, con más contraste en textos secundarios y más ancho para los selectores horarios.
 - El horario semanal usa filas compactas, con estado y controles editables por día. Se eliminó la escala anterior de marcas horarias superpuestas.
 - Caja muestra un resumen compacto y deja el arqueo en un detalle expandible. La bitácora queda debajo y puede mostrar hasta 25 eventos recibidos desde la API.
-- Proveedores, tareas y fechas especiales tienen estados vacíos. No hay API ni persistencia para administrarlos todavía, así que no se muestran registros inventados.
+- Proveedores y tareas tienen estados vacíos. Fechas especiales preguntan si se abrirá y explican que falta guardar la excepción y comunicarla a los clientes; todavía no hay API ni persistencia, así que no se muestran registros inventados.
 - Agendar pedidos a una hora elegida por el cliente queda en backlog.
 
 ## Límites

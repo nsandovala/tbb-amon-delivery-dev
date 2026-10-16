@@ -68,12 +68,12 @@ a {
 
 [data-admin-surface="operations"][data-theme="light"] {
   color-scheme: light;
-  --ops-bg: #f4f5f1;
-  --ops-surface: #ffffff;
-  --ops-raised: #f7f8f6;
+  --ops-bg: #ecefea;
+  --ops-surface: #f8f9f7;
+  --ops-raised: #f1f3f0;
   --ops-text: #202821;
-  --ops-muted: #727b73;
-  --ops-line: #e1e6df;
+  --ops-muted: #5d685f;
+  --ops-line: #d6ddd5;
   background: var(--ops-bg) !important;
   color: var(--ops-text) !important;
 }
@@ -108,7 +108,7 @@ a {
 [data-admin-surface="operations"][data-theme="light"] .text-neutral-400,
 [data-admin-surface="operations"][data-theme="light"] .text-neutral-500,
 [data-admin-surface="operations"][data-theme="light"] .text-neutral-600 {
-  color: #727b73 !important;
+  color: #5d685f !important;
 }
 
 [data-admin-surface="operations"][data-theme="light"] .text-emerald-100,
@@ -139,7 +139,7 @@ a {
 
 [data-admin-surface="operations"][data-theme="light"] .ops-input {
   color-scheme: light;
-  background-color: #fff !important;
+  background-color: #fbfcfa !important;
   color: #202821 !important;
   border-color: var(--ops-line) !important;
 }

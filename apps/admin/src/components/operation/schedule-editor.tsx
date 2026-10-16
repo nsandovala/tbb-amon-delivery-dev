@@ -106,7 +106,7 @@ export function ScheduleEditor({
 
       <div className="mt-4" aria-label="Horario semanal de la tienda">
         <div>
-          <div className="hidden grid-cols-[minmax(110px,1fr)_minmax(150px,1.1fr)_150px] gap-3 border-y border-white/10 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-neutral-500 sm:grid">
+          <div className="hidden grid-cols-[minmax(110px,1fr)_minmax(150px,1.1fr)_220px] gap-3 border-y border-white/10 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-neutral-500 sm:grid">
             <span>Día</span><span>Atención</span><span className="text-center">Apertura · cierre</span>
           </div>
           <div className="divide-y divide-white/[0.07]">
@@ -114,7 +114,7 @@ export function ScheduleEditor({
             const schedule = draft.days[day];
 
             return (
-              <div key={day} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-x-2 gap-y-2 py-2.5 sm:grid-cols-[minmax(110px,1fr)_minmax(150px,1.1fr)_150px] sm:gap-3">
+              <div key={day} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-x-2 gap-y-2 py-2.5 sm:grid-cols-[minmax(110px,1fr)_minmax(150px,1.1fr)_220px] sm:gap-3">
                 <label className="flex min-w-0 items-center gap-2.5">
                   <input
                     type="checkbox"
@@ -145,7 +145,7 @@ export function ScheduleEditor({
                         value={schedule[field]}
                         disabled={!schedule.enabled}
                         onChange={(event) => updateDay(day, { [field]: event.target.value })}
-                        className="ops-input h-8 w-full rounded-sm border border-white/10 bg-[#090b0d] px-2 text-xs tabular-nums text-white [color-scheme:dark] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300"
+                        className="ops-input h-8 min-w-[96px] w-full rounded-sm border border-white/10 bg-[#090b0d] px-2 text-xs tabular-nums text-white [color-scheme:dark] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300"
                       />
                     </label>
                   ))}
@@ -221,8 +221,10 @@ export function ScheduleEditor({
       <section className="mt-5 border-t border-white/10 pt-4" aria-labelledby="special-dates-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 id="special-dates-title" className="ops-text text-sm font-semibold text-white">Feriados y fechas especiales</h3>
-            <p className="ops-muted mt-1 text-xs text-neutral-400">El calendario de excepciones requiere aún un contrato persistente; no hay fechas configuradas.</p>
+            <h3 id="special-dates-title" className="ops-text text-sm font-semibold text-white">¿Abrirás en feriados o fechas especiales?</h3>
+            <p className="ops-muted mt-1 max-w-2xl text-xs leading-5 text-neutral-400">
+              Aún no se puede programar esa decisión. Falta guardar por fecha si abrirás, cerrarás o usarás otro horario, y comunicarlo a los clientes antes de aceptar pedidos.
+            </p>
           </div>
           <span className="rounded-sm border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">Por configurar</span>
         </div>

@@ -1,5 +1,20 @@
 # Phase Log
 
+## 2026-10-16 — Ajustes visuales tras QA local
+
+### Qué cambió
+- El modo claro usa un fondo nieve mate y superficies opacas más suaves; se oscurecieron los textos secundarios para que se lean mejor.
+- Se amplió la columna del horario para que los controles de hora no queden cortados en escritorio.
+- La sección de fechas especiales ahora pregunta directamente si la tienda abrirá y explica que la decisión debe guardarse por fecha y comunicarse a clientes.
+
+### Contratos y comportamiento
+- No se agregó persistencia de excepciones ni cambios a la aceptación de pedidos. La sección sigue siendo informativa y marca la capacidad como pendiente.
+- El horario semanal continúa guardándose con formato de 24 horas (`HH:mm`). En este caso corresponde mostrar `17:30–22:30`; `22:30 p. m.` mezcla formatos y no es correcto.
+
+### Validación
+- Revisar en navegador local el modo claro, los controles de hora y el ancho móvil después de traer este commit.
+- No desplegar hasta definir el proyecto Firebase piloto.
+
 ## 2026-10-16 — Revisión visual aprobada: Operaciones
 
 ### Qué cambió
