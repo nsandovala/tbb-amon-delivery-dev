@@ -111,7 +111,7 @@ export function StorePanel({
   return (
     <section aria-labelledby="store-zone" className="space-y-4">
       <div
-        className={["rounded-3xl border p-6 sm:p-8", tone.border, tone.bg, tone.glow].join(" ")}
+        className={["rounded-lg border p-6 sm:p-8", tone.border, tone.bg, tone.glow].join(" ")}
         aria-live="polite"
       >
         <div className="flex flex-wrap items-start justify-between gap-6">
@@ -141,33 +141,33 @@ export function StorePanel({
         </div>
 
         <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+          <div className="rounded-md border border-white/10 bg-black/30 px-4 py-3">
             <dt className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">{next.label}</dt>
             <dd className="mt-1 text-2xl font-black tabular-nums text-white">
               {formatStoreTime(next.at, status.timezone)}
             </dd>
             {countdown && <dd className="text-xs text-neutral-400">{countdown}</dd>}
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+          <div className="rounded-md border border-white/10 bg-black/30 px-4 py-3">
             <dt className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Horario hoy</dt>
             <dd className="mt-1 text-2xl font-black tabular-nums text-white">
               {status.today ? (status.today.enabled ? `${status.today.open}–${status.today.close}` : "Sin atención") : "—"}
             </dd>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+          <div className="rounded-md border border-white/10 bg-black/30 px-4 py-3">
             <dt className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Control</dt>
             <dd className="mt-1 text-2xl font-black text-white">
               {status.source === "manual" ? "Manual" : status.source === "schedule" ? "Horario" : "Bloqueo"}
             </dd>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+          <div className="rounded-md border border-white/10 bg-black/30 px-4 py-3">
             <dt className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Día operacional</dt>
             <dd className="mt-1 text-2xl font-black tabular-nums text-white">{status.operationalDate ?? "—"}</dd>
           </div>
         </dl>
 
         {status.override && (
-          <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-neutral-300">
+          <p className="mt-4 rounded-md border border-white/10 bg-black/30 px-4 py-3 text-sm text-neutral-300">
             <span className="font-semibold text-white">
               {status.override.mode === "closed" ? "Cerrada" : "Abierta"} manualmente
             </span>
@@ -178,11 +178,11 @@ export function StorePanel({
         )}
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-[#101010] p-5">
+      <div className="rounded-lg border border-white/10 bg-[#101010] p-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-neutral-500">Acción manual</p>
 
         {configBroken && (
-          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-red-500/30 bg-red-500/10 p-4">
             <ShieldAlert className="h-5 w-5 text-red-300" />
             <p className="flex-1 text-sm text-red-100">
               Fail-closed: sin horario válido el backend rechaza todos los pedidos.
@@ -193,7 +193,7 @@ export function StorePanel({
                 type="button"
                 disabled={busy}
                 onClick={createDefaultSchedule}
-                className="rounded-xl border border-emerald-400/40 bg-emerald-400/15 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/25 disabled:opacity-50"
+                className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/25 disabled:opacity-50"
               >
                 Crear horario 17:30–22:30
               </button>
@@ -202,7 +202,7 @@ export function StorePanel({
         )}
 
         {cashClosed && (
-          <p className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+          <p className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
             La caja de hoy ya fue cerrada: la jornada no puede reabrirse hasta el próximo día operacional.
           </p>
         )}
@@ -218,7 +218,7 @@ export function StorePanel({
                   setFeedback(null);
                 }}
                 className={[
-                  "flex min-h-14 items-center gap-2 rounded-2xl border px-5 text-base font-bold transition-colors",
+                  "flex min-h-14 items-center gap-2 rounded-md border px-5 text-base font-bold transition-colors",
                   ACTION_COPY[action].tone,
                 ].join(" ")}
               >
@@ -230,7 +230,7 @@ export function StorePanel({
         )}
 
         {pending && (
-          <div className="mt-3 space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+          <div className="mt-3 space-y-3 rounded-md border border-white/10 bg-black/30 p-4">
             <p className="text-sm text-neutral-200">{ACTION_COPY[pending].confirm}</p>
             <label className="block text-xs text-neutral-400">
               Motivo (opcional, queda en auditoría)
@@ -239,7 +239,7 @@ export function StorePanel({
                 onChange={(event) => setReason(event.target.value)}
                 maxLength={280}
                 placeholder="Ej: se acabó el pan"
-                className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/30"
+                className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/30"
               />
             </label>
             <div className="flex flex-wrap gap-2">
@@ -247,7 +247,7 @@ export function StorePanel({
                 type="button"
                 disabled={busy}
                 onClick={() => run(pending)}
-                className={["min-h-12 rounded-xl border px-5 text-sm font-bold disabled:opacity-50", ACTION_COPY[pending].tone].join(" ")}
+                className={["min-h-12 rounded-md border px-5 text-sm font-bold disabled:opacity-50", ACTION_COPY[pending].tone].join(" ")}
               >
                 {busy ? "Aplicando…" : `Confirmar: ${pending === "open" && status.state === "manual_closed" ? "Reabrir tienda" : ACTION_COPY[pending].title}`}
               </button>
@@ -255,7 +255,7 @@ export function StorePanel({
                 type="button"
                 disabled={busy}
                 onClick={() => setPending(null)}
-                className="min-h-12 rounded-xl border border-white/10 px-5 text-sm text-neutral-300 hover:bg-white/5"
+                className="min-h-12 rounded-md border border-white/10 px-5 text-sm text-neutral-300 hover:bg-white/5"
               >
                 Cancelar
               </button>
