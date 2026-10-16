@@ -10,7 +10,7 @@ import {
   type CashCloseRecord,
 } from "@/lib/api/store";
 import { formatClp } from "@/lib/clp";
-import { parseCountedClp } from "@/lib/store-status";
+import { formatLocalDateTime, formatOperationalDate, parseCountedClp } from "@/lib/store-status";
 
 const BLOCKER_COPY = {
   ACTIVE_POS_SALES: "Ventas POS sin cerrar",
@@ -36,19 +36,19 @@ function Difference({ value }: { value: number }) {
 
 function Tile({ label, value, hint, tone = "text-white" }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500">{label}</p>
-      <p className={["mt-1 text-xl font-black tabular-nums", tone].join(" ")}>{value}</p>
-      {hint && <p className="text-xs text-neutral-500">{hint}</p>}
+    <div className="ops-subtle rounded-sm border border-white/10 bg-black/30 px-3 py-2">
+      <p className="ops-muted text-[9px] uppercase tracking-[0.12em] text-neutral-500">{label}</p>
+      <p className={["ops-text mt-1 text-base font-bold tabular-nums", tone].join(" ")}>{value}</p>
+      {hint && <p className="ops-muted text-[10px] text-neutral-500">{hint}</p>}
     </div>
   );
 }
 
 function CloseReceipt({ close }: { close: CashCloseRecord }) {
   return (
-    <div className="space-y-3 rounded-2xl border border-sky-400/25 bg-sky-400/[0.06] p-4">
+    <div className="ops-surface space-y-3 rounded-sm border border-sky-400/25 bg-sky-400/[0.06] p-4">
       <p className="flex items-center gap-2 text-sm font-bold text-sky-100">
-        <Lock className="h-4 w-4" /> Caja {close.operationalDate} cerrada
+        <Lock className="h-4 w-4" /> Caja {formatOperationalDate(close.operationalDate)} cerrada
       </p>
       <dl className="grid grid-cols-2 gap-2 text-sm">
         <dt className="text-neutral-400">Efectivo esperado</dt>
@@ -63,7 +63,7 @@ function CloseReceipt({ close }: { close: CashCloseRecord }) {
         <dd className="text-right font-bold"><Difference value={close.transferDifference} /></dd>
       </dl>
       <p className="text-xs text-neutral-400">
-        Por {close.closedBy.email ?? close.closedBy.uid} · {close.closedAtLocal}
+        Por {close.closedBy.email ?? close.closedBy.uid} · {formatLocalDateTime(close.closedAtLocal)}
         {close.override && <> · override: “{close.override.reason}”</>}
         {close.observation && <> · {close.observation}</>}
       </p>
@@ -132,40 +132,46 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
   }
 
   return (
-    <section
-      aria-labelledby="cash-zone"
-      className="rounded-3xl border border-sky-400/20 bg-[linear-gradient(180deg,rgba(56,189,248,0.06),rgba(16,16,16,0.9)_40%)] p-5 sm:p-6"
-    >
+    <section aria-labelledby="cash-zone" className="ops-surface rounded-md border border-white/10 bg-[#101010] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p id="cash-zone" className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-sky-300/80">
+          <p id="cash-zone" className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-sky-300/80">
             <Wallet className="h-3.5 w-3.5" /> Caja · cierre financiero
           </p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
-            Jornada {day?.operationalDate ?? "…"}
+          <h2 className="ops-text mt-1 text-base font-semibold text-white">
+            Jornada {formatOperationalDate(day?.operationalDate)}
           </h2>
           {day && (
-            <p className="mt-1 text-xs text-neutral-500">
+            <p className="ops-muted mt-1 text-[10px] text-neutral-500">
               {day.window.start.slice(11, 16)} → {day.window.end.slice(11, 16)} del día siguiente · {day.timezone}
             </p>
           )}
         </div>
+        <span className={day?.close ? "rounded-sm border border-sky-400/25 bg-sky-400/10 px-2 py-1 text-[9px] text-sky-200" : "rounded-sm border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[9px] text-amber-200"}>
+          {day?.close ? "Cerrada" : "En curso"}
+        </span>
         <button
           type="button"
           onClick={() => void load()}
-          className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-neutral-400 hover:bg-white/5 hover:text-white"
+          aria-label="Actualizar resumen de caja"
+          className="rounded-sm border border-white/10 px-2 py-1 text-[10px] text-neutral-400 hover:bg-white/5 hover:text-white"
         >
-          Actualizar
+          ↻
         </button>
       </div>
 
-      <p className="mt-3 text-xs text-neutral-400">
+      <p className="ops-muted mt-3 text-[10px] text-neutral-400">
         Separado de la tienda: cerrar la tienda no cuenta dinero. Cerrar caja registra el arqueo y deja la
         jornada cerrada (no se aceptan más pedidos de este día operacional).
       </p>
 
       {loadError && <p className="mt-4 text-sm text-red-300">{loadError}</p>}
 
+      <details className="mt-3 border-t border-white/10 pt-3">
+      <summary className="ops-text flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium text-white marker:hidden">
+        <span>{day?.close ? "Ver comprobante de cierre" : "Revisar resumen y preparar cierre"}</span>
+        {summary && <span className="ops-muted text-right text-[10px] font-normal text-neutral-400">{summary.blockers.length > 0 ? `${summary.blockers.length} bloqueo(s)` : `${formatClp(summary.expectedCash)} esperado`}</span>}
+      </summary>
       {summary && (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -185,7 +191,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
           {summary.blockers.length > 0 && (
             <ul className="mt-4 space-y-2">
               {summary.blockers.map((blocker) => (
-                <li key={blocker.code} className="flex items-start gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                <li key={blocker.code} className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
                     <span className="font-bold">{BLOCKER_COPY[blocker.code]}:</span> {blocker.count} ({formatClp(blocker.total)}) ·{" "}
@@ -218,7 +224,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
                 value={counted}
                 onChange={(event) => setCounted(event.target.value)}
                 placeholder="Ej: 45.000"
-                className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-lg font-bold tabular-nums text-white outline-none focus:border-sky-400/40"
+                className="ops-input mt-1 w-full rounded-sm border border-white/10 bg-white/5 px-3 py-2 text-base font-bold tabular-nums text-white outline-none focus:border-sky-400/40"
               />
               {countedParsed && !countedParsed.ok && <span className="mt-1 block text-red-300">{countedParsed.message}</span>}
             </label>
@@ -229,14 +235,14 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
                 value={transfers}
                 onChange={(event) => setTransfers(event.target.value)}
                 placeholder="Verificadas en el banco"
-                className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-lg font-bold tabular-nums text-white outline-none focus:border-sky-400/40"
+                className="ops-input mt-1 w-full rounded-sm border border-white/10 bg-white/5 px-3 py-2 text-base font-bold tabular-nums text-white outline-none focus:border-sky-400/40"
               />
               {transfersParsed && !transfersParsed.ok && <span className="mt-1 block text-red-300">{transfersParsed.message}</span>}
             </label>
           </div>
 
           {countedParsed?.ok && (
-            <p className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-base font-bold">
+            <p className="ops-subtle rounded-sm border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold">
               Diferencia efectivo: <Difference value={countedParsed.value - summary.expectedCash} />
               {transfersParsed?.ok && (
                 <span className="ml-4 text-sm font-semibold">
@@ -253,12 +259,12 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
               onChange={(event) => setObservation(event.target.value)}
               maxLength={500}
               placeholder="Ej: faltan monedas de $100"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/40"
+              className="ops-input mt-1 w-full rounded-sm border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-sky-400/40"
             />
           </label>
 
           {blocked && (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.06] p-4">
+            <div className="rounded-md border border-red-500/30 bg-red-500/[0.06] p-4">
               <label className="flex items-center gap-2 text-sm font-semibold text-red-100">
                 <input type="checkbox" checked={useOverride} onChange={(event) => setUseOverride(event.target.checked)} />
                 Cerrar igual con override administrativo (queda auditado)
@@ -269,7 +275,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
                   onChange={(event) => setOverrideReason(event.target.value)}
                   maxLength={280}
                   placeholder="Motivo obligatorio (mín. 5 caracteres)"
-                  className="mt-2 w-full rounded-xl border border-red-500/30 bg-black/30 px-3 py-2.5 text-sm text-white outline-none"
+                  className="mt-2 w-full rounded-md border border-red-500/30 bg-black/30 px-3 py-2.5 text-sm text-white outline-none"
                 />
               )}
             </div>
@@ -282,14 +288,14 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
               type="button"
               disabled={!canSubmit}
               onClick={() => setConfirming(true)}
-              className="min-h-14 w-full rounded-2xl border border-sky-400/40 bg-sky-400/15 text-base font-bold text-sky-100 hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-40"
+              className="min-h-14 w-full rounded-md border border-sky-400/40 bg-sky-400/15 text-base font-bold text-sky-100 hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Cerrar caja
             </button>
           ) : (
-            <div className="space-y-2 rounded-2xl border border-sky-400/30 bg-black/40 p-4">
-              <p className="text-sm text-neutral-200">
-                Se registra el arqueo de {day?.operationalDate} y la jornada queda cerrada: no se aceptan más pedidos
+            <div className="space-y-2 rounded-md border border-sky-400/30 bg-black/40 p-4">
+              <p className="ops-muted text-xs text-neutral-200">
+                Se registra el arqueo de {formatOperationalDate(day?.operationalDate)} y la jornada queda cerrada: no se aceptan más pedidos
                 web ni POS hasta el próximo día operacional. No se puede deshacer.
               </p>
               <div className="flex gap-2">
@@ -297,7 +303,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
                   type="button"
                   disabled={busy}
                   onClick={submit}
-                  className="min-h-12 flex-1 rounded-xl border border-sky-400/40 bg-sky-400/20 text-sm font-bold text-sky-50 disabled:opacity-50"
+                  className="min-h-12 flex-1 rounded-md border border-sky-400/40 bg-sky-400/20 text-sm font-bold text-sky-50 disabled:opacity-50"
                 >
                   {busy ? "Cerrando…" : "Confirmar cierre de caja"}
                 </button>
@@ -305,7 +311,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
                   type="button"
                   disabled={busy}
                   onClick={() => setConfirming(false)}
-                  className="min-h-12 rounded-xl border border-white/10 px-4 text-sm text-neutral-300"
+                  className="min-h-12 rounded-md border border-white/10 px-4 text-sm text-neutral-300"
                 >
                   Volver
                 </button>
@@ -314,6 +320,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
           )}
         </div>
       ) : null}
+      </details>
     </section>
   );
 }

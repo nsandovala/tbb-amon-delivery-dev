@@ -1,12 +1,15 @@
 import { test, expect } from "@playwright/test";
 import {
   formatCountdown,
+  formatLocalDateTime,
+  formatOperationalDate,
   formatStoreClock,
   formatStoreTime,
   getNextTransition,
   getStoreTone,
   parseCountedClp,
 } from "../../apps/admin/src/lib/store-status";
+import { isValidScheduleTime } from "../../apps/admin/src/lib/schedule";
 
 /**
  * M6J — semántica visual de la sala de control (sin emulador).
@@ -44,6 +47,12 @@ test.describe("Reloj y transiciones", () => {
     expect(formatCountdown(null, now)).toBeNull();
   });
 
+  test("fechas operativas y bitácora usan formato DD/MM/AAAA", () => {
+    expect(formatOperationalDate("2026-10-16")).toBe("16/10/2026");
+    expect(formatLocalDateTime("2026-10-16T17:30:00-03:00")).toBe("16/10/2026 17:30");
+    expect(formatOperationalDate(null)).toBe("—");
+  });
+
   test("muestra cierre si recibe pedidos y apertura si no", () => {
     const times = { nextOpenAt: "open", nextCloseAt: "close" };
     expect(getNextTransition({ acceptingOrders: true, ...times })).toEqual({ label: "Cierra", at: "close" });
@@ -62,5 +71,14 @@ test.describe("Efectivo contado", () => {
     expect(parseCountedClp("12,50").ok).toBe(false);
     expect(parseCountedClp("-100").ok).toBe(false);
     expect(parseCountedClp("abc").ok).toBe(false);
+  });
+});
+
+test.describe("Vista del horario semanal", () => {
+  test("acepta horas válidas y rechaza 24:00", () => {
+    expect(isValidScheduleTime("00:00")).toBe(true);
+    expect(isValidScheduleTime("23:59")).toBe(true);
+    expect(isValidScheduleTime("24:00")).toBe(false);
+    expect(isValidScheduleTime("25:99")).toBe(false);
   });
 });

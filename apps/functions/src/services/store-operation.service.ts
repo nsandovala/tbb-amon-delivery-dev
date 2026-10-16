@@ -6,12 +6,17 @@ import { logger } from "../lib/logger";
 import {
   buildDefaultStoreHoursConfig,
   evaluateStoreStatus,
+  formatLocalDateKey,
   formatLocalIso,
   parseStoreHoursConfig,
   storeHoursConfigSchema,
+  storeDateExceptionSchema,
   storeOverrideSchema,
   toPublicStoreStatus,
   type PublicStoreStatus,
+  type StoreDateException,
+  type StoreHoursConfig,
+  type Weekday,
   type StoreActor,
   type StoreOverride,
   type StoreStatus,
@@ -23,6 +28,7 @@ import {
   serializeFirestore,
   storeRefs,
   transactionReader,
+  listUpcomingStoreDateExceptions,
   type StoreEventType,
 } from "../repositories/firestore-store.repo";
 
@@ -124,7 +130,12 @@ export async function observeStoreStatus(tenantId: string): Promise<StoreStatus>
 
 export async function getPublicStoreStatus(tenantId: string): Promise<PublicStoreStatus> {
   const snapshot = await readStoreSnapshot(tenantId, plainReader, new Date());
-  return toPublicStoreStatus(snapshot.status);
+  const fromDate = formatLocalDateKey(new Date(), snapshot.timezone);
+  const throughDateValue = new Date(`${fromDate}T12:00:00.000Z`);
+  throughDateValue.setUTCDate(throughDateValue.getUTCDate() + 90);
+  const throughDate = throughDateValue.toISOString().slice(0, 10);
+  const upcoming = await listUpcomingStoreDateExceptions(tenantId, fromDate, throughDate, 12);
+  return toPublicStoreStatus(snapshot.status, upcoming.map(publicDateException));
 }
 
 export async function getStoreControl(tenantId: string) {
@@ -135,6 +146,12 @@ export async function getStoreControl(tenantId: string) {
     refs.events.orderBy("at", "desc").limit(RECENT_EVENTS_LIMIT).get(),
   ]);
 
+  const fromDate = formatLocalDateKey(new Date(), snapshot.timezone);
+  const throughDateValue = new Date(`${fromDate}T12:00:00.000Z`);
+  throughDateValue.setUTCDate(throughDateValue.getUTCDate() + 365);
+  const throughDate = throughDateValue.toISOString().slice(0, 10);
+  const specialDates = await listUpcomingStoreDateExceptions(tenantId, fromDate, throughDate, 100);
+
   const parsed = snapshot.hoursRaw ? parseStoreHoursConfig(snapshot.hoursRaw) : null;
 
   return {
@@ -143,7 +160,18 @@ export async function getStoreControl(tenantId: string) {
     configUpdatedAt: serializeFirestore(snapshot.hoursRaw?.updatedAt ?? null),
     configUpdatedBy: snapshot.hoursRaw?.updatedBy ?? null,
     defaultConfig: buildDefaultStoreHoursConfig(),
+    specialDates,
     events: eventsSnap.docs.map((doc) => serializeFirestore(doc.data())),
+  };
+}
+
+function publicDateException(exception: StoreDateException): StoreDateException {
+  return {
+    date: exception.date,
+    mode: exception.mode,
+    ...(exception.open ? { open: exception.open } : {}),
+    ...(exception.close ? { close: exception.close } : {}),
+    customerMessage: exception.customerMessage,
   };
 }
 
@@ -210,6 +238,7 @@ export async function setStoreOperation(
       config: snapshot.hoursRaw,
       override: nextOverride,
       cashClosedOperationalDate: null,
+      dateExceptions: snapshot.dateExceptions,
     });
 
     const reopening = previous.state === "manual_closed" && next.acceptingOrders;
@@ -300,6 +329,7 @@ export async function updateStoreHours(
       config,
       override: overrideParse.success ? overrideParse.data : null,
       cashClosedOperationalDate: existingClosedDate,
+      dateExceptions: snapshot.dateExceptions,
     });
 
     const refs = storeRefs(tenantId);
@@ -340,5 +370,176 @@ export async function updateStoreHours(
 
     logger.info("Store hours updated", { tenantId, actor: actor.uid, to: next.state });
     return { status: next, eventId };
+  });
+}
+
+export const updateStoreDateExceptionInputSchema = z.object({
+  tenantId: z.string().min(1).optional(),
+  exception: z.unknown(),
+  reason: z.string().trim().max(280).optional(),
+});
+
+export const deleteStoreDateExceptionInputSchema = z.object({
+  tenantId: z.string().min(1).optional(),
+  date: z.string(),
+  reason: z.string().trim().max(280).optional(),
+});
+
+function getExceptionWeekday(date: string): Weekday {
+  const weekday = new Date(`${date}T12:00:00.000Z`).getUTCDay();
+  return (["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const)[weekday];
+}
+
+function validateDateException(
+  snapshot: Awaited<ReturnType<typeof readStoreSnapshot>>,
+  rawException: unknown,
+  now: Date
+): StoreDateException {
+  const parsed = storeDateExceptionSchema.safeParse(rawException);
+  if (!parsed.success) throw new ValidationError("Excepción de fecha inválida", parsed.error.issues);
+
+  const schedule = snapshot.hoursRaw ? parseStoreHoursConfig(snapshot.hoursRaw) : null;
+  if (!schedule?.ok) {
+    throw new AppError("Configura primero un horario semanal válido.", 409, "STORE_CONFIG_INVALID");
+  }
+
+  const today = formatLocalDateKey(now, schedule.config.timezone);
+  if (parsed.data.date < today) {
+    throw new ValidationError("No puedes configurar una fecha pasada.");
+  }
+
+  if (
+    parsed.data.mode === "regular_hours" &&
+    !schedule.config.days[getExceptionWeekday(parsed.data.date)].enabled
+  ) {
+    throw new ValidationError(
+      "Ese día normalmente está cerrado. Define un horario especial para abrirlo."
+    );
+  }
+
+  return parsed.data;
+}
+
+function evaluateWithDateException(
+  snapshot: Awaited<ReturnType<typeof readStoreSnapshot>>,
+  now: Date,
+  date: string,
+  value: StoreDateException | null
+): StoreStatus {
+  const dateExceptions = { ...snapshot.dateExceptions };
+  if (value) dateExceptions[date] = value;
+  else delete dateExceptions[date];
+  return evaluateStoreStatus({
+    now,
+    config: snapshot.hoursRaw,
+    override: snapshot.operation.override ?? null,
+    cashClosedOperationalDate:
+      snapshot.status.reasonCode === "CASH_CLOSED" ? snapshot.status.operationalDate : null,
+    dateExceptions,
+  });
+}
+
+export async function updateStoreDateException(
+  tenantId: string,
+  actor: StoreActor,
+  rawException: unknown,
+  reason?: string
+): Promise<{ changed: boolean; status: StoreStatus; eventId: string | null }> {
+  const requested = storeDateExceptionSchema.safeParse(rawException);
+  if (!requested.success) throw new ValidationError("Excepción de fecha inválida", requested.error.issues);
+
+  return getDb().runTransaction(async (tx) => {
+    const now = new Date();
+    const snapshot = await readStoreSnapshot(tenantId, transactionReader(tx), now);
+    const exception = validateDateException(snapshot, requested.data, now);
+    const ref = storeRefs(tenantId).dateException(exception.date);
+    const previousDoc = await tx.get(ref);
+    const previousException = previousDoc.exists
+      ? storeDateExceptionSchema.safeParse({ date: previousDoc.id, ...previousDoc.data() })
+      : null;
+    const same = previousException?.success && JSON.stringify(previousException.data) === JSON.stringify(exception);
+    if (same) return { changed: false, status: snapshot.status, eventId: null };
+
+    const next = evaluateWithDateException(snapshot, now, exception.date, exception);
+    const nowLocalDate = formatLocalDateKey(now, snapshot.timezone);
+    const stamp = admin.firestore.FieldValue.serverTimestamp();
+    tx.set(ref, {
+      ...exception,
+      createdAt: previousDoc.exists ? previousDoc.get("createdAt") ?? stamp : stamp,
+      createdBy: previousDoc.exists ? previousDoc.get("createdBy") ?? actor : actor,
+      updatedAt: stamp,
+      updatedBy: actor,
+    });
+
+    if (exception.date === nowLocalDate) {
+      tx.set(storeRefs(tenantId).operation, {
+        lastObservedState: next.state,
+        lastObservedOperationalDate: next.operationalDate,
+        lastObservedAt: stamp,
+      }, { merge: true });
+    }
+
+    const eventId = appendStoreEvent(tx, tenantId, {
+      type: "special_date_updated",
+      source: "manual",
+      actor,
+      reason: reason?.trim() || exception.customerMessage || "Fecha especial configurada",
+      previousState: snapshot.status.state,
+      newState: next.state,
+      reasonCode: next.reasonCode,
+      operationalDate: exception.date,
+      metadata: {
+        action: "saved",
+        date: exception.date,
+        previousException: previousDoc.exists ? previousDoc.data() : null,
+        newException: exception,
+      },
+    }, now, snapshot.timezone);
+
+    return { changed: true, status: next, eventId };
+  });
+}
+
+export async function deleteStoreDateException(
+  tenantId: string,
+  actor: StoreActor,
+  date: string,
+  reason?: string
+): Promise<{ changed: boolean; status: StoreStatus; eventId: string | null }> {
+  return getDb().runTransaction(async (tx) => {
+    const now = new Date();
+    const snapshot = await readStoreSnapshot(tenantId, transactionReader(tx), now);
+    const dateParse = storeDateExceptionSchema.shape.date.safeParse(date);
+    if (!dateParse.success) throw new ValidationError("Fecha inválida", dateParse.error.issues);
+    const today = formatLocalDateKey(now, snapshot.timezone);
+    if (date < today) throw new ValidationError("No puedes eliminar una excepción de fecha pasada.");
+
+    const ref = storeRefs(tenantId).dateException(date);
+    const previousDoc = await tx.get(ref);
+    if (!previousDoc.exists) return { changed: false, status: snapshot.status, eventId: null };
+
+    const next = evaluateWithDateException(snapshot, now, date, null);
+    tx.delete(ref);
+    if (date === today) {
+      tx.set(storeRefs(tenantId).operation, {
+        lastObservedState: next.state,
+        lastObservedOperationalDate: next.operationalDate,
+        lastObservedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    const eventId = appendStoreEvent(tx, tenantId, {
+      type: "special_date_updated",
+      source: "manual",
+      actor,
+      reason: reason?.trim() || "Excepción de fecha eliminada",
+      previousState: snapshot.status.state,
+      newState: next.state,
+      reasonCode: next.reasonCode,
+      operationalDate: date,
+      metadata: { action: "deleted", date, previousException: previousDoc.data(), newException: null },
+    }, now, snapshot.timezone);
+
+    return { changed: true, status: next, eventId };
   });
 }

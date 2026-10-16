@@ -5,8 +5,12 @@ import { logger } from "../lib/logger";
 import {
   getPublicStoreStatus,
   getStoreControl as loadStoreControl,
+  deleteStoreDateException as removeStoreDateException,
+  deleteStoreDateExceptionInputSchema,
   setStoreOperation as applyStoreOperation,
   storeOperationInputSchema,
+  updateStoreDateException as saveStoreDateException,
+  updateStoreDateExceptionInputSchema,
   updateStoreHours as saveStoreHours,
   updateStoreHoursInputSchema,
 } from "../services/store-operation.service";
@@ -108,6 +112,50 @@ export const updateStoreHours = onRequest(
         actor,
         parsed.data.config,
         parsed.data.reason
+      );
+      res.status(200).json({ ok: true, data } satisfies ApiResponse);
+    } catch (err) {
+      handleError(err, res);
+    }
+  }
+);
+
+/**
+ * POST /updateStoreDateException (admin)
+ * Body: { exception: { date, mode, open?, close?, customerMessage? }, reason? }
+ */
+export const updateStoreDateException = onRequest(
+  { cors: true },
+  async (req, res): Promise<void> => {
+    try {
+      if (req.method !== "POST" && req.method !== "PUT") return methodNotAllowed(res, "POST/PUT");
+      const actor = await requireAdmin(req);
+      const parsed = updateStoreDateExceptionInputSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError("Invalid special date payload", parsed.error.issues);
+      const data = await saveStoreDateException(
+        resolveTenant(req), actor, parsed.data.exception, parsed.data.reason
+      );
+      res.status(200).json({ ok: true, data } satisfies ApiResponse);
+    } catch (err) {
+      handleError(err, res);
+    }
+  }
+);
+
+/**
+ * POST /deleteStoreDateException (admin)
+ * Body: { date: "YYYY-MM-DD", reason? }
+ */
+export const deleteStoreDateException = onRequest(
+  { cors: true },
+  async (req, res): Promise<void> => {
+    try {
+      if (req.method !== "POST") return methodNotAllowed(res, "POST");
+      const actor = await requireAdmin(req);
+      const parsed = deleteStoreDateExceptionInputSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError("Invalid special date payload", parsed.error.issues);
+      const data = await removeStoreDateException(
+        resolveTenant(req), actor, parsed.data.date, parsed.data.reason
       );
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {

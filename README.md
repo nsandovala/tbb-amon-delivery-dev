@@ -1,146 +1,100 @@
 # TBB AMON Delivery Dev
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+Plataforma multi-tenant para pedidos y operación de comercios gastronómicos, construida con Next.js, Firebase y TypeScript.
 
-Backend-first multi-tenant ordering and operations platform for **AMON Delivery**.  
-Tenant piloto actual: **TBB — The Best Burger (Receta de la Abuela)**.
+El tenant piloto es **TBB — The Best Burger (Receta de la Abuela)**, en Valparaíso, Chile. El repositorio incluye la tienda para clientes, el panel Admin con POS y pedidos, una API en Firebase Functions y contratos/seeds compartidos.
 
-Esta repo valida un flujo operativo real para comercio gastronómico sobre Firebase, con foco en:
+## Estado del proyecto
 
-- **Storefront** (`apps/web`)
-- **Admin / POS / Pedidos** (`apps/admin`)
-- **Backend Functions API** (`apps/functions`)
-- **Contratos, schemas y seeds compartidos** (`packages/shared`)
+- **Tienda web** (`apps/web`): storefront del tenant piloto.
+- **Admin** (`apps/admin`): pedidos, POS y control de operación.
+- **API** (`apps/functions`): validaciones y operaciones de negocio mediante Functions.
+- **Datos compartidos** (`packages/shared`): tipos, contratos y seed local.
+- **Desarrollo local**: emuladores de Authentication, Firestore y Functions.
 
----
+La sección **Operación** tiene un ciclo de polish de UI aprobado para modo claro y oscuro. Incluye identidad de tienda/local y operador, horario semanal, excepciones de fechas configurables, estado de tienda, caja y bitácora. Las excepciones se guardan por fecha y se aplican al aceptar pedidos; no se precarga automáticamente un calendario nacional de feriados. Proveedores y tareas siguen pendientes. El agendamiento de pedidos por hora solicitada está en backlog.
 
-## Estado actual
+El siguiente orden de producto acordado es: **Operaciones → Métricas → Home**. Las ventas del seed son datos de demostración. La revisión del diseño en navegador local forma parte de la validación del sprint; este repositorio no se despliega automáticamente a producción.
 
-### Operativo hoy
-- storefront por tenant: `apps/web`
-- panel admin / POS / pedidos: `apps/admin`
-- seeds compartidos para tenant `tbb`
-- emuladores Firebase configurados
-- base backend-first iniciada
-- contratos, contexto y playbooks base
+## Inicio rápido
 
-### En progreso
-- mover escrituras críticas desde frontend a backend Functions
-- endurecer reglas de Firestore después del flujo e2e
-- consolidar contratos compartidos
-- puente bot / WhatsApp → Firestore orders
-
----
-
-## Quick Start
+Requiere Node.js/npm y Firebase CLI.
 
 ```bash
-# instalar dependencias
 npm install
-
-# seed del tenant piloto en emulador
-npm run seed
-
-# levantar emuladores + web + admin
+# Terminal 1: iniciar emuladores, tienda y Admin
 npm run dev:all
+```
 
-# solo emuladores
-npm run dev:emulators
+En otra terminal, carga los datos de demostración con `npm run seed`. También puedes usar `npm run dev:reset` para iniciar el stack y ejecutar el seed cuando Firestore esté disponible. Para iniciar cada aplicación por separado, usa `npm run dev:web`, `npm run dev:admin` y `npm run dev:emulators` en terminales distintas.
 
-Arquitectura rápida
+## Direcciones locales
+
+| Servicio | URL |
+| --- | --- |
+| Tienda web | `http://localhost:3000` |
+| Admin | `http://localhost:3001` |
+| Firebase Emulator Suite | `http://127.0.0.1:4000` |
+| Firebase Authentication | `http://127.0.0.1:9099` |
+| Cloud Functions | `http://127.0.0.1:5001` |
+| Firestore | `http://127.0.0.1:8080` |
+
+El usuario administrador de desarrollo se crea mediante el seed local. Usa las credenciales de desarrollo documentadas por el equipo; no reutilices esas credenciales fuera de los emuladores.
+
+## Scripts principales
+
+| Comando | Descripción |
+| --- | --- |
+| `npm run dev:web` | Inicia la tienda web. |
+| `npm run dev:admin` | Inicia el panel Admin. |
+| `npm run dev:emulators` | Compila Functions e inicia los emuladores. |
+| `npm run seed` | Carga tenant y datos de demostración en los emuladores. |
+| `npm run dev:all` | Inicia emuladores, tienda y Admin. |
+| `npm run dev:reset` | Inicia el stack y carga el seed al estar disponible Firestore. |
+| `npm run test:e2e` | Ejecuta todas las pruebas Playwright. |
+| `npm run test:e2e:api` | Ejecuta las pruebas de contratos API. |
+
+## Arquitectura
+
+```text
 apps/
-  web/          # Storefront cliente final (Next.js)
-  admin/        # POS + pedidos + operaciones (Next.js)
-  functions/    # Backend HTTP / Firebase Functions
+  web/          Tienda para clientes (Next.js)
+  admin/        Admin, POS, pedidos y operaciones (Next.js)
+  functions/    API HTTP y Firebase Functions
 
 packages/
-  shared/       # Constantes, tipos, schemas, seeds, utilidades
+  shared/       Tipos, schemas, contratos y seed
+```
 
-  Principios clave
-  | Principio                            | Qué significa                                                           |
-| ------------------------------------ | ----------------------------------------------------------------------- |
-| **Firestore manda**                  | Firestore es estado operativo real. Zustand solo UI/cart state.         |
-| **Backend-first**                    | Validación, reglas de negocio, cálculo y persistencia viven en backend. |
-| **No mocks si ya existe flujo real** | Si existe emulador, seed o colección real, no se inventa mock paralelo. |
-| **Cambios incrementales**            | Cambios pequeños, reversibles y auditables.                             |
-| **Un solo Firebase**                 | Se trabaja sobre `minierp-sentinel`, sin duplicar proyectos por ahora.  |
+En operaciones críticas, el backend valida y persiste el estado en Firestore. El cliente envía solicitudes a Functions; el panel Admin consulta el estado operativo y presenta las acciones disponibles.
 
-Flujo crítico
+## Emuladores Firebase
 
-storefront / POS / bot
-→ backend HTTP / Functions
-→ validación
-→ escritura en Firestore
-→ lectura live en admin
-→ transición de estados
-
-Estados operativos
-queued
-preparing
-ready
-on_the_way
-delivered
-cancelled
-
-Tenant piloto: TBB
-tenantId: tbb
-slug: tbb
-moneda: CLP
-ciudad base: Valparaíso
-capacidades activas: pickup, delivery, assistant, addons, reviews
-
-Emuladores Firebase
-
-| Emulator  | Puerto |
-| --------- | ------ |
+| Emulador | Puerto |
+| --- | ---: |
+| Authentication | `9099` |
 | Firestore | `8080` |
-| Auth      | `9099` |
-| UI        | `4000` |
+| Functions | `5001` |
+| Emulator Suite UI | `4000` |
 
-Scripts útiles
+El seed contiene datos locales de demostración. No representa ventas reales.
 
-| Comando                 | Descripción                    |
-| ----------------------- | ------------------------------ |
-| `npm run dev:web`       | levanta web                    |
-| `npm run dev:admin`     | levanta admin                  |
-| `npm run dev:emulators` | levanta emuladores             |
-| `npm run seed`          | inserta seed del tenant piloto |
-| `npm run dev:all`       | emuladores + web + admin       |
-| `npm run dev:reset`     | seed + stack completo          |
+## Documentación
 
-Mapa de documentación
+| Tema | Archivo |
+| --- | --- |
+| Descripción y contexto del proyecto | `context/project-overview.md` |
+| Arquitectura | `context/architecture.md` |
+| Decisiones | `context/decisions.md` |
+| Sprint actual | `context/current-sprint.md` |
+| Contratos API | `contracts/api-contracts.md` |
+| Colecciones Firestore | `contracts/firestore-collections.md` |
+| Contrato de operación de tienda | `docs/architecture/store-operation-contract.md` |
+| Flujo de estados de pedidos | `contracts/order-status.md` |
+| Registro de fases | `roadmap/phase-log.md` |
+| Polish de Operaciones | `roadmap/sprint-operations-polish.md` |
+| Lista de verificación de release | `playbooks/release-checklist.md` |
 
-| Tema                  | Archivo                              |
-| --------------------- | ------------------------------------ |
-| Project overview      | `context/project-overview.md`        |
-| Architecture          | `context/architecture.md`            |
-| Decisions log         | `context/decisions.md`               |
-| Current sprint        | `context/current-sprint.md`          |
-| API contracts         | `contracts/api-contracts.md`         |
-| Firestore collections | `contracts/firestore-collections.md` |
-| Order status machine  | `contracts/order-status.md`          |
-| Order JSON schema     | `contracts/order.schema.json`        |
-| Repo rules            | `playbooks/repo-rules.md`            |
-| Backend-first         | `playbooks/backend-first.md`         |
-| Debugging checklist   | `playbooks/debugging-checklist.md`   |
-| Release checklist     | `playbooks/release-checklist.md`     |
-| Sprint log            | `roadmap/phase-log.md`               |
-| Backend sprint        | `roadmap/sprint-backend-1.md`        |
-
-Regla operativa importante
-
-Las operaciones críticas no deben escribirse directo desde frontend.
-
-Eso incluye:
-
-creación de pedidos
-ventas POS
-cambio de estado de pedidos
-
-El frontend debe enviar payload mínimo al backend.
-El backend valida, enriquece, calcula, persiste y responde.
-
-Licencia
+## Licencia
 
 MIT

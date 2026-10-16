@@ -3,12 +3,14 @@ import { getDb } from "../lib/firebase-admin";
 import {
   DEFAULT_STORE_TIMEZONE,
   evaluateStoreStatus,
+  formatLocalDateKey,
   formatLocalIso,
   getOperationalDateFor,
   parseStoreHoursConfig,
   type StoreActor,
   type StoreState,
   type StoreStatus,
+  type StoreDateException,
 } from "../lib/store-hours";
 
 /**
@@ -26,12 +28,21 @@ import {
 export const STORE_HOURS_DOC = "storeHours";
 export const STORE_OPERATION_DOC = "storeOperation";
 
+type StoreReaderRef = admin.firestore.DocumentReference | admin.firestore.Query;
+type StoreReaderResult = admin.firestore.DocumentSnapshot | admin.firestore.QuerySnapshot;
+type StoreReader = {
+  (ref: admin.firestore.DocumentReference): Promise<admin.firestore.DocumentSnapshot>;
+  (ref: admin.firestore.Query): Promise<admin.firestore.QuerySnapshot>;
+};
+
 export function storeRefs(tenantId: string) {
   const tenant = getDb().collection("tenants").doc(tenantId);
   return {
     hours: tenant.collection("settings").doc(STORE_HOURS_DOC),
     operation: tenant.collection("settings").doc(STORE_OPERATION_DOC),
     events: tenant.collection("storeEvents"),
+    dateExceptions: tenant.collection("storeExceptions"),
+    dateException: (date: string) => tenant.collection("storeExceptions").doc(date),
     cashCloses: tenant.collection("cashCloses"),
     cashClose: (operationalDate: string) => tenant.collection("cashCloses").doc(operationalDate),
     orders: tenant.collection("orders"),
@@ -39,14 +50,10 @@ export function storeRefs(tenantId: string) {
   };
 }
 
-type DocReader = (
-  ref: admin.firestore.DocumentReference
-) => Promise<admin.firestore.DocumentSnapshot>;
+export const plainReader: StoreReader = ((ref: StoreReaderRef) => ref.get()) as StoreReader;
 
-export const plainReader: DocReader = (ref) => ref.get();
-
-export function transactionReader(tx: admin.firestore.Transaction): DocReader {
-  return (ref) => tx.get(ref);
+export function transactionReader(tx: admin.firestore.Transaction): StoreReader {
+  return ((ref: StoreReaderRef) => tx.get(ref as admin.firestore.Query)) as StoreReader;
 }
 
 export type StoreOperationDoc = {
@@ -60,6 +67,7 @@ export type StoreSnapshot = {
   /** Raw schedule doc (may be invalid) or null when missing. */
   hoursRaw: Record<string, unknown> | null;
   operation: StoreOperationDoc;
+  dateExceptions: Record<string, unknown>;
   /** Timezone used to resolve operational dates (config tz, or default when invalid). */
   timezone: string;
 };
@@ -71,14 +79,17 @@ export type StoreSnapshot = {
  */
 export async function readStoreSnapshot(
   tenantId: string,
-  read: DocReader,
+  read: StoreReader,
   now: Date
 ): Promise<StoreSnapshot> {
   const refs = storeRefs(tenantId);
-  const [hoursSnap, operationSnap] = await Promise.all([
+  const [hoursResult, operationResult] = await Promise.all([
     read(refs.hours),
     read(refs.operation),
   ]);
+
+  const hoursSnap = hoursResult as admin.firestore.DocumentSnapshot;
+  const operationSnap = operationResult as admin.firestore.DocumentSnapshot;
 
   const hoursRaw = hoursSnap.exists
     ? ((hoursSnap.data() ?? null) as Record<string, unknown> | null)
@@ -87,6 +98,20 @@ export async function readStoreSnapshot(
 
   const parsed = hoursRaw ? parseStoreHoursConfig(hoursRaw) : null;
   const timezone = parsed?.ok ? parsed.config.timezone : DEFAULT_STORE_TIMEZONE;
+
+  const localDate = formatLocalDateKey(now, timezone);
+  const endDateValue = new Date(`${localDate}T12:00:00.000Z`);
+  endDateValue.setUTCDate(endDateValue.getUTCDate() + 8);
+  const endDate = endDateValue.toISOString().slice(0, 10);
+  const exceptionsQuery = refs.dateExceptions
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .startAt(localDate)
+    .endAt(endDate);
+  const exceptionsResult = await read(exceptionsQuery);
+  const exceptionsSnapshot = exceptionsResult as admin.firestore.QuerySnapshot;
+  const dateExceptions = Object.fromEntries(
+    exceptionsSnapshot.docs.map((doc) => [doc.id, { date: doc.id, ...doc.data() }])
+  );
 
   let cashClosedOperationalDate: string | null = null;
   if (parsed?.ok) {
@@ -100,9 +125,10 @@ export async function readStoreSnapshot(
     config: hoursRaw,
     override: operation.override ?? null,
     cashClosedOperationalDate,
+    dateExceptions,
   });
 
-  return { status, hoursRaw, operation, timezone };
+  return { status, hoursRaw, operation, timezone, dateExceptions };
 }
 
 export type StoreEventType =
@@ -112,6 +138,7 @@ export type StoreEventType =
   | "store_reopened"
   | "schedule_resumed"
   | "hours_updated"
+  | "special_date_updated"
   | "cash_closed";
 
 export type StoreEventInput = {
@@ -164,4 +191,22 @@ export function serializeFirestore(value: unknown): unknown {
     );
   }
   return value;
+}
+
+export async function listUpcomingStoreDateExceptions(
+  tenantId: string,
+  fromDate: string,
+  throughDate: string,
+  limit = 12
+): Promise<Array<StoreDateException & Record<string, unknown>>> {
+  const snapshot = await storeRefs(tenantId).dateExceptions
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .startAt(fromDate)
+    .endAt(throughDate)
+    .limit(limit)
+    .get();
+  return snapshot.docs.map((doc) => ({
+    date: doc.id,
+    ...serializeFirestore(doc.data()) as Record<string, unknown>,
+  })) as Array<StoreDateException & Record<string, unknown>>;
 }

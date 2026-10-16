@@ -1,5 +1,131 @@
 # Phase Log
 
+## 2026-10-16 — Ajustes visuales tras QA local
+
+### Qué cambió
+- El modo claro usa un fondo nieve mate y superficies opacas más suaves; se oscurecieron los textos secundarios para que se lean mejor.
+- Se amplió la columna del horario para que los controles de hora no queden cortados en escritorio.
+- La sección de fechas especiales ahora pregunta directamente si la tienda abrirá y explica que la decisión debe guardarse por fecha y comunicarse a clientes.
+
+### Contratos y comportamiento
+- No se agregó persistencia de excepciones ni cambios a la aceptación de pedidos. La sección sigue siendo informativa y marca la capacidad como pendiente.
+- El horario semanal continúa guardándose con formato de 24 horas (`HH:mm`). En este caso corresponde mostrar `17:30–22:30`; `22:30 p. m.` mezcla formatos y no es correcto.
+
+### Validación
+- Revisar en navegador local el modo claro, los controles de hora y el ancho móvil después de traer este commit.
+- No desplegar hasta definir el proyecto Firebase piloto.
+
+## 2026-10-16 — Revisión visual aprobada: Operaciones
+
+### Qué cambió
+- `/operacion` ahora identifica el tenant/local y ubicación leyendo el documento real `tenants/tbb`; identifica al operador con el correo de la sesión Firebase y el rol admin ya verificado por `AdminGuard`.
+- Se añadió selector de modo claro/oscuro, con preferencia local persistida en el navegador y modo oscuro como valor inicial.
+- Se reemplazó el eje horario que se superponía por una tabla semanal legible y adaptable, con apertura/cierre editables por día y estado explícito de cerrado.
+- Caja queda compacta y plegada inicialmente; la bitácora está inmediatamente debajo, muestra cinco movimientos recientes y permite expandir hasta los 25 que entrega el endpoint actual.
+- Fechas operacionales y de bitácora se presentan como `DD/MM/AAAA`; los contratos y valores internos ISO no cambian.
+- Se añadieron estados vacíos explícitos para feriados/excepciones, proveedores y acciones por hacer. No se simulan registros que todavía no existen.
+
+### Por qué cambió
+- Nelson aprobó el mockup y pidió saber en todo momento qué tienda está operando y quién tiene la sesión activa.
+- Las etiquetas de horas del eje anterior se solapaban en pantallas reales; la tabla expresa el horario sin una escala ilegible.
+- La caja y la bitácora deben ocupar una columna compacta y el calendario debe ser la superficie principal.
+
+### Archivos modificados
+- `apps/admin/src/app/operacion/page.tsx`
+- `apps/admin/src/app/globals.css`
+- `apps/admin/src/components/operation/{store-panel,cash-panel,schedule-editor,audit-log}.tsx`
+- `apps/admin/src/lib/{store-status,schedule}.ts`
+- `e2e/unit/m6j-control-room.spec.ts`
+- `roadmap/phase-log.md`
+- `roadmap/sprint-operations-polish.md`
+
+### Contratos afectados
+- Ningún contrato de Functions, Firestore, autenticación, horario o cierre de caja cambia.
+- `operationalDate` y `atLocal` conservan ISO en backend; solo cambia su formato de presentación.
+- El tenant no contiene razón social separada: la UI muestra el nombre real del tenant y su comuna/ciudad; no inventa un nombre legal.
+- No hay modelo persistente/API para feriados, proveedores ni tareas. Sus secciones quedan como estados vacíos honestos hasta diseñar esos módulos.
+- El endpoint actual limita la bitácora a 25 eventos; expandir la UI revela ese máximo, no pagina histórico.
+
+### Validación
+```bash
+./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit
+npm --workspace apps/admin run build
+npx playwright test e2e/unit/m6j-control-room.spec.ts e2e/unit/m6j-store-hours.spec.ts --config=playwright.config.ts
+git diff --check
+```
+
+- Typecheck de Admin: OK.
+- Build de Admin: OK.
+- Unitarias de Operaciones/horario: 51/51 OK.
+- Revisión visual de escritorio/móvil en navegador: pendiente.
+
+### Riesgos y siguiente paso
+- El modo claro se limita al área de Operaciones; la navegación global de Admin mantiene el tema existente.
+- Feriados/excepciones, proveedores y tareas requieren contrato de datos/API antes de volverse editables.
+- El cambio se publica en la rama de revisión autorizada para que Nelson haga QA visual local de ambos temas y anchos móvil/desktop. No desplegar: el proyecto Firebase destino sigue sin confirmarse.
+
+## 2026-10-16 — Inicio del sprint de polish de Operaciones
+
+### Qué cambió
+- `/operacion`: primera pasada del editor de horario semanal. La escala ahora cubre 00:00–24:00, los campos de apertura/cierre quedan fuera de la barra de disponibilidad y los días cerrados desactivan sus campos sin borrar sus horas.
+- Se redujeron los radios grandes de tarjetas y controles en la sala de operaciones para dar jerarquía más nítida a estado, horario, caja y bitácora.
+- La validación visual rechaza horas fuera de rango, intervalos sin duración y avisos de cierre fuera de 0–120 minutos antes de llamar a Functions.
+- Se alineó una expectativa de prueba de cierre de caja con el contrato vigente: pedidos web/WhatsApp activos también bloquean el cierre.
+
+### Por qué cambió
+- La vista anterior comenzaba a las 08:00 aunque el contrato acepta horas desde 00:00. Además, los campos de hora dentro de una barra corta podían quedar recortados.
+- El usuario indicó que Operaciones requiere polish y que el calendario actual no satisface la expectativa. Métricas y Home siguen sin aprobación y están planificados para sprints posteriores.
+
+### Archivos modificados
+- `apps/admin/src/components/operation/schedule-editor.tsx`
+- `apps/admin/src/components/operation/{store-panel,cash-panel,audit-log}.tsx`
+- `apps/admin/src/app/operacion/page.tsx`
+- `apps/admin/src/lib/schedule.ts` (nuevo)
+- `e2e/unit/m6j-control-room.spec.ts`
+- `e2e/unit/m6j-store-hours.spec.ts`
+- `roadmap/sprint-operations-polish.md` (nuevo)
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- Ninguno. Se preserva el endpoint `updateStoreHours`, el contrato de horario y la regla de no cruzar medianoche.
+- Sin cambios a Firebase, seed, autenticación, ventas o despliegue.
+
+### Validación
+```bash
+npm --workspace apps/admin run build
+npx playwright test e2e/unit/m6j-control-room.spec.ts e2e/unit/m6j-store-hours.spec.ts --config=playwright.config.ts
+git diff --check
+```
+
+- Build de Admin: OK.
+- Pruebas de horario y sala de control: 51/51 OK.
+- `git diff --check`: OK.
+- El primer pase de pruebas detectó una expectativa obsoleta sobre pedidos web activos; se alineó con el bloqueo definido en el contrato y se volvió a ejecutar la suite.
+
+### Riesgos y siguiente paso
+- Falta una revisión visual real de `/operacion` en navegador, escritorio y móvil.
+- Este es el primer incremento del sprint; revisar después la jerarquía de caja/bitácora. Métricas va después de cerrar Operaciones y Home después de Métricas.
+
+## 2026-10-16 — Excepciones de fechas en Operaciones
+
+### Qué cambió
+- Se añadieron excepciones por fecha para permanecer cerrado, operar con el horario semanal o usar horas especiales, con mensaje opcional a clientes.
+- Functions guarda las excepciones en `tenants/{tenantId}/storeExceptions/{YYYY-MM-DD}`, las audita y las aplica dentro del guard transaccional de pedidos Web y POS.
+- El Admin permite crear, editar y eliminar excepciones de hoy y fechas futuras. La tienda informa la atención de hoy y las próximas fechas configuradas.
+- Se documentó que feriados se ingresan manualmente por local; no hay importación automática del calendario nacional.
+
+### Alcance de cierre
+- Con esta capacidad queda cubierta la pasada funcional de calendario dentro de Operaciones. Proveedores y tareas quedan para después, según el orden acordado; el agendamiento de pedidos se mantiene en backlog.
+- No se despliega a Firebase. Revisar el cambio local y confirmar el proyecto Firebase piloto antes de cualquier despliegue.
+
+### Validación
+- `npm --prefix apps/functions run build`: OK.
+- `npm --workspace apps/admin run build`: OK.
+- `npm --workspace apps/web run build`: OK.
+- `npx playwright test e2e/unit/m6j-store-hours.spec.ts --config=playwright.config.ts`: 44/44 OK.
+- `e2e/api/m6j-store-operation.contract.spec.ts`: no ejecutable en este entorno porque el emulador Firestore `127.0.0.1:8080` no estaba levantado; se dejó cobertura para auth, persistencia, respuesta pública y rechazo Web/POS.
+- `git diff --check`: OK.
+
 ## Fase actual
 M6J — horario operativo fail-closed, operación manual auditada y cierre de caja
 

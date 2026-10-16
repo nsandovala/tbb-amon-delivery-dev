@@ -76,6 +76,29 @@ interface CreateOrderResponse {
   operationalDate: string;
 }
 
+export type PublicStoreDateException = {
+  date: string;
+  mode: "closed" | "regular_hours" | "custom_hours";
+  open?: string;
+  close?: string;
+  customerMessage?: string;
+};
+
+export type PublicStoreAvailability = {
+  state: string;
+  acceptingOrders: boolean;
+  timezone: string;
+  localNow: string;
+  specialDate: PublicStoreDateException | null;
+  upcomingSpecialDates: PublicStoreDateException[];
+};
+
+export function fetchPublicStoreAvailability(tenantId: string): Promise<PublicStoreAvailability> {
+  return apiFetch<PublicStoreAvailability>(
+    `${FUNCTIONS_BASE}/getStoreStatus?tenantId=${encodeURIComponent(tenantId)}`
+  );
+}
+
 export async function createOrderApi(
   payload: CreateOrderPayload
 ): Promise<CreateOrderResponse> {

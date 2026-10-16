@@ -8,6 +8,7 @@ import { StoreHeader } from "@/components/store/store-header";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { HeroSection } from "@/components/store/hero-section";
 import { StorefrontClient } from "@/components/store/storefront-client";
+import { StoreSpecialDates } from "@/components/store/store-special-dates";
 import type { Category, Product, Tenant } from "@/types";
 
 interface StorePageProps {
@@ -108,6 +109,8 @@ export default function StorePage({ params }: StorePageProps) {
       <div className="relative z-10 w-full">
         <StoreHeader tenantName={tenant.name} />
       </div>
+
+      <StoreSpecialDates tenantId={tenant.id} />
 
       <main className="relative z-10 flex-1 w-full max-w-[1400px] mx-auto flex flex-col">
         <HeroSection />

@@ -15,6 +15,8 @@ import {
   getStoreControl,
   setStoreOperation,
   updateStoreHours,
+  updateStoreDateException,
+  deleteStoreDateException,
   getCashCloseSummary,
   closeCashSession,
 } from "./routes/store";
@@ -36,6 +38,8 @@ export {
   getStoreControl,
   setStoreOperation,
   updateStoreHours,
+  updateStoreDateException,
+  deleteStoreDateException,
   getCashCloseSummary,
   closeCashSession,
 };
