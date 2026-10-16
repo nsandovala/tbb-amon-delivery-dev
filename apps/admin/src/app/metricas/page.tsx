@@ -101,6 +101,7 @@ type TrendDay = {
   label: string;
   sales: number;
   orders: number;
+  products: { name: string; qty: number }[];
 };
 
 function getTrendDays(orders: AdminOrder[], now: Date): TrendDay[] {
@@ -111,8 +112,8 @@ function getTrendDays(orders: AdminOrder[], now: Date): TrendDay[] {
     return date;
   });
 
-  const totals = new Map<string, { sales: number; orders: number }>();
-  days.forEach((date) => totals.set(date.toLocaleDateString("en-CA"), { sales: 0, orders: 0 }));
+  const totals = new Map<string, { sales: number; orders: number; products: Map<string, number> }>();
+  days.forEach((date) => totals.set(date.toLocaleDateString("en-CA"), { sales: 0, orders: 0, products: new Map() }));
 
   orders.forEach((order) => {
     if (order.status === "cancelled") return;
@@ -123,12 +124,21 @@ function getTrendDays(orders: AdminOrder[], now: Date): TrendDay[] {
     if (!total) return;
     total.sales += getOrderTotal(order);
     total.orders += 1;
+    order.items?.forEach((item) => {
+      const name = item.productName || item.productId || "Producto sin nombre";
+      total.products.set(name, (total.products.get(name) ?? 0) + (item.qty ?? 0));
+    });
   });
 
   return days.map((date) => ({
     key: date.toLocaleDateString("en-CA"),
     label: date.toLocaleDateString("es-CL", { weekday: "short" }).replace(".", ""),
-    ...totals.get(date.toLocaleDateString("en-CA"))!,
+    sales: totals.get(date.toLocaleDateString("en-CA"))!.sales,
+    orders: totals.get(date.toLocaleDateString("en-CA"))!.orders,
+    products: Array.from(totals.get(date.toLocaleDateString("en-CA"))!.products.entries())
+      .map(([name, qty]) => ({ name, qty }))
+      .sort((left, right) => right.qty - left.qty)
+      .slice(0, 3),
   }));
 }
 
@@ -210,7 +220,7 @@ function StatCard({
   icon: LucideIcon;
 }) {
   return (
-    <article className="group relative rounded-2xl border border-white/10 bg-[#0c0f0f]/80 transition-colors hover:border-[#6f5934] focus-within:border-[#6f5934]">
+    <article className="rounded-2xl border border-white/10 bg-[#0c0f0f]/80 transition-colors hover:border-white/20">
       <div className="flex items-start justify-between gap-3 border-b border-white/6 px-4 py-3.5">
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{label}</p>
@@ -221,10 +231,6 @@ function StatCard({
         </div>
       </div>
       <p className="px-4 py-2.5 text-xs text-neutral-500">{detail}</p>
-      <div className="pointer-events-none absolute right-3 top-14 z-10 w-64 translate-y-1 rounded-xl border border-[#6f5934] bg-[#11100d]/95 p-3 opacity-0 shadow-2xl backdrop-blur-md transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-[#d6a85c]">Cómo leer esta métrica</p>
-        <p className="mt-1 text-xs leading-5 text-neutral-300">{detail}</p>
-      </div>
     </article>
   );
 }
@@ -310,11 +316,20 @@ function SalesTrend({ days }: { days: TrendDay[] }) {
             <div key={day.key} className="flex h-full flex-col items-center justify-end gap-2">
               <span className="text-[10px] tabular-nums text-neutral-500">{day.orders ? formatMoney(day.sales) : "—"}</span>
               <div className="flex h-full w-full items-end justify-center">
-                <div
-                  className={["w-full max-w-10 rounded-t-lg transition-all", isBest ? "bg-[#d6a85c]" : "bg-[#3d403a]"].join(" ")}
-                  style={{ height: `${height}%` }}
-                  title={`${day.label}: ${formatMoney(day.sales)} · ${day.orders} pedidos`}
-                />
+                <div className="group/bar relative flex h-full w-full max-w-10 items-end justify-center">
+                  <div
+                    className={["w-full rounded-t-lg transition-all", isBest ? "bg-[#c4a46a]" : "bg-[#3d403a]"].join(" ")}
+                    style={{ height: `${height}%` }}
+                  />
+                  <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 w-56 -translate-x-1/2 translate-y-1 rounded-xl border border-[#5b4a2e] bg-[#11100d]/95 p-3 text-left opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover/bar:translate-y-0 group-hover/bar:opacity-100">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-[#c4a46a]">{day.label} · resumen operacional</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{formatMoney(day.sales)} · {day.orders} pedidos</p>
+                    <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-neutral-500">Más vendidos</p>
+                    {day.products.length > 0 ? day.products.map((product) => (
+                      <p key={product.name} className="mt-1 flex justify-between gap-3 text-xs text-neutral-300"><span className="truncate">{product.name}</span><span className="shrink-0 text-[#c4a46a]">{product.qty}x</span></p>
+                    )) : <p className="mt-1 text-xs text-neutral-500">Sin ventas registradas</p>}
+                  </div>
+                </div>
               </div>
               <span className="text-[11px] capitalize text-neutral-400">{day.label}</span>
             </div>
