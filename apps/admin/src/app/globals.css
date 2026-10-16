@@ -38,26 +38,17 @@ a {
   text-decoration: none;
 }
 
-/* El dorado es acento de foco/acción. Las superficies siguen siendo oscuras. */
-[data-admin-surface="pos"] [class*="text-emerald-400"],
-[data-admin-surface="pos"] [class*="text-emerald-300"],
-[data-admin-surface="orders"] [class*="text-emerald-400"],
-[data-admin-surface="orders"] [class*="text-emerald-300"],
-[data-admin-surface="expenses"] [class*="text-emerald-400"],
-[data-admin-surface="expenses"] [class*="text-emerald-300"] {
-  color: #d6a85c !important;
-}
-
+/* El dorado es acento de foco/acción. Las superficies y los estados siguen oscuros. */
 [data-admin-surface="pos"] [class*="border-emerald-400"],
 [data-admin-surface="orders"] [class*="border-emerald-400"],
-[data-admin-surface="expenses"] [class*="border-emerald-400"] {
-  border-color: rgb(214 168 92 / 0.35) !important;
+[data-admin-surface="expenses"] button[class*="border-emerald-400"] {
+  border-color: rgb(196 164 106 / 0.45) !important;
 }
 
 [data-admin-surface="pos"] button[class*="bg-emerald-400"],
 [data-admin-surface="orders"] button[class*="bg-emerald-400"],
 [data-admin-surface="expenses"] button[class*="bg-emerald-400"] {
-  background-color: #d6a85c !important;
+  background-color: #c4a46a !important;
   color: #171108 !important;
 }
 

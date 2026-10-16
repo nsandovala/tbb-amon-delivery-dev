@@ -290,6 +290,11 @@ function SalesTrend({ days }: { days: TrendDay[] }) {
           <p className="text-[11px] uppercase tracking-[0.22em] text-[#a99570]">Patrón de venta POS + web</p>
           <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Días buenos y días a reforzar</h2>
           <p className="mt-1 text-sm text-neutral-500">Ventas reales de los últimos 7 días operacionales.</p>
+          <p className="mt-3 text-xs text-neutral-400">
+            Mejor: <span className="font-semibold text-[#c4a46a]">{best?.label ?? "—"} · {formatMoney(best?.sales)}</span>
+            <span className="mx-2 text-neutral-700">·</span>
+            Reforzar: <span className="font-semibold text-neutral-300">{weak?.label ?? "—"} · {formatMoney(weak?.sales)}</span>
+          </p>
         </div>
         <div className="flex gap-3 text-[11px] text-neutral-500">
           <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#d6a85c]" /> Sobre promedio</span>
@@ -317,11 +322,7 @@ function SalesTrend({ days }: { days: TrendDay[] }) {
         })}
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-[#4d3d25] bg-[#17130d] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#a99570]">Mejor día</p><p className="mt-1 font-bold text-[#f0d296]">{best?.label ?? "—"} · {formatMoney(best?.sales)}</p></div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Promedio diario</p><p className="mt-1 font-bold text-white">{formatMoney(average)}</p></div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Día a reforzar</p><p className="mt-1 font-bold text-neutral-300">{weak?.label ?? "—"} · {formatMoney(weak?.sales)}</p></div>
-      </div>
+      <p className="mt-3 text-xs text-neutral-500">Promedio diario: {formatMoney(average)} · Las barras muestran ventas y cantidad de pedidos.</p>
     </section>
   );
 }
