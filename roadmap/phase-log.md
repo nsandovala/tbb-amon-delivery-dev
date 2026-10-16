@@ -1,5 +1,42 @@
 # Phase Log
 
+## 2026-10-16 — Mini sprint: correcciones de revisión de fechas especiales
+
+### Qué cambió
+- El aviso público de hoy refleja apertura/cierre manual efectivo; deja de mostrar como vigente la decisión de calendario que el operador reemplazó.
+- `getStoreControl` lista todas las excepciones futuras, sin recortar a 365 días ni a 100 resultados. `getStoreStatus` conserva su ventana pública de 90 días y máximo 12 fechas.
+
+### Por qué cambió
+- La revisión del PR #74 detectó que una apertura manual podía aceptar pedidos mientras el aviso seguía diciendo “Cerrado”.
+- El backend aceptaba excepciones futuras que el panel dejaba de listar después de un año o al superar 100 registros.
+
+### Archivos modificados
+- `apps/web/src/components/store/store-special-dates.tsx`
+- `apps/web/src/lib/api/orders.ts`
+- `apps/web/src/lib/store-special-date-notice.ts`
+- `apps/functions/src/repositories/firestore-store.repo.ts`
+- `apps/functions/src/services/store-operation.service.ts`
+- `e2e/api/m6j-store-operation.contract.spec.ts`
+- `e2e/unit/m6j-public-special-dates.spec.ts`
+- `docs/architecture/store-operation-contract.md`
+- `roadmap/phase-log.md`
+- `roadmap/sprint-special-date-review-fixes.md`
+
+### Contratos afectados
+- `getStoreStatus` tipa explícitamente `override.mode` en la respuesta pública; no expone actor ni motivo.
+- El listado de `getStoreControl` cubre todas las fechas futuras persistidas. No cambia el esquema Firestore ni las reglas de aceptación de pedidos.
+
+### Validación
+- Build de Functions: OK.
+- Typecheck y build de Web: OK.
+- Unitarias del monorepo: 87/87 OK, incluyendo los cuatro casos nuevos del aviso público.
+- `git diff --check`: OK.
+- Se añadió prueba API con 101 excepciones futuras y una fecha a más de 365 días; pendiente de correr contra emuladores porque esta estación no tiene Firebase CLI y no hay emuladores activos.
+
+### Riesgos y siguiente paso
+- El listado administrativo puede crecer con el tiempo; la colección contiene como máximo una excepción por fecha. Si el volumen operativo aumenta mucho, añadir paginación como sprint independiente.
+- Ejecutar la prueba API desde la Mac con emuladores activos antes de merge. No hacer deploy; el proyecto Firebase destino sigue sujeto a confirmación explícita.
+
 ## 2026-10-16 — Ajustes visuales tras QA local
 
 ### Qué cambió
