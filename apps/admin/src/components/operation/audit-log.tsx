@@ -10,14 +10,14 @@ function formatLocal(atLocal: string): string {
 
 export function AuditLog({ events }: { events: StoreEvent[] }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#101010] p-5">
+    <section className="rounded-lg border border-white/10 bg-[#101010] p-5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-neutral-500">Bitácora (solo lectura)</p>
       {events.length === 0 ? (
         <p className="mt-3 text-sm text-neutral-500">Sin eventos registrados.</p>
       ) : (
         <ol className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1">
           {events.map((event) => (
-            <li key={event.id} className="rounded-2xl border border-white/5 bg-white/[0.02] px-3 py-2.5 text-sm">
+            <li key={event.id} className="rounded-md border border-white/5 bg-white/[0.02] px-3 py-2.5 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs tabular-nums text-neutral-500">{formatLocal(event.atLocal)}</span>
                 <span className="font-semibold text-white">{STORE_EVENT_LABELS[event.type] ?? event.type}</span>
