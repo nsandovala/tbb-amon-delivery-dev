@@ -4,7 +4,8 @@ export const TBB_ORDERS = [
     status: "preparing",
     channel: "web",
     fulfillmentType: "delivery",
-    paymentMethod: "pending",
+    paymentMethod: "transfer",
+    paymentStatus: "pending",
     customer: { name: "Cliente Demo", phone: "+56900000000" },
     items: [
       {

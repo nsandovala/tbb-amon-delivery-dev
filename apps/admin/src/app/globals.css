@@ -264,22 +264,25 @@ a {
 .metric-attribution-summary { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--metric-border); border-radius: 7px; background: var(--metric-raised); padding: 10px; }
 .metric-attribution-summary > div { min-width: 0; }
 .metric-note { border-top: 1px solid var(--metric-border); padding-top: 10px; color: var(--metric-muted); font-size: 10px; line-height: 1.5; }
-.metric-smart-panel { display: flex; align-items: flex-start; gap: 13px; border: 1px solid var(--metric-border); border-left: 3px solid var(--metric-accent); border-radius: 9px; background: var(--metric-panel); padding: 15px; }
-.metric-smart-mark { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid var(--metric-border); border-radius: 7px; color: var(--metric-accent); font-size: 13px; font-weight: 800; }
+.metric-smart-panel { display: flex; align-items: flex-start; gap: 13px; border: 1px solid #286047; border-left: 3px solid #27b77d; border-radius: 9px; background: linear-gradient(108deg, rgb(25 112 76 / 0.3) 0%, rgb(19 67 49 / 0.2) 38%, var(--metric-panel) 82%); padding: 15px; }
+.metric-smart-mark { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid rgb(62 190 132 / 0.42); border-radius: 7px; color: #39c58b; font-size: 13px; font-weight: 800; }
 .metric-smart-copy { color: var(--metric-muted); font-size: 12px; line-height: 1.6; }
 .metric-smart-copy strong { color: var(--metric-text); }
-.metric-smart-icon { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 7px; background: var(--metric-raised); color: var(--metric-accent); }
+.metric-smart-icon { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 7px; background: rgb(39 183 125 / 0.13); color: #39c58b; }
 .metric-footer { padding: 12px 2px 4px; color: var(--metric-muted); font-size: 9px; line-height: 1.5; }
 .metric-loading, .metric-error { padding: 22px; color: var(--metric-muted); font-size: 13px; }
 .metric-error { border: 1px solid rgb(194 79 70 / .4); border-radius: 8px; background: rgb(194 79 70 / .08); color: #e79a93; }
 
 html[data-amon-theme="light"] body, html[data-amon-theme="light"] body > div { background: #eff1ed !important; color: #202521 !important; }
-html[data-amon-theme="light"] body aside { background: #e9ece7 !important; border-color: #d9ded9 !important; }
-html[data-amon-theme="light"] body aside .text-white { color: #202521 !important; }
-html[data-amon-theme="light"] body aside .text-neutral-400, html[data-amon-theme="light"] body aside .text-neutral-500 { color: #68716b !important; }
-html[data-amon-theme="light"] body aside [class*="bg-white/"] { background: #f7f8f5 !important; }
-html[data-amon-theme="light"] body aside a { border-color: #d9ded9 !important; }
-html[data-amon-theme="light"] body aside a[class*="bg-[#211b11]"] { background: #f4eedf !important; color: #624c2a !important; }
+html[data-amon-theme="light"] body aside { background: #080808 !important; border-color: #29261f !important; }
+html[data-amon-theme="light"] body aside .text-white { color: #ffffff !important; }
+html[data-amon-theme="light"] body aside .text-neutral-400, html[data-amon-theme="light"] body aside .text-neutral-500 { color: #a3a3a3 !important; }
+html[data-amon-theme="light"] body aside [class*="bg-white/"] { background: rgb(255 255 255 / 0.025) !important; }
+html[data-amon-theme="light"] body aside a { border-color: rgb(255 255 255 / 0.06) !important; }
+html[data-amon-theme="light"] body aside a[class*="bg-[#211b11]"] { background: #211b11 !important; color: #f0d296 !important; border-color: #806438 !important; }
+html[data-amon-theme="light"] [data-admin-surface="metrics"] .metric-smart-panel { border-color: #a8d3b5; border-left-color: #15945f; background: linear-gradient(108deg, #d9f1e2 0%, #e8f5eb 38%, var(--metric-panel) 82%); }
+html[data-amon-theme="light"] [data-admin-surface="metrics"] .metric-smart-mark { border-color: #a8d3b5; color: #167647; }
+html[data-amon-theme="light"] [data-admin-surface="metrics"] .metric-smart-icon { background: #d9f1e2; color: #167647; }
 
 @media (max-width: 1100px) {
   .metric-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
