@@ -3,6 +3,8 @@ export interface AdminOrderItem {
   productName?: string;
   qty?: number;
   unitPrice?: number;
+  subtotal?: number;
+  name?: string;
   imageUrl?: string;
   categoryId?: string;
 }
@@ -34,6 +36,8 @@ export interface AdminOrder {
   tenantId?: string;
   status?: OrderStatus;
   channel?: string;
+  acquisitionSource?: "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
+  acquisitionCampaign?: string;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
   paymentStatus?: string;
   fulfillmentType?: string;

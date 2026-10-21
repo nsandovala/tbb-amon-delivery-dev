@@ -124,6 +124,25 @@ test.describe("Orders API contract emulator", () => {
     expect(body.data.displayCode).toMatch(/^\d{3,}$/);
   });
 
+  test("createPosSale conserva el origen manual y la campaña opcional", async ({ request }) => {
+    const res = await request.post("createPosSale", {
+      data: {
+        ...validPosSale(),
+        acquisitionSource: "instagram",
+        acquisitionCampaign: "Historia fin de semana",
+      },
+    });
+    expect(res.status(), await res.text()).toBe(201);
+
+    const body = await res.json();
+    const get = await request.get(`getOrder/${body.data.orderId}?tenantId=${TENANT}`);
+    expect(get.status(), await get.text()).toBe(200);
+    const found = await get.json();
+    expect(found.data.channel).toBe("admin_pos");
+    expect(found.data.acquisitionSource).toBe("instagram");
+    expect(found.data.acquisitionCampaign).toBe("Historia fin de semana");
+  });
+
   test("createPosSale delivery cobra fee y persiste en getOrder", async ({ request }) => {
     const res = await request.post("createPosSale", {
       data: {

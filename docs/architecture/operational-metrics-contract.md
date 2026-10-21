@@ -9,6 +9,11 @@ It does not write documents.
 It does not persist snapshots.
 It does not call new Cloud Functions.
 
+Orders created from POS may include optional `acquisitionSource` and
+`acquisitionCampaign` fields for manual channel attribution. `channel` continues
+to identify the technical source (`admin_pos`); attribution records where the
+customer learned about the business. This is not a Meta integration.
+
 ## Data sources
 
 - Orders: `tenants/{tenantId}/orders/{orderId}`
@@ -138,6 +143,19 @@ web
 admin_pos
 ```
 
+### Manual acquisition attribution
+
+Optional POS values:
+
+```txt
+instagram | facebook | whatsapp | in_person | other
+```
+
+`acquisitionCampaign` is optional, limited to 100 characters, and only accepted
+with a selected source. Unattributed orders leave both fields absent. The metrics
+view reports order count and registered sales by source; it does not infer a
+source from the technical `channel`.
+
 ### Open POS sales
 
 Active unclosed admin POS orders:
@@ -149,11 +167,12 @@ status in {queued, preparing, ready, on_the_way}
 
 ## Non-goals
 
-- No charts or historical persistence layer.
+- No historical snapshots or persistence layer for aggregates.
 - No ERP/outbox integration.
 - No storefront changes.
 - No catalog or CRM work.
 - No backend aggregation documents.
+- No automatic Meta attribution or campaign sync.
 
 ## Validation baseline
 

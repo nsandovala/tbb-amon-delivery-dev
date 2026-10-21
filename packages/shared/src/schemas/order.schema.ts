@@ -109,6 +109,8 @@ export const orderSchema = z.object({
   paymentStatus: paymentStatusSchema,
   paymentMethod: paymentMethodSchema,
   channel: orderChannelSchema,
+  acquisitionSource: z.enum(["instagram", "facebook", "whatsapp", "in_person", "other"]).optional(),
+  acquisitionCampaign: z.string().trim().max(100).optional(),
   fulfillmentType: fulfillmentTypeSchema,
   items: z.array(orderItemSchema).min(1, "Order must have at least one item"),
   modifiers: z.array(z.unknown()).default([]),

@@ -93,6 +93,8 @@ interface CreatePosSalePayload {
   };
   fulfillmentType?: "delivery" | "pickup";
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
+  acquisitionSource?: "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
+  acquisitionCampaign?: string;
 }
 
 interface CreatePosSaleResponse {

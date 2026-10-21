@@ -159,7 +159,17 @@ export const createPosSaleSchema = z.object({
   customer: createPosSaleCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema.optional().default("pickup"),
   paymentMethod: paymentMethodSchema.optional().default("pending"),
+  acquisitionSource: z.enum(["instagram", "facebook", "whatsapp", "in_person", "other"]).optional(),
+  acquisitionCampaign: z.string().trim().max(100).optional(),
 }).superRefine((value, ctx) => {
+  if (value.acquisitionCampaign && !value.acquisitionSource) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["acquisitionCampaign"],
+      message: "Selecciona el origen antes de indicar una campaña o publicación",
+    });
+  }
+
   if (value.fulfillmentType !== "delivery") {
     return;
   }

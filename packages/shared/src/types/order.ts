@@ -7,6 +7,7 @@ export type OrderStatus =
   | "cancelled";
 
 export type OrderChannel = "web" | "whatsapp" | "admin_pos" | "marketplace";
+export type OrderAcquisitionSource = "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
 
 export type OrderItemModifier = {
   modifierId: string;
@@ -30,6 +31,9 @@ export type Order = {
   tenantId: string;
   status: OrderStatus;
   channel: OrderChannel;
+  /** Optional manual acquisition attribution; distinct from the technical order channel. */
+  acquisitionSource?: OrderAcquisitionSource;
+  acquisitionCampaign?: string;
 
   customer: {
     name?: string;
