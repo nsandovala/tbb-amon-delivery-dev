@@ -105,6 +105,19 @@ interface CreatePosSaleResponse {
   operationalDate: string;
 }
 
+export interface PosOrderSnapshot {
+  id: string;
+  displayCode?: string;
+  channel?: string;
+  fulfillmentType?: "delivery" | "pickup";
+  paymentMethod?: "pending" | "cash" | "card" | "transfer";
+  acquisitionSource?: "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
+  acquisitionCampaign?: string;
+  customer?: { name?: string; phone?: string; address?: string; notes?: string };
+  items?: { name?: string; qty?: number; unitPrice?: number; subtotal?: number }[];
+  totals?: { subtotal?: number; deliveryFee?: number; delivery?: number; discount?: number; total?: number };
+}
+
 export async function createPosSaleApi(
   payload: CreatePosSalePayload
 ): Promise<CreatePosSaleResponse> {
@@ -112,6 +125,12 @@ export async function createPosSaleApi(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function getOrderApi(orderId: string, tenantId = "tbb"): Promise<PosOrderSnapshot> {
+  return apiFetch<PosOrderSnapshot>(
+    `${FUNCTIONS_BASE}/getOrder/${encodeURIComponent(orderId)}?tenantId=${encodeURIComponent(tenantId)}`
+  );
 }
 
 interface UpdateOrderStatusPayload {

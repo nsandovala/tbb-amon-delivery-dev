@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   onSnapshot,
@@ -10,12 +11,14 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
-import { db } from "../../lib/firebase/client";
-import { createPosSaleApi, updateOrderStatusApi } from "../../lib/api/orders";
+import { auth, db } from "../../lib/firebase/client";
+import { createPosSaleApi, getOrderApi, updateOrderStatusApi } from "../../lib/api/orders";
 import { StoreStatusStrip } from "@/components/store-status-strip";
 import { getHumanOrderLabel } from "../../lib/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
-import { getOperationalDayStart } from "../../lib/time";
+import { PosReceiptDialog } from "../../components/pos/pos-receipt-dialog";
+import { receiptFromOrder, type PosReceipt } from "../../lib/pos-receipt";
+import { getOperationalDayStart, toDate } from "../../lib/time";
 import {
   Minus,
   Plus,
@@ -30,6 +33,8 @@ import {
   Bike,
   Trash2,
   MessageSquare,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 type PosProduct = {
@@ -57,13 +62,16 @@ type PosOrder = {
   total?: number;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
   fulfillmentType?: "delivery" | "pickup";
-  items?: { productId?: string; productName?: string; qty?: number }[];
+  items?: { productId?: string; productName?: string; name?: string; qty?: number; unitPrice?: number }[];
   customer?: {
     name?: string;
     phone?: string;
   };
   createdAt?: unknown;
   totals?: {
+    subtotal?: number;
+    delivery?: number;
+    deliveryFee?: number;
     total?: number;
   };
 };
@@ -117,6 +125,7 @@ export default function PosPage() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [todayOrders, setTodayOrders] = useState<PosOrder[]>([]);
+  const [posHistoryOrders, setPosHistoryOrders] = useState<PosOrder[]>([]);
   const [pendingLiveOrder, setPendingLiveOrder] = useState<{
     orderId: string;
     displayCode: string;
@@ -126,6 +135,10 @@ export default function PosPage() {
     displayCode: string;
   } | null>(null);
   const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
+  const [receipt, setReceipt] = useState<PosReceipt | null>(null);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [operatorEmail, setOperatorEmail] = useState("Operador");
 
   const startOfDay = useMemo(() => {
     return Timestamp.fromDate(getOperationalDayStart(new Date()));
@@ -149,6 +162,20 @@ export default function PosPage() {
     : phoneRequired
     ? isValidChileanPhone(customerPhone)
     : customerPhone.trim().length === 0 || isValidChileanPhone(customerPhone);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("amon-operations-theme");
+    if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setOperatorEmail(user?.email ?? "Operador");
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.amonTheme = theme;
+  }, [theme]);
 
   useEffect(() => {
     if (!toast) return;
@@ -198,6 +225,20 @@ export default function PosPage() {
 
     return () => unsub();
   }, [startOfDay]);
+
+  useEffect(() => {
+    const ref = collection(db, `tenants/${tenantId}/orders`);
+    // Single-field query avoids introducing a composite-index requirement.
+    const q = query(ref, where("channel", "==", "admin_pos"));
+    return onSnapshot(
+      q,
+      (snapshot) => setPosHistoryOrders(snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<PosOrder, "id">),
+      }))),
+      (error) => console.error("Error cargando historial POS:", error)
+    );
+  }, []);
 
   useEffect(() => {
     if (!pendingLiveOrder) return;
@@ -273,6 +314,13 @@ export default function PosPage() {
     [todayOrders]
   );
 
+  const recentPosHistory = useMemo(
+    () => [...posHistoryOrders]
+      .sort((a, b) => (toDate(b.createdAt)?.getTime() ?? 0) - (toDate(a.createdAt)?.getTime() ?? 0))
+      .slice(0, 50),
+    [posHistoryOrders]
+  );
+
   const catalogNames = useMemo(
     () => Object.fromEntries(products.map((p) => [p.id, p.name])),
     [products]
@@ -333,6 +381,17 @@ export default function PosPage() {
     setVerifiedLiveOrder(null);
   }
 
+  function startNewSale() {
+    setIsReceiptOpen(false);
+    clearPos();
+    document.getElementById("pos-catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openStoredReceipt(order: PosOrder) {
+    setReceipt(receiptFromOrder(order));
+    setIsReceiptOpen(true);
+  }
+
   async function handleCreateOrder() {
     if (!isFormValid || isSubmitting) return;
 
@@ -347,6 +406,33 @@ export default function PosPage() {
       setVerifiedLiveOrder(null);
 
       const orderItems = cart.map((item) => ({ productId: item.product.id, qty: item.quantity }));
+      const receiptItems = cart.map((item) => ({
+        name: item.product.name,
+        quantity: item.quantity,
+        unitPrice: item.product.price,
+      }));
+      let receiptDetails: Omit<PosReceipt, "orderId" | "displayCode" | "createdAt"> = {
+        customerName: effectiveCustomerName,
+        customerPhone: phoneForOrder ?? undefined,
+        fulfillmentType,
+        paymentLabel: paymentLabels[paymentMethod],
+        acquisitionLabel: acquisitionSource
+          ? ({
+              instagram: "Instagram",
+              facebook: "Facebook",
+              whatsapp: "WhatsApp",
+              in_person: "Presencial",
+              other: "Otro",
+            } as const)[acquisitionSource]
+          : undefined,
+        acquisitionCampaign: acquisitionCampaign.trim() || undefined,
+        address: fulfillmentType === "delivery" ? address.trim() : undefined,
+        notes: notes.trim() || undefined,
+        items: receiptItems,
+        subtotal,
+        delivery,
+        total,
+      };
 
       const { orderId, displayCode } = await createPosSaleApi({
         tenantId,
@@ -364,7 +450,53 @@ export default function PosPage() {
         ...(acquisitionCampaign.trim() ? { acquisitionCampaign: acquisitionCampaign.trim() } : {}),
       });
 
+      // Use the saved snapshot (backend price/totals) for the customer-facing receipt.
+      // If the read fails, preserve the sale and fall back to the values already shown in POS.
+      try {
+        const savedOrder = await getOrderApi(orderId, tenantId);
+        const sourceLabels = {
+          instagram: "Instagram",
+          facebook: "Facebook",
+          whatsapp: "WhatsApp",
+          in_person: "Presencial",
+          other: "Otro",
+        } as const;
+        const savedPaymentLabels = {
+          cash: "Efectivo",
+          transfer: "Transferencia",
+          card: "Tarjeta",
+          pending: "Pendiente",
+        } as const;
+        receiptDetails = {
+          ...receiptDetails,
+          customerName: savedOrder.customer?.name || receiptDetails.customerName,
+          customerPhone: savedOrder.customer?.phone || receiptDetails.customerPhone,
+          fulfillmentType: savedOrder.fulfillmentType || receiptDetails.fulfillmentType,
+          paymentLabel: savedOrder.paymentMethod
+            ? savedPaymentLabels[savedOrder.paymentMethod]
+            : receiptDetails.paymentLabel,
+          acquisitionLabel: savedOrder.acquisitionSource
+            ? sourceLabels[savedOrder.acquisitionSource]
+            : undefined,
+          acquisitionCampaign: savedOrder.acquisitionCampaign || undefined,
+          address: savedOrder.customer?.address || undefined,
+          notes: savedOrder.customer?.notes || undefined,
+          items: savedOrder.items?.map((item) => ({
+            name: item.name || "Producto",
+            quantity: item.qty ?? 0,
+            unitPrice: item.unitPrice ?? 0,
+          })) ?? receiptDetails.items,
+          subtotal: savedOrder.totals?.subtotal ?? receiptDetails.subtotal,
+          delivery: savedOrder.totals?.deliveryFee ?? savedOrder.totals?.delivery ?? receiptDetails.delivery,
+          total: savedOrder.totals?.total ?? receiptDetails.total,
+        };
+      } catch (receiptReadError) {
+        console.warn("Se usará el resumen POS para el comprobante:", receiptReadError);
+      }
+
       setPendingLiveOrder({ orderId, displayCode });
+      setReceipt({ orderId, displayCode, createdAt: new Date(), ...receiptDetails });
+      setIsReceiptOpen(true);
       clearPos();
       setToast({
         type: "success",
@@ -424,7 +556,7 @@ export default function PosPage() {
   };
 
   return (
-    <main data-admin-surface="pos" className="min-h-screen bg-[#050505] text-white">
+    <main data-admin-surface="pos" data-theme={theme} className="pos-root min-h-screen bg-[#050505] text-white">
       <div className={["mx-auto max-w-[1600px] px-4 py-5", cart.length > 0 ? "pb-24 xl:pb-5" : ""].join(" ")}>
 
         <StoreStatusStrip />
@@ -432,14 +564,32 @@ export default function PosPage() {
         {/* Header compacto */}
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-400/80">Centro de venta</p>
-            <h1 className="mt-0.5 text-2xl font-black tracking-tight text-white">POS Lite</h1>
+            <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-400/80">Punto de venta · TBB</p>
+            <h1 className="mt-0.5 text-2xl font-black tracking-tight text-white">The Best Burger</h1>
             <p className="mt-1 text-xs text-neutral-400">
-              Venta manual · {itemCount > 0 ? `${itemCount} ${itemCount === 1 ? "item" : "items"} en caja` : "caja vacía"}
+              Valparaíso · Operando: {operatorEmail} · {itemCount > 0 ? `${itemCount} ${itemCount === 1 ? "producto" : "productos"} en caja` : "caja lista"}
             </p>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {receipt && !isReceiptOpen ? (
+              <button type="button" className="pos-theme-toggle" onClick={() => setIsReceiptOpen(true)}>
+                Último comprobante · #{receipt.displayCode}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setTheme((current) => {
+                const next = current === "dark" ? "light" : "dark";
+                window.localStorage.setItem("amon-operations-theme", next);
+                return next;
+              })}
+              aria-label={`Cambiar a modo ${theme === "dark" ? "claro" : "oscuro"}`}
+              className="pos-theme-toggle"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              Modo {theme === "dark" ? "claro" : "oscuro"}
+            </button>
             <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-500">Ventas</p>
               <p className="mt-0.5 text-base font-black text-emerald-400 xl:text-xl">{formatMoney(totalSalesToday)}</p>
@@ -459,7 +609,7 @@ export default function PosPage() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_400px]">
 
           {/* CATÁLOGO COMPACTO */}
-          <section className="rounded-2xl border border-white/10 bg-[#101010] p-4">
+          <section id="pos-catalog" className="pos-panel rounded-2xl border border-white/10 bg-[#101010] p-4">
 
             {/* Búsqueda + categorías */}
             <div className="mb-3 space-y-2">
@@ -614,10 +764,42 @@ export default function PosPage() {
                 </p>
               </div>
             ) : null}
+
+            <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3" aria-labelledby="pos-history-title">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p id="pos-history-title" className="text-[11px] uppercase tracking-[0.16em] text-neutral-300">Historial POS</p>
+                  <p className="mt-0.5 text-[11px] text-neutral-500">Ventas guardadas · comprobantes internos</p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-neutral-400">{recentPosHistory.length}</span>
+              </div>
+              {recentPosHistory.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs text-neutral-500">Todavía no hay ventas POS registradas.</p>
+              ) : (
+                <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                  {recentPosHistory.map((sale) => {
+                    const savedReceipt = receiptFromOrder(sale);
+                    return (
+                      <div key={sale.id} className="flex items-center gap-3 rounded-lg border border-white/8 bg-[#0D0D0D] px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-white">{getHumanOrderLabel({ id: sale.id, displayCode: sale.displayCode })} · {savedReceipt.customerName}</p>
+                          <p className="mt-0.5 text-[11px] text-neutral-500">
+                            {savedReceipt.createdAt ? new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short", timeZone: "America/Santiago" }).format(savedReceipt.createdAt) : "Fecha sin registro"}
+                            {" · "}{paymentLabels[sale.paymentMethod ?? "pending"]}{" · "}{sale.status === "cancelled" ? "Cancelada" : sale.status === "delivered" ? "Entregada" : "En curso"}
+                          </p>
+                        </div>
+                        <strong className="shrink-0 text-xs text-emerald-300">{formatMoney(sale.totals?.total ?? sale.total)}</strong>
+                        <button type="button" className="pos-secondary-button shrink-0 px-2.5 py-1.5 text-[11px]" onClick={() => openStoredReceipt(sale)}>Comprobante</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </section>
 
           {/* CAJA OPERATIVA */}
-          <aside id="pos-checkout" className="rounded-2xl border border-white/10 bg-[#101010] p-4">
+          <aside id="pos-checkout" className="pos-panel rounded-2xl border border-white/10 bg-[#101010] p-4">
 
             {/* Header caja */}
             <div className="mb-4 flex items-center justify-between">
@@ -1010,6 +1192,8 @@ export default function PosPage() {
           </div>
         </div>
       ) : null}
+
+      {receipt && isReceiptOpen ? <PosReceiptDialog receipt={receipt} onClose={() => setIsReceiptOpen(false)} onNewSale={startNewSale} /> : null}
 
       {/* Toast global */}
       {toast ? (
