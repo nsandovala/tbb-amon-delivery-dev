@@ -3,6 +3,72 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-21 — Mini sprint: correcciones de revisión Codex CI en Métricas
+
+### Qué cambió
+- Las comparaciones de hoy, últimos 7 y últimos 30 días desplazan ambos extremos por el mismo número de días calendario, conservando la hora local y el corte operacional. Los períodos personalizados mantienen una comparación previa de igual duración.
+- AMON Finanzas Smart ya no calcula un neto con ventas Web/POS filtradas y gastos de toda la tienda. Con un canal seleccionado, explica el alcance y oculta el neto; con todos los canales, conserva el cálculo global.
+- El gráfico destaca el día de mayor venta en modo Ventas y el día con más pedidos en modo Pedidos, con una etiqueta acorde a cada selección.
+- Se agregaron pruebas unitarias puras para los tres casos.
+
+### Archivos modificados
+- `apps/admin/src/app/metricas/page.tsx`
+- `apps/admin/src/lib/metrics.ts`
+- `e2e/unit/m7-metrics-review-fixes.spec.ts`
+- `docs/architecture/operational-metrics-contract.md`
+- `roadmap/sprint-metrics.md`
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- No cambia la persistencia, Firestore, los pedidos ni el contrato API.
+- El contrato de comparación ahora explicita ventanas con la misma hora local; gastos continúan sin atribución por canal.
+
+### Validación
+- `npx playwright test e2e/unit/m7-metrics-review-fixes.spec.ts --config=playwright.config.ts`: 4/4 OK.
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`: OK.
+- `npm --workspace apps/admin run build`: OK; compiló y generó las páginas. Next reportó avisos de caché Webpack y múltiples lockfiles.
+- `git diff --check`: OK.
+- La suite Orders API de Nelson reportó 14/14 antes de estos cambios; valida persistencia de atribución POS, no esta lógica visual.
+
+### Riesgos y siguiente paso
+- La comparación personalizada continúa siendo un intervalo inmediatamente anterior de igual duración, no una jornada operacional semántica.
+- No se hizo commit, push, merge ni deploy. Tras validar, revisar el diff y actualizar el PR abierto.
+
+## 2026-10-21 — Sprint de UX y atribución manual en Métricas
+
+### Qué cambió
+- `/metricas` adopta el mockup aprobado: cuatro tarjetas prioritarias, filtro de período/canal, comparación opcional, modo claro y oscuro, tendencia semanal con detalle por hover/foco, métodos de pago, ranking de productos, origen del pedido y observación de AMON Finanzas Smart.
+- El panel identifica tienda, local y operador usando datos del tenant y de la sesión Firebase.
+- La captura POS permite registrar origen opcional (`instagram`, `facebook`, `whatsapp`, `in_person`, `other`) y campaña/publicación opcional. Se mantiene `channel=admin_pos` como canal técnico separado.
+- Las métricas se calculan en vivo desde `orders` y `expenses`; no se crean snapshots ni nuevas colecciones.
+
+### Archivos modificados
+- `apps/admin/src/app/metricas/page.tsx`, `apps/admin/src/app/globals.css`, `apps/admin/src/app/pos/page.tsx`
+- `apps/admin/src/lib/api/orders.ts`, `apps/admin/src/lib/firebase/queries/orders.ts`
+- `apps/functions/src/schemas/order.shared.ts`, `apps/functions/src/repositories/firestore-orders.repo.ts`, `apps/functions/src/services/pos.service.ts`
+- `packages/shared/src/types/order.ts`, `packages/shared/src/schemas/order.schema.ts`
+- `e2e/api/orders.contract.spec.ts`
+- `contracts/api-contracts.md`, `docs/architecture/{customer-order-contract,operational-metrics-contract}.md`, `roadmap/sprint-metrics.md`
+
+### Contratos afectados
+- Los documentos de order pueden tener `acquisitionSource` y `acquisitionCampaign`; ambos son opcionales, no requieren migración. La campaña requiere origen y admite hasta 100 caracteres.
+- No cambia el contrato de checkout web, pagos, estado, totales ni cierre de caja.
+- No hay conexión a Meta; la atribución se registra manualmente durante una venta POS.
+
+### Validación
+- Typecheck de Admin: OK.
+- Build de Admin: OK; Next informa advertencias preexistentes de raíz por múltiples lockfiles y de caché Webpack, sin afectar la compilación.
+- Build de Functions y typecheck de Shared: OK.
+- Smoke de Zod: acepta origen + campaña y rechaza campaña sin origen.
+- `git diff --check`: OK.
+- Prueba API de persistencia y QA visual dentro de la app con emuladores: pendientes; este entorno no tiene Firebase CLI ni emuladores disponibles.
+
+### Riesgos y siguiente paso
+- Órdenes existentes no tienen estos campos y aparecerán como “Sin origen”.
+- La atribución manual depende de que el operador seleccione el origen; no representa tracking automático ni ingresos atribuidos por Meta.
+- Los agregados siguen leyendo las colecciones live completas, suficiente para la marcha blanca actual.
+- Revisar `/metricas` y el selector POS localmente; no hacer deploy. Commit y push requieren aprobación por separado.
+
 ## 2026-10-16 — M6J follow-up: precedencia pública de cierre de caja
 
 ### Qué cambió

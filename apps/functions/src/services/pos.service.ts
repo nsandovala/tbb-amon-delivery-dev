@@ -120,6 +120,8 @@ export async function handleCreatePosSale(
     fulfillmentType: input.fulfillmentType,
     paymentMethod: input.paymentMethod ?? "pending",
     channel: "admin_pos",
+    acquisitionSource: input.acquisitionSource,
+    acquisitionCampaign: input.acquisitionCampaign,
     totals: { subtotal, delivery, total },
     customerId: normalizedPhone ?? undefined,
     customerPhoneNormalized: normalizedPhone ?? undefined,

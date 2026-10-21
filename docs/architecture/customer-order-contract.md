@@ -40,6 +40,8 @@ POS sale
 - `tenantId`
 - `status`
 - `channel`
+- `acquisitionSource?` — POS acquisition origin, distinct from `channel`
+- `acquisitionCampaign?` — optional campaign/post label, max 100 characters
 - `paymentMethod`
 - `paymentStatus`
 - `fulfillmentType`

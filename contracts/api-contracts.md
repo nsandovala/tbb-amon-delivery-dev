@@ -30,6 +30,11 @@ Payload esperado:
   - `notes?`
 - `fulfillmentType`
 - `paymentMethod?`
+- `acquisitionSource?`: `instagram` | `facebook` | `whatsapp` | `in_person` | `other`
+- `acquisitionCampaign?`: texto opcional de hasta 100 caracteres; requiere `acquisitionSource`
+
+`channel` se mantiene como canal técnico (`admin_pos`). `acquisitionSource` registra
+de forma manual cómo llegó el cliente y no reemplaza el canal de creación.
 
 El frontend **no** debe enviar:
 - `subtotal`

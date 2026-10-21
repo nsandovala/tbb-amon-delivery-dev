@@ -9,6 +9,11 @@ It does not write documents.
 It does not persist snapshots.
 It does not call new Cloud Functions.
 
+Orders created from POS may include optional `acquisitionSource` and
+`acquisitionCampaign` fields for manual channel attribution. `channel` continues
+to identify the technical source (`admin_pos`); attribution records where the
+customer learned about the business. This is not a Meta integration.
+
 ## Data sources
 
 - Orders: `tenants/{tenantId}/orders/{orderId}`
@@ -42,6 +47,12 @@ today   = from current operational-day start to now
 last7   = from current operational-day start minus 6 days to now
 last30  = from current operational-day start minus 29 days to now
 ```
+
+When comparison is enabled, preset windows compare the same local-time slice
+shifted by one matching period (1, 7, or 30 calendar days). This keeps an
+in-progress operational day aligned with the same hours of the previous day.
+Custom ranges compare against the immediately preceding interval of equal
+elapsed duration.
 
 Orders are filtered by:
 
@@ -138,6 +149,24 @@ web
 admin_pos
 ```
 
+The channel filter applies to order-derived metrics only. Expenses have no
+channel attribution, so the operational net is suppressed while a single sales
+channel is selected. With all channels selected, net is all-channel sales minus
+active expenses for the selected dates.
+
+### Manual acquisition attribution
+
+Optional POS values:
+
+```txt
+instagram | facebook | whatsapp | in_person | other
+```
+
+`acquisitionCampaign` is optional, limited to 100 characters, and only accepted
+with a selected source. Unattributed orders leave both fields absent. The metrics
+view reports order count and registered sales by source; it does not infer a
+source from the technical `channel`.
+
 ### Open POS sales
 
 Active unclosed admin POS orders:
@@ -149,11 +178,12 @@ status in {queued, preparing, ready, on_the_way}
 
 ## Non-goals
 
-- No charts or historical persistence layer.
+- No historical snapshots or persistence layer for aggregates.
 - No ERP/outbox integration.
 - No storefront changes.
 - No catalog or CRM work.
 - No backend aggregation documents.
+- No automatic Meta attribution or campaign sync.
 
 ## Validation baseline
 

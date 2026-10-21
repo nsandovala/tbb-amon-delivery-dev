@@ -2,342 +2,278 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  ArrowDownLeft,
-  ArrowUpRight,
+  CalendarDays,
+  ChartNoAxesColumnIncreasing,
+  CircleHelp,
   Coins,
-  type LucideIcon,
-  ReceiptText,
-  ShoppingBag,
-  Wallet,
+  Moon,
+  Sun,
+  Users,
 } from "lucide-react";
+import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { useLiveExpenses } from "../../hooks/use-live-expenses";
 import { useLiveOrders } from "../../hooks/use-live-orders";
-import {
-  EXPENSE_PAYMENT_METHOD_LABELS,
-  type AdminExpense,
-} from "../../lib/firebase/queries/expenses";
-import {
-  type AdminOrder,
-  type OrderStatus,
-} from "../../lib/firebase/queries/orders";
-import {
-  OPERATIONAL_DAY_CUTOFF_HOUR,
-  getOperationalDayStart,
-  toDate,
-} from "../../lib/time";
-import { getOrderOperatorTitle } from "../../lib/orders";
+import { type AdminExpense } from "../../lib/firebase/queries/expenses";
+import { type AdminOrder } from "../../lib/firebase/queries/orders";
+import { auth, db } from "../../lib/firebase/client";
+import { getOperationalDayStart, OPERATIONAL_DAY_CUTOFF_HOUR, toDate } from "../../lib/time";
+import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay } from "../../lib/metrics";
 
 const tenantId = "tbb";
+type Period = "today" | "last7" | "last30" | "custom";
+type Channel = "all" | "web" | "admin_pos";
+type ProductMetric = "units" | "revenue";
+type Source = NonNullable<AdminOrder["acquisitionSource"]>;
 
-type MetricsPeriod = "today" | "last7" | "last30";
-type SupportedPaymentMethod = "cash" | "transfer" | "pending";
-
-const PERIOD_OPTIONS: {
-  value: MetricsPeriod;
-  label: string;
-  detail: string;
-}[] = [
-  {
-    value: "today",
-    label: "Hoy operacional",
-    detail: `Corte ${String(OPERATIONAL_DAY_CUTOFF_HOUR).padStart(2, "0")}:00`,
-  },
-  { value: "last7", label: "Ultimos 7 dias", detail: "Ventana rolling" },
-  { value: "last30", label: "Ultimos 30 dias", detail: "Ventana rolling" },
-];
-
-const ACTIVE_ORDER_STATUSES = new Set<OrderStatus>([
-  "queued",
-  "preparing",
-  "ready",
-  "on_the_way",
-]);
-
-const PAYMENT_METHODS: SupportedPaymentMethod[] = ["cash", "transfer", "pending"];
-
-function formatMoney(value?: number) {
-  return `$${Math.round(value ?? 0).toLocaleString("es-CL")}`;
-}
-
-function formatDateTime(date: Date) {
-  return date.toLocaleString("es-CL", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getOrderTotal(order: AdminOrder) {
-  return order.totals?.total ?? 0;
-}
-
-function formatPaymentMethodLabel(method?: string) {
-  switch (method) {
-    case "cash":
-    case "transfer":
-    case "pending":
-      return EXPENSE_PAYMENT_METHOD_LABELS[method];
-    case "card":
-      return "Tarjeta";
-    default:
-      return method ?? "Sin definir";
-  }
-}
-
-function isActiveExpense(expense: AdminExpense) {
-  return (expense.status ?? "active") === "active";
-}
-
-function isWithinRange(value: Date | null, start: Date, end: Date) {
-  if (!value) return false;
-  const timestamp = value.getTime();
-  return timestamp >= start.getTime() && timestamp <= end.getTime();
-}
-
-type TrendDay = {
+type TenantInfo = { name?: string; location?: { commune?: string; city?: string } };
+type Range = { start: Date; end: Date };
+type DayPoint = {
   key: string;
+  date: Date;
   label: string;
   sales: number;
-  orders: number;
+  count: number;
   products: { name: string; qty: number }[];
 };
 
-function getTrendDays(orders: AdminOrder[], now: Date): TrendDay[] {
-  const operationalStart = getOperationalDayStart(now);
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(operationalStart);
-    date.setDate(date.getDate() - (6 - index));
-    return date;
-  });
+const SOURCES: { id: Source; label: string }[] = [
+  { id: "instagram", label: "Instagram" },
+  { id: "facebook", label: "Facebook" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "in_person", label: "Presencial" },
+  { id: "other", label: "Otro" },
+];
+const PERIODS: { id: Exclude<Period, "custom">; label: string }[] = [
+  { id: "today", label: "Hoy operacional" },
+  { id: "last7", label: "Últimos 7 días" },
+  { id: "last30", label: "Últimos 30 días" },
+];
 
-  const totals = new Map<string, { sales: number; orders: number; products: Map<string, number> }>();
-  days.forEach((date) => totals.set(date.toLocaleDateString("en-CA"), { sales: 0, orders: 0, products: new Map() }));
-
-  orders.forEach((order) => {
-    if (order.status === "cancelled") return;
-    const createdAt = toDate(order.createdAt);
-    if (!createdAt) return;
-    const key = getOperationalDayStart(createdAt).toLocaleDateString("en-CA");
-    const total = totals.get(key);
-    if (!total) return;
-    total.sales += getOrderTotal(order);
-    total.orders += 1;
-    order.items?.forEach((item) => {
-      const name = item.productName || item.productId || "Producto sin nombre";
-      total.products.set(name, (total.products.get(name) ?? 0) + (item.qty ?? 0));
-    });
-  });
-
-  return days.map((date) => ({
-    key: date.toLocaleDateString("en-CA"),
-    label: date.toLocaleDateString("es-CL", { weekday: "short" }).replace(".", ""),
-    sales: totals.get(date.toLocaleDateString("en-CA"))!.sales,
-    orders: totals.get(date.toLocaleDateString("en-CA"))!.orders,
-    products: Array.from(totals.get(date.toLocaleDateString("en-CA"))!.products.entries())
-      .map(([name, qty]) => ({ name, qty }))
-      .sort((left, right) => right.qty - left.qty)
-      .slice(0, 3),
-  }));
+function money(value: number) {
+  return `$${Math.round(value).toLocaleString("es-CL")}`;
 }
-
-function getPeriodRange(period: MetricsPeriod, now: Date) {
-  const end = now;
-  const operationalStart = getOperationalDayStart(now);
-
-  if (period === "today") {
-    return { start: operationalStart, end };
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function shortDate(date: Date) {
+  return date.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function dayName(date: Date) {
+  return date.toLocaleDateString("es-CL", { weekday: "short" }).replace(".", "");
+}
+function within(value: Date | null, range: Range) {
+  if (!value) return false;
+  return value >= range.start && value <= range.end;
+}
+function rangeFor(period: Period, now: Date, customStart: string, customEnd: string): Range {
+  const end = new Date(now);
+  if (period === "custom" && customStart && customEnd) {
+    const start = new Date(`${customStart}T00:00:00`);
+    const customFinish = new Date(`${customEnd}T23:59:59.999`);
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(customFinish.getTime()) && start <= customFinish) {
+      return { start, end: customFinish < end ? customFinish : end };
+    }
   }
-
-  const days = period === "last7" ? 7 : 30;
+  const operationalStart = getOperationalDayStart(now);
+  const days = period === "today" ? 1 : period === "last30" ? 30 : 7;
   const start = new Date(operationalStart);
   start.setDate(start.getDate() - (days - 1));
   return { start, end };
 }
-
-function summarizePayments<T extends { paymentMethod?: string }>(
-  records: T[],
-  getAmount: (record: T) => number
-) {
-  const totals: Record<SupportedPaymentMethod, number> = {
-    cash: 0,
-    transfer: 0,
-    pending: 0,
-  };
-  let other = 0;
-
-  records.forEach((record) => {
-    const amount = getAmount(record);
-    switch (record.paymentMethod) {
-      case "cash":
-      case "transfer":
-      case "pending":
-        totals[record.paymentMethod] += amount;
-        break;
-      default:
-        other += amount;
-        break;
-    }
-  });
-
-  return { totals, other };
+function amount(order: AdminOrder) {
+  return order.totals?.total ?? 0;
+}
+function productName(item: NonNullable<AdminOrder["items"]>[number]) {
+  return item.productName || item.name || item.productId || "Producto sin nombre";
+}
+function productRevenue(item: NonNullable<AdminOrder["items"]>[number]) {
+  return item.subtotal ?? (item.unitPrice ?? 0) * (item.qty ?? 0);
+}
+function percent(value: number, total: number) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+function isDemoOrder(order: AdminOrder) {
+  return /^DEMO\d+/i.test(order.id);
+}
+function isActiveExpense(expense: AdminExpense) {
+  return (expense.status ?? "active") === "active";
 }
 
-function getChannelSummary(orders: AdminOrder[]) {
-  return orders.reduce(
-    (acc, order) => {
-      const total = getOrderTotal(order);
-
-      if (order.channel === "web") {
-        acc.web.total += total;
-        acc.web.count += 1;
-      } else if (order.channel === "admin_pos") {
-        acc.adminPos.total += total;
-        acc.adminPos.count += 1;
-      }
-
-      return acc;
-    },
-    {
-      web: { total: 0, count: 0 },
-      adminPos: { total: 0, count: 0 },
-    }
-  );
+function Info({ label }: { label: string }) {
+  return <span title={label} aria-label={label} className="ml-1 inline-flex align-middle text-current/65"><CircleHelp className="h-3.5 w-3.5" /></span>;
 }
 
-function StatCard({
+function KpiCard({
   label,
   value,
   detail,
-  accent,
-  icon: Icon,
+  tone = "default",
+  comparison,
+  helper,
 }: {
   label: string;
   value: string;
   detail: string;
-  accent: string;
-  icon: LucideIcon;
+  tone?: "default" | "accent" | "warning";
+  comparison?: { value: string; positive: boolean | null };
+  helper: string;
 }) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-[#0c0f0f]/80 transition-colors hover:border-white/20">
-      <div className="flex items-start justify-between gap-3 border-b border-white/6 px-4 py-3.5">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{label}</p>
-          <p className={["mt-1.5 text-2xl font-semibold tracking-tight", accent].join(" ")}>{value}</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.025] p-2.5">
-          <Icon className="h-4 w-4 text-[#d6a85c]" />
-        </div>
+    <article className={`metric-surface metric-kpi metric-kpi-${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="metric-label">{label}<Info label={helper} /></p>
+        {comparison && <span className={`metric-comparison ${comparison.positive === null ? "" : comparison.positive ? "is-positive" : "is-negative"}`}>{comparison.value}</span>}
       </div>
-      <p className="px-4 py-2.5 text-xs text-neutral-500">{detail}</p>
+      <p className="metric-kpi-value">{value}</p>
+      <p className="metric-muted mt-1 text-xs">{detail}</p>
     </article>
   );
 }
 
-function PaymentBreakdown({
-  title,
-  rows,
-  other,
-}: {
-  title: string;
-  rows: Record<SupportedPaymentMethod, number>;
-  other: number;
-}) {
-  return (
-    <section className="rounded-3xl border border-white/10 bg-[#101010] p-5">
-      <div className="mb-4">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Desglose</p>
-        <h2 className="mt-1 text-xl font-black text-white">{title}</h2>
-      </div>
+function SalesTrend({ days, mode, setMode }: { days: DayPoint[]; mode: "sales" | "orders"; setMode: (mode: "sales" | "orders") => void }) {
+  const maxValue = Math.max(1, ...days.map((day) => mode === "sales" ? day.sales : day.count));
+  const total = days.reduce((sum, day) => sum + (mode === "sales" ? day.sales : day.count), 0);
+  const average = days.length ? total / days.length : 0;
+  const topDay = getTopMetricsDay(days, mode);
 
-      <div className="space-y-3">
-        {PAYMENT_METHODS.map((paymentMethod) => (
-          <div
-            key={paymentMethod}
-            className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3"
-          >
-            <div>
-              <p className="text-sm font-semibold text-white">
-                {EXPENSE_PAYMENT_METHOD_LABELS[paymentMethod]}
-              </p>
-              <p className="text-xs text-neutral-500">Metodo operativo</p>
+  return (
+    <section className="metric-surface metric-panel min-w-0" aria-labelledby="trend-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="metric-label">Actividad por jornada · corte {String(OPERATIONAL_DAY_CUTOFF_HOUR).padStart(2, "0")}:00</p>
+          <h2 id="trend-title" className="metric-heading mt-1">¿Qué días tuvieron movimiento?</h2>
+          <p className="metric-muted mt-1 text-xs">Los días sin ventas no se clasifican como “malos” sin historial suficiente.</p>
+        </div>
+        <div className="metric-segment" role="group" aria-label="Métrica del gráfico">
+          <button type="button" aria-pressed={mode === "sales"} onClick={() => setMode("sales")}>Ventas</button>
+          <button type="button" aria-pressed={mode === "orders"} onClick={() => setMode("orders")}>Pedidos</button>
+        </div>
+      </div>
+      <div className="metric-chart" role="group" aria-label={mode === "sales" ? "Ventas por jornada de los últimos siete días" : "Pedidos por jornada de los últimos siete días"}>
+        <div className="metric-y-axis" aria-hidden="true">
+          <span>{mode === "sales" ? money(maxValue) : `${Math.round(maxValue)} ped.`}</span>
+          <span>{mode === "sales" ? money(maxValue / 2) : `${Math.floor(maxValue / 2)} ped.`}</span>
+          <span>0</span>
+        </div>
+        <div className="metric-chart-grid">
+          {[0, 1, 2].map((line) => <span key={line} className={`metric-gridline metric-gridline-${line}`} />)}
+          {days.map((day) => {
+            const value = mode === "sales" ? day.sales : day.count;
+            const height = value ? Math.max(7, (value / maxValue) * 100) : 3;
+            const isTop = Boolean(topDay && day.key === topDay.key);
+            return (
+              <div key={day.key} className={`metric-day ${isTop ? "is-top" : ""}`} tabIndex={0} aria-label={`${shortDate(day.date)}: ${money(day.sales)}, ${day.count} pedidos`}>
+                <div className="metric-tooltip">
+                  <p className="metric-tooltip-title">{dayName(day.date)} · {shortDate(day.date)}</p>
+                  <p className="mt-1 text-sm font-semibold">{money(day.sales)} · {day.count} {day.count === 1 ? "pedido" : "pedidos"}</p>
+                  <p className="metric-tooltip-caption">Productos con más unidades</p>
+                  {day.products.length ? day.products.slice(0, 3).map((product) => (
+                    <p key={product.name} className="metric-tooltip-row"><span>{product.name}</span><b>{product.qty}×</b></p>
+                  )) : <p className="metric-muted text-xs">Sin ventas registradas</p>}
+                </div>
+                <span className="metric-bar-value">{value ? mode === "sales" ? money(value) : value : "—"}</span>
+                <span className="metric-bar-track"><span className="metric-bar" style={{ height: `${height}%` }} /></span>
+                <span className="metric-day-label">{dayName(day.date)}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <footer className="metric-chart-footer">
+        <span><i className="metric-legend-dot is-active" /> {mode === "sales" ? "Ventas registradas" : "Pedidos registrados"}</span>
+        <span><i className="metric-legend-dot" /> Sin pedidos registrados</span>
+        <span className="metric-chart-summary">{topDay ? mode === "sales" ? `Mayor venta: ${dayName(topDay.date)} · ${money(topDay.sales)}` : `Más pedidos: ${dayName(topDay.date)} · ${topDay.count} ${topDay.count === 1 ? "pedido" : "pedidos"}` : "Aún no hay pedidos en este período"}</span>
+      </footer>
+      <p className="metric-muted mt-2 text-[11px]">Promedio diario: {mode === "sales" ? money(average) : `${average.toFixed(1)} pedidos`} · Pasa el cursor o enfoca una barra para ver el detalle.</p>
+    </section>
+  );
+}
+
+function PaymentPanel({ rows }: { rows: { id: string; label: string; detail: string; amount: number; share: number; tone: string }[] }) {
+  return (
+    <section className="metric-surface metric-panel" aria-labelledby="payment-title">
+      <p className="metric-label">Cómo se pagó</p>
+      <h2 id="payment-title" className="metric-heading mt-1">Pagos por método</h2>
+      <p className="metric-muted mt-1 text-xs">Método y estado se muestran por separado.</p>
+      <div className="mt-5 divide-y metric-divider">
+        {rows.map((row) => (
+          <div key={row.id} className="py-3 first:pt-0 last:pb-0">
+            <div className="flex items-start justify-between gap-2">
+              <div><p className="text-sm font-semibold">{row.label}</p><p className="metric-muted mt-1 text-[11px]">{row.detail}</p></div>
+              <div className="text-right"><p className={`text-sm font-bold ${row.tone}`}>{money(row.amount)}</p><p className="metric-muted mt-1 text-[10px]">{row.share}%</p></div>
             </div>
-            <p className="text-base font-black text-emerald-300">
-              {formatMoney(rows[paymentMethod])}
-            </p>
+            <div className="metric-progress mt-2"><span className={row.tone} style={{ width: `${row.share}%` }} /></div>
           </div>
         ))}
-
-        {other > 0 ? (
-          <div className="flex items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/[0.05] px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-amber-100">Otros legacy</p>
-              <p className="text-xs text-amber-200/70">Fuera del set cash/transfer/pending</p>
-            </div>
-            <p className="text-base font-black text-amber-200">{formatMoney(other)}</p>
-          </div>
-        ) : null}
       </div>
     </section>
   );
 }
 
-function SalesTrend({ days }: { days: TrendDay[] }) {
-  const maxSales = Math.max(...days.map((day) => day.sales), 1);
-  const average = days.reduce((sum, day) => sum + day.sales, 0) / days.length;
-  const best = days.reduce((current, day) => (day.sales > current.sales ? day : current), days[0]);
-  const weak = days.reduce((current, day) => (day.sales < current.sales ? day : current), days[0]);
+function ProductPanel({ orders, metric, setMetric }: { orders: AdminOrder[]; metric: ProductMetric; setMetric: (metric: ProductMetric) => void }) {
+  const products = new Map<string, { units: number; revenue: number }>();
+  orders.filter((order) => order.status !== "cancelled").forEach((order) => {
+    order.items?.forEach((item) => {
+      const name = productName(item);
+      const current = products.get(name) ?? { units: 0, revenue: 0 };
+      current.units += item.qty ?? 0;
+      current.revenue += productRevenue(item);
+      products.set(name, current);
+    });
+  });
+  const ranking = Array.from(products.entries()).map(([name, values]) => ({ name, ...values }))
+    .sort((a, b) => metric === "units" ? b.units - a.units : b.revenue - a.revenue).slice(0, 5);
+  const maximum = Math.max(1, ...ranking.map((item) => metric === "units" ? item.units : item.revenue));
 
   return (
-    <section className="rounded-3xl border border-[#332e24] bg-[#0d0d0c] p-5 shadow-[inset_0_1px_rgba(255,255,255,0.025)]">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-[#a99570]">Patrón de venta POS + web</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Días buenos y días a reforzar</h2>
-          <p className="mt-1 text-sm text-neutral-500">Ventas reales de los últimos 7 días operacionales.</p>
-          <p className="mt-3 text-xs text-neutral-400">
-            Mejor: <span className="font-semibold text-[#c4a46a]">{best?.label ?? "—"} · {formatMoney(best?.sales)}</span>
-            <span className="mx-2 text-neutral-700">·</span>
-            Reforzar: <span className="font-semibold text-neutral-300">{weak?.label ?? "—"} · {formatMoney(weak?.sales)}</span>
-          </p>
-        </div>
-        <div className="flex gap-3 text-[11px] text-neutral-500">
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#d6a85c]" /> Sobre promedio</span>
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#494943]" /> Bajo promedio</span>
+    <section className="metric-surface metric-panel" aria-labelledby="products-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="metric-label">Mix de productos</p><h2 id="products-title" className="metric-heading mt-1">¿Qué se vendió más?</h2><p className="metric-muted mt-1 text-xs">Unidades e ingresos se comparan por separado.</p></div>
+        <div className="metric-segment" role="group" aria-label="Ordenar productos">
+          <button type="button" aria-pressed={metric === "units"} onClick={() => setMetric("units")}>Unidades</button>
+          <button type="button" aria-pressed={metric === "revenue"} onClick={() => setMetric("revenue")}>Ingresos</button>
         </div>
       </div>
-
-      <div className="mt-6 grid h-48 grid-cols-7 items-end gap-2 border-b border-white/10 px-1 pb-0 sm:gap-4">
-        {days.map((day) => {
-          const height = day.sales === 0 ? 5 : Math.max(9, Math.round((day.sales / maxSales) * 100));
-          const isBest = day.sales >= average && day.sales > 0;
-          return (
-            <div key={day.key} className="flex h-full flex-col items-center justify-end gap-2">
-              <span className="text-[10px] tabular-nums text-neutral-500">{day.orders ? formatMoney(day.sales) : "—"}</span>
-              <div className="flex h-full w-full items-end justify-center">
-                <div className="group/bar relative flex h-full w-full max-w-10 items-end justify-center">
-                  <div
-                    className={["w-full rounded-t-lg transition-all", isBest ? "bg-[#c4a46a]" : "bg-[#3d403a]"].join(" ")}
-                    style={{ height: `${height}%` }}
-                  />
-                  <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 w-56 -translate-x-1/2 translate-y-1 rounded-xl border border-[#5b4a2e] bg-[#11100d]/95 p-3 text-left opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover/bar:translate-y-0 group-hover/bar:opacity-100">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-[#c4a46a]">{day.label} · resumen operacional</p>
-                    <p className="mt-1 text-sm font-semibold text-white">{formatMoney(day.sales)} · {day.orders} pedidos</p>
-                    <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-neutral-500">Más vendidos</p>
-                    {day.products.length > 0 ? day.products.map((product) => (
-                      <p key={product.name} className="mt-1 flex justify-between gap-3 text-xs text-neutral-300"><span className="truncate">{product.name}</span><span className="shrink-0 text-[#c4a46a]">{product.qty}x</span></p>
-                    )) : <p className="mt-1 text-xs text-neutral-500">Sin ventas registradas</p>}
-                  </div>
-                </div>
-              </div>
-              <span className="text-[11px] capitalize text-neutral-400">{day.label}</span>
-            </div>
-          );
-        })}
+      <div className="mt-5">
+        {ranking.length ? ranking.map((item, index) => {
+          const value = metric === "units" ? item.units : item.revenue;
+          return <div key={item.name} className="metric-product-row">
+            <span className="metric-rank">{String(index + 1).padStart(2, "0")}</span>
+            <div className="min-w-0 flex-1"><div className="flex justify-between gap-3"><span className="truncate text-sm font-semibold">{item.name}</span><span className="shrink-0 text-xs font-semibold">{metric === "units" ? `${item.units} un.` : money(item.revenue)}</span></div><div className="metric-progress mt-2"><span style={{ width: `${(value / maximum) * 100}%` }} /></div></div>
+          </div>;
+        }) : <div className="metric-empty"><ChartNoAxesColumnIncreasing className="mx-auto h-5 w-5" /><p className="mt-2 text-sm font-medium">Aún no hay detalle de productos en este período.</p><p className="metric-muted mt-1 text-xs">El ranking aparecerá cuando existan ventas con artículos disponibles.</p></div>}
       </div>
+    </section>
+  );
+}
 
-      <p className="mt-3 text-xs text-neutral-500">Promedio diario: {formatMoney(average)} · Las barras muestran ventas y cantidad de pedidos.</p>
+function AcquisitionPanel({ orders }: { orders: AdminOrder[] }) {
+  const attributed = orders.filter((order) => order.status !== "cancelled" && order.acquisitionSource);
+  const total = orders.filter((order) => order.status !== "cancelled").length;
+  const bySource = new Map<Source, { count: number; revenue: number }>();
+  attributed.forEach((order) => {
+    const source = order.acquisitionSource as Source;
+    const current = bySource.get(source) ?? { count: 0, revenue: 0 };
+    current.count += 1;
+    current.revenue += amount(order);
+    bySource.set(source, current);
+  });
+  const rows = SOURCES.map((source) => ({ ...source, ...(bySource.get(source.id) ?? { count: 0, revenue: 0 }) }));
+  return (
+    <section className="metric-surface metric-panel" aria-labelledby="acquisition-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="metric-label">Adquisición · origen del pedido</p><h2 id="acquisition-title" className="metric-heading mt-1">¿Desde dónde llegó?</h2><p className="metric-muted mt-1 text-xs">Origen y canal de registro son dimensiones distintas.</p></div>
+        <span className="metric-tag">Captura manual en POS</span>
+      </div>
+      <div className="metric-attribution-summary mt-4">
+        <div><span className="metric-label">Pedidos atribuibles</span><p className="mt-1 text-xl font-semibold">{attributed.length}<span className="metric-muted text-sm"> de {total}</span></p></div>
+        <div className="text-right"><span className="metric-label">Ventas atribuidas</span><p className="mt-1 text-xl font-semibold">{money(attributed.reduce((sum, order) => sum + amount(order), 0))}</p></div>
+      </div>
+      <div className="mt-3 divide-y metric-divider">
+        {rows.map((row) => <div key={row.id} className="flex items-center justify-between gap-3 py-2.5 text-sm"><span>{row.label}</span><span className="metric-muted text-right">{row.count ? `${row.count} ${row.count === 1 ? "pedido" : "pedidos"} · ${money(row.revenue)}` : "Sin datos"}</span></div>)}
+      </div>
+      <p className="metric-note mt-3">En POS puedes registrar Instagram, Facebook, WhatsApp, presencial u otro. La campaña o publicación es opcional; todavía no hay conexión con Meta.</p>
     </section>
   );
 }
@@ -345,342 +281,187 @@ function SalesTrend({ days }: { days: TrendDay[] }) {
 export default function MetricasPage() {
   const { orders, loading: loadingOrders, error: ordersError } = useLiveOrders(tenantId);
   const { expenses, loading: loadingExpenses, error: expensesError } = useLiveExpenses(tenantId);
-
-  const [selectedPeriod, setSelectedPeriod] = useState<MetricsPeriod>("today");
-  const [nowTs, setNowTs] = useState(() => Date.now());
+  const [period, setPeriod] = useState<Period>("today");
+  const [channel, setChannel] = useState<Channel>("all");
+  const [compare, setCompare] = useState(false);
+  const [chartMode, setChartMode] = useState<"sales" | "orders">("sales");
+  const [productMetric, setProductMetric] = useState<ProductMetric>("units");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [tenant, setTenant] = useState<TenantInfo | null>(null);
+  const [operator, setOperator] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => setNowTs(Date.now()), 60000);
-    return () => window.clearInterval(intervalId);
+    const savedTheme = window.localStorage.getItem("amon-operations-theme");
+    if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
+    const unsubscribe = onAuthStateChanged(auth, (user) => setOperator(user?.email ?? null));
+    let active = true;
+    void getDoc(doc(db, "tenants", tenantId)).then((snapshot) => {
+      if (active && snapshot.exists()) setTenant(snapshot.data() as TenantInfo);
+    }).catch(() => undefined);
+    const interval = window.setInterval(() => setNowMs(Date.now()), 60000);
+    return () => { active = false; unsubscribe(); window.clearInterval(interval); };
   }, []);
 
-  const periodRange = useMemo(
-    () => getPeriodRange(selectedPeriod, new Date(nowTs)),
-    [selectedPeriod, nowTs]
-  );
+  useEffect(() => {
+    document.documentElement.dataset.amonTheme = theme;
+    return () => { delete document.documentElement.dataset.amonTheme; };
+  }, [theme]);
 
-  const metrics = useMemo(() => {
-    const filteredOrders = orders.filter((order) =>
-      isWithinRange(toDate(order.createdAt), periodRange.start, periodRange.end)
-    );
-    const filteredExpenses = expenses.filter((expense) =>
-      isWithinRange(
-        toDate(expense.occurredAt ?? expense.createdAt),
-        periodRange.start,
-        periodRange.end
-      )
-    );
+  function toggleTheme() {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      window.localStorage.setItem("amon-operations-theme", next);
+      return next;
+    });
+  }
 
-    const validOrders = filteredOrders.filter((order) => order.status !== "cancelled");
-    const cancelledOrders = filteredOrders.length - validOrders.length;
-    const activeExpenses = filteredExpenses.filter(isActiveExpense);
+  const now = useMemo(() => new Date(nowMs), [nowMs]);
+  const range = useMemo(() => rangeFor(period, now, customStart, customEnd), [period, now, customStart, customEnd]);
+  const earlierRange = useMemo(() => getPreviousMetricsRange(range, period), [range, period]);
+  const channelOrders = useMemo(() => orders.filter((order) => channel === "all" || order.channel === channel), [orders, channel]);
+  const selectedOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), range)), [channelOrders, range]);
+  const previousOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), earlierRange)), [channelOrders, earlierRange]);
+  const selectedExpenses = useMemo(() => expenses.filter((expense) => within(toDate(expense.occurredAt ?? expense.createdAt), range) && isActiveExpense(expense)), [expenses, range]);
+  const trendDays = useMemo<DayPoint[]>(() => {
+    const start = getOperationalDayStart(now);
+    const dates = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(date.getDate() - (6 - index));
+      return date;
+    });
+    return dates.map((date) => {
+      const key = dateKey(date);
+      const dailyOrders = channelOrders.filter((order) => order.status !== "cancelled" && toDate(order.createdAt) && dateKey(getOperationalDayStart(toDate(order.createdAt)!)) === key);
+      const products = new Map<string, number>();
+      dailyOrders.forEach((order) => order.items?.forEach((item) => {
+        const name = productName(item);
+        products.set(name, (products.get(name) ?? 0) + (item.qty ?? 0));
+      }));
+      return { key, date, label: dayName(date), sales: dailyOrders.reduce((sum, order) => sum + amount(order), 0), count: dailyOrders.length, products: Array.from(products, ([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty) };
+    });
+  }, [channelOrders, now]);
 
-    const grossSales = validOrders.reduce((acc, order) => acc + getOrderTotal(order), 0);
-    const totalExpenses = activeExpenses.reduce(
-      (acc, expense) => acc + (expense.amount ?? 0),
-      0
-    );
-    const netOperational = grossSales - totalExpenses;
-
-    const salesPayments = summarizePayments(validOrders, getOrderTotal);
-    const expensePayments = summarizePayments(
-      activeExpenses,
-      (expense) => expense.amount ?? 0
-    );
-    const channelSummary = getChannelSummary(validOrders);
-    const openAdminPosOrders = filteredOrders
-      .filter(
-        (order) =>
-          order.channel === "admin_pos" &&
-          ACTIVE_ORDER_STATUSES.has(order.status as OrderStatus)
-      )
-      .sort((left, right) => {
-        const leftTs = toDate(left.createdAt)?.getTime() ?? 0;
-        const rightTs = toDate(right.createdAt)?.getTime() ?? 0;
-        return rightTs - leftTs;
-      });
-
-    const orderCount = validOrders.length;
-    const averageTicket = orderCount > 0 ? grossSales / orderCount : 0;
-    const trendDays = getTrendDays(orders, new Date(nowTs));
-
+  const summary = useMemo(() => {
+    const validOrders = selectedOrders.filter((order) => order.status !== "cancelled");
+    const sales = validOrders.reduce((sum, order) => sum + amount(order), 0);
+    const cashOrders = validOrders.filter((order) => order.paymentMethod === "cash");
+    const cash = cashOrders.reduce((sum, order) => sum + amount(order), 0);
+    const transferOrders = validOrders.filter((order) => order.paymentMethod === "transfer");
+    const confirmedTransfers = transferOrders.filter((order) => order.paymentStatus === "paid");
+    const pendingTransfers = transferOrders.filter((order) => order.paymentStatus !== "paid");
+    const pendingTransferAmount = pendingTransfers.reduce((sum, order) => sum + amount(order), 0);
+    const unclassifiedOrders = validOrders.filter((order) => order.paymentMethod !== "cash" && order.paymentMethod !== "transfer");
+    const unclassifiedAmount = unclassifiedOrders.reduce((sum, order) => sum + amount(order), 0);
+    const expensesAmount = selectedExpenses.reduce((sum, expense) => sum + (expense.amount ?? 0), 0);
     return {
-      grossSales,
-      totalExpenses,
-      netOperational,
-      estimatedCash: salesPayments.totals.cash - expensePayments.totals.cash,
-      averageTicket,
-      orderCount,
-      cancelledOrders,
-      salesPayments,
-      expensePayments,
-      channelSummary,
-      openAdminPosOrders,
-      trendDays,
+      validOrders, sales, cash, cashCount: cashOrders.length,
+      confirmedTransferAmount: confirmedTransfers.reduce((sum, order) => sum + amount(order), 0),
+      confirmedTransferCount: confirmedTransfers.length,
+      pendingTransferAmount, pendingTransferCount: pendingTransfers.length,
+      unclassifiedAmount, unclassifiedCount: unclassifiedOrders.length,
+      averageTicket: validOrders.length ? sales / validOrders.length : 0,
+      expensesAmount, net: getOperationalNet(sales, expensesAmount, channel),
     };
-  }, [expenses, nowTs, orders, periodRange.end, periodRange.start]);
-
+  }, [channel, selectedOrders, selectedExpenses]);
+  const previousSummary = useMemo(() => {
+    const valid = previousOrders.filter((order) => order.status !== "cancelled");
+    const sales = valid.reduce((sum, order) => sum + amount(order), 0);
+    const cash = valid.filter((order) => order.paymentMethod === "cash").reduce((sum, order) => sum + amount(order), 0);
+    const pendingTransfer = valid.filter((order) => order.paymentMethod === "transfer" && order.paymentStatus !== "paid").reduce((sum, order) => sum + amount(order), 0);
+    return { sales, cash, pendingTransfer, count: valid.length, average: valid.length ? sales / valid.length : 0 };
+  }, [previousOrders]);
+  const paymentTotal = summary.cash + summary.confirmedTransferAmount + summary.pendingTransferAmount + summary.unclassifiedAmount;
+  const demoOnly = orders.length > 0 && orders.every(isDemoOrder);
+  const pendingAttribution = summary.validOrders.filter((order) => !order.acquisitionSource).length;
   const loading = loadingOrders || loadingExpenses;
   const error = ordersError ?? expensesError;
+  const location = [tenant?.location?.commune, tenant?.location?.city].filter(Boolean).join(" · ");
+
+  function comparison(current: number, previous: number) {
+    if (!compare) return undefined;
+    if (!previous) return { value: current ? "Nuevo" : "—", positive: current ? true : null };
+    const difference = Math.round(((current - previous) / previous) * 100);
+    return { value: `${difference > 0 ? "+" : ""}${difference}% vs ant.`, positive: difference > 0 ? true : difference < 0 ? false : null };
+  }
+
+  const paymentRows = [
+    { id: "cash", label: "Efectivo", detail: `${summary.cashCount} ${summary.cashCount === 1 ? "pedido" : "pedidos"} · registrado`, amount: summary.cash, share: percent(summary.cash, paymentTotal), tone: "metric-tone-positive" },
+    { id: "transfer-paid", label: "Transferencia confirmada", detail: summary.confirmedTransferCount ? `${summary.confirmedTransferCount} pedidos confirmados` : "Sin pagos confirmados en el período", amount: summary.confirmedTransferAmount, share: percent(summary.confirmedTransferAmount, paymentTotal), tone: "metric-tone-neutral" },
+    { id: "transfer-pending", label: "Transferencia pendiente", detail: summary.pendingTransferCount ? `${summary.pendingTransferCount} pedidos · por confirmar` : "Sin transferencias pendientes", amount: summary.pendingTransferAmount, share: percent(summary.pendingTransferAmount, paymentTotal), tone: "metric-tone-warning" },
+    ...(summary.unclassifiedAmount > 0 ? [{ id: "other", label: "Otro método / sin clasificar", detail: `${summary.unclassifiedCount} ${summary.unclassifiedCount === 1 ? "pedido" : "pedidos"}`, amount: summary.unclassifiedAmount, share: percent(summary.unclassifiedAmount, paymentTotal), tone: "metric-tone-neutral" }] : []),
+  ];
 
   return (
-    <main data-admin-surface="metrics" className="min-h-screen bg-[#050505] text-white">
-      <div className="mx-auto max-w-[1500px] px-4 py-6">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-[#d6a85c]">
-              Radar operativo
-            </p>
-            <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
-              Metricas TBB / Foodtruck
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-neutral-400">
-              Dashboard minimo derivado en vivo desde orders y expenses. Sin snapshots,
-              sin persistencia nueva, sin tocar ERP.
-            </p>
+    <main data-admin-surface="metrics" data-theme={theme} className="metric-root min-h-screen">
+      <div className="mx-auto max-w-[1540px] px-4 py-4 sm:px-6 lg:px-8">
+        <header className="metric-context mb-5" aria-label="Contexto del negocio">
+          <div className="metric-breadcrumb"><span>AMON Shop</span><span>/</span><strong>Métricas</strong></div>
+          <div className="metric-context-items">
+            <div><span>Negocio</span><strong>{tenant?.name ?? "Cargando tienda…"}</strong><small>Tenant {tenantId.toUpperCase()}</small></div>
+            <div><span>Local activo</span><strong>{tenant?.location?.commune ?? "Local no disponible"}</strong><small>{location || "Ubicación no configurada"}</small></div>
+            <div><span>Operador</span><strong>{operator ?? "Sesión no disponible"}</strong><small>Acceso verificado · Administrador</small></div>
+            <button type="button" className="metric-theme-button" onClick={toggleTheme} aria-label={`Cambiar a modo ${theme === "dark" ? "claro" : "oscuro"}`}>
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              Modo {theme === "dark" ? "claro" : "oscuro"}
+            </button>
           </div>
+        </header>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-              Ventana activa
-            </p>
-            <p className="mt-1 text-sm font-semibold text-white">
-              {formatDateTime(periodRange.start)} {"->"} {formatDateTime(periodRange.end)}
-            </p>
-          </div>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div><p className="metric-eyebrow">Pulso del negocio</p><h1 className="metric-title mt-1">Métricas</h1><p className="metric-muted mt-1 text-sm">Ventas, pagos y actividad de tu tienda en un solo lugar.</p></div>
+          <span className={`metric-tag ${demoOnly ? "metric-tag-demo" : ""}`}>{demoOnly ? "Datos demo · seed local" : "Datos en vivo · Firestore"}</span>
         </div>
 
-        <div className="mb-4 flex max-w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {PERIOD_OPTIONS.map((option) => {
-            const active = option.value === selectedPeriod;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setSelectedPeriod(option.value)}
-                className={[
-                  "shrink-0 rounded-full border px-4 py-2 text-left transition-all",
-                  active
-                    ? "border-[#806438] bg-[#211b11] text-[#f0d296] shadow-[inset_3px_0_#d6a85c]"
-                    : "border-white/10 bg-white/[0.03] text-neutral-400 hover:border-white/20 hover:text-white",
-                ].join(" ")}
-              >
-                <p className="text-xs font-black uppercase tracking-[0.14em]">{option.label}</p>
-                <p className="mt-1 text-[11px]">{option.detail}</p>
-              </button>
-            );
-          })}
-        </div>
+        <section className="metric-filter-row mb-4" aria-label="Filtros de métricas">
+          <div className="metric-periods" role="group" aria-label="Período">
+            {PERIODS.map((item) => <button key={item.id} type="button" aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>{item.label}</button>)}
+            <button type="button" aria-pressed={period === "custom"} onClick={() => setPeriod(period === "custom" ? "today" : "custom")}><CalendarDays className="h-3.5 w-3.5" /> Personalizado</button>
+          </div>
+          <div className="metric-filters-secondary">
+            <label htmlFor="metrics-channel">Canal</label>
+            <select id="metrics-channel" className="metric-select" value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>
+              <option value="all">Todos los canales</option><option value="web">Web</option><option value="admin_pos">POS</option>
+            </select>
+            <button type="button" className={`metric-compare ${compare ? "is-selected" : ""}`} onClick={() => setCompare((value) => !value)} aria-pressed={compare}>Comparar: período anterior</button>
+          </div>
+        </section>
+        {period === "custom" && <div className="metric-custom-range mb-4"><label>Desde <input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>Hasta <input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label><span>{shortDate(range.start)} – {shortDate(range.end)}</span></div>}
 
-        <div className="mb-6 rounded-3xl border border-amber-400/20 bg-amber-400/[0.06] p-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-2">
-              <AlertTriangle className="h-4 w-4 text-amber-200" />
+        {!loading && demoOnly && summary.validOrders.length <= 5 && <div className="metric-caution mb-4"><CircleHelp className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Lectura responsable:</strong> este período contiene {summary.validOrders.length} pedido{summary.validOrders.length === 1 ? "" : "s"} de muestra. La comparación por día y producto todavía no permite concluir tendencias.</p></div>}
+
+        {loading ? <div className="metric-surface metric-loading">Cargando métricas de la tienda…</div> : error ? (
+          <div role="alert" className="metric-error"><p className="font-semibold">No pudimos cargar las métricas.</p><p className="mt-1">{error.message.toLowerCase().includes("failed to fetch") ? "Sin conexión con Firestore. Comprueba que los emuladores estén activos." : error.message}</p></div>
+        ) : <>
+          <section className="metric-kpis mb-4" aria-label="Resumen del período">
+            <KpiCard label="Ventas registradas" value={money(summary.sales)} detail="Total de pedidos no anulados · período seleccionado" helper="Suma de pedidos no anulados; no significa que todos estén cobrados." tone="accent" comparison={comparison(summary.sales, previousSummary.sales)} />
+            <KpiCard label="Efectivo registrado" value={money(summary.cash)} detail={`${summary.cashCount} ${summary.cashCount === 1 ? "pedido" : "pedidos"} con efectivo · validar con cierre de caja`} helper="Suma las ventas registradas con método efectivo. Validar contra el cierre de caja." comparison={comparison(summary.cash, previousSummary.cash)} />
+            <KpiCard label="Transferencia pendiente" value={money(summary.pendingTransferAmount)} detail={`${summary.pendingTransferCount} ${summary.pendingTransferCount === 1 ? "pedido" : "pedidos"} · por confirmar`} helper="Transferencias que aún no figuran como pagadas." tone="warning" comparison={comparison(summary.pendingTransferAmount, previousSummary.pendingTransfer)} />
+            <KpiCard label="Pedidos · ticket promedio" value={`${summary.validOrders.length} · ${money(summary.averageTicket)}`} detail="Pedidos no anulados · muestra del período" helper="El ticket promedio usa pedidos no anulados del período." comparison={comparison(summary.validOrders.length, previousSummary.count)} />
+          </section>
+
+          <section className="metric-primary-grid mb-4">
+            <SalesTrend days={trendDays} mode={chartMode} setMode={setChartMode} />
+            <PaymentPanel rows={paymentRows} />
+          </section>
+
+          <section className="metric-secondary-grid mb-4">
+            <ProductPanel orders={selectedOrders} metric={productMetric} setMetric={setProductMetric} />
+            <AcquisitionPanel orders={selectedOrders} />
+          </section>
+
+          <section className="metric-smart-panel" aria-labelledby="smart-title">
+            <div className="metric-smart-mark">A</div>
+            <div className="min-w-0 flex-1"><p className="metric-label">Observación del período</p><h2 id="smart-title" className="metric-heading mt-1">AMON Finanzas Smart</h2>
+              <p className="metric-smart-copy mt-2">{summary.pendingTransferAmount > 0 ? <>Hay <strong>{money(summary.pendingTransferAmount)} en transferencia pendiente</strong>. </> : <>No se detectan transferencias pendientes en este período. </>}{demoOnly && summary.validOrders.length <= 5 ? "La muestra todavía es pequeña para identificar días o productos con rendimiento consistente." : summary.net === null ? `Se registran ${money(summary.expensesAmount)} en gastos activos de toda la tienda. El neto se oculta porque el filtro ${channel === "web" ? "Web" : "POS"} solo aplica a ventas.` : `Se registran ${money(summary.expensesAmount)} en gastos activos y un neto operacional preliminar de ${money(summary.net)}.`}</p>
+              <p className="metric-muted mt-3 text-[11px]">Basado en pedidos y gastos · sin proyecciones ni conexión con Meta · {pendingAttribution} pedido{pendingAttribution === 1 ? "" : "s"} sin origen</p>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-amber-100">Advertencia de caja</p>
-              <p className="mt-1 text-sm text-amber-200/80">
-                Caja estimada no considera saldo inicial ni cierre formal de caja.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="rounded-3xl border border-white/10 bg-[#101010] px-6 py-10 text-center text-neutral-400">
-            Cargando metricas operativas...
-          </div>
-        ) : error ? (
-          <div className="rounded-3xl border border-red-500/20 bg-red-500/[0.06] p-6 text-sm text-red-200">
-            <p className="font-semibold">No pudimos calcular las metricas</p>
-            <p className="mt-1 text-red-200/70">
-              {error.message.toLowerCase().includes("failed to fetch")
-                ? "Sin conexion al servidor o al emulador."
-                : error.message}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <StatCard
-                label="Ventas brutas"
-                value={formatMoney(metrics.grossSales)}
-                detail={`Canceladas fuera del KPI: ${metrics.cancelledOrders}`}
-                accent="text-white"
-                icon={ArrowUpRight}
-              />
-              <StatCard
-                label="Gastos activos"
-                value={formatMoney(metrics.totalExpenses)}
-                detail="Solo gastos con status active dentro de la ventana."
-                accent="text-neutral-200"
-                icon={ArrowDownLeft}
-              />
-              <StatCard
-                label="Neto operacional"
-                value={formatMoney(metrics.netOperational)}
-                detail="Ventas brutas menos gastos activos."
-                accent={
-                  metrics.netOperational >= 0 ? "text-cyan-200" : "text-red-300"
-                }
-                icon={Coins}
-              />
-              <StatCard
-                label="Caja estimada"
-                value={formatMoney(metrics.estimatedCash)}
-                detail="Ventas cash menos gastos cash."
-                accent={
-                  metrics.estimatedCash >= 0 ? "text-[#d6a85c]" : "text-red-300"
-                }
-                icon={Wallet}
-              />
-              <StatCard
-                label="Ticket promedio"
-                value={formatMoney(metrics.averageTicket)}
-                detail="Promedio sobre pedidos no cancelados."
-                accent="text-neutral-200"
-                icon={ReceiptText}
-              />
-              <StatCard
-                label="Numero de pedidos"
-                value={String(metrics.orderCount)}
-                detail="Pedidos no cancelados en el periodo seleccionado."
-                accent="text-white"
-                icon={ShoppingBag}
-              />
-            </section>
-
-            <SalesTrend days={metrics.trendDays} />
-
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_380px]">
-              <PaymentBreakdown
-                title="Ventas por metodo"
-                rows={metrics.salesPayments.totals}
-                other={metrics.salesPayments.other}
-              />
-
-              <PaymentBreakdown
-                title="Gastos por metodo"
-                rows={metrics.expensePayments.totals}
-                other={metrics.expensePayments.other}
-              />
-
-              <section className="rounded-3xl border border-white/10 bg-[#101010] p-5">
-                <div className="mb-4">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
-                    Canal
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-white">Ventas web vs admin_pos</h2>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">Web</p>
-                        <p className="text-xs text-neutral-500">
-                          {metrics.channelSummary.web.count} pedidos
-                        </p>
-                      </div>
-                      <p className="text-lg font-black text-emerald-300">
-                        {formatMoney(metrics.channelSummary.web.total)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">Admin POS</p>
-                        <p className="text-xs text-neutral-500">
-                          {metrics.channelSummary.adminPos.count} pedidos
-                        </p>
-                      </div>
-                      <p className="text-lg font-black text-cyan-300">
-                        {formatMoney(metrics.channelSummary.adminPos.total)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </section>
-
-            <section
-              className={[
-                "rounded-3xl p-5",
-                metrics.openAdminPosOrders.length === 0
-                  ? "border border-white/10 bg-[#101010]"
-                  : "border border-amber-400/20 bg-amber-400/[0.05]",
-              ].join(" ")}
-            >
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
-                    Alerta operativa
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-white">
-                    Ventas POS abiertas sin cerrar
-                  </h2>
-                  <p className="mt-1 text-sm text-neutral-500">
-                    {metrics.openAdminPosOrders.length === 0
-                      ? "Todas las ventas POS del período están cerradas."
-                      : `${metrics.openAdminPosOrders.length} ventas POS pendientes de cerrar.`}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.08] px-4 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">
-                    Conteo
-                  </p>
-                  <p className="mt-1 text-2xl font-black text-amber-100">
-                    {metrics.openAdminPosOrders.length}
-                  </p>
-                </div>
-              </div>
-
-              {metrics.openAdminPosOrders.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-8 text-center text-neutral-500">
-                  Todas las ventas POS del período están cerradas.
-                </div>
-              ) : (
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {metrics.openAdminPosOrders.slice(0, 6).map((order) => {
-                    const createdAt = toDate(order.createdAt);
-                    return (
-                      <div
-                        key={order.id}
-                        className="rounded-2xl border border-white/8 bg-[#0D0D0D] p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-base font-black text-white">
-                              {getOrderOperatorTitle(order)}
-                            </p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.14em] text-neutral-500">
-                              {order.status ?? "Sin estado"}
-                            </p>
-                          </div>
-                          <p className="text-lg font-black text-emerald-300">
-                            {formatMoney(getOrderTotal(order))}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 space-y-1 text-sm text-neutral-400">
-                          <p>Pago: {formatPaymentMethodLabel(order.paymentMethod)}</p>
-                          <p>
-                            Cliente: {order.customer?.name || order.customer?.phone || "Sin dato"}
-                          </p>
-                          <p>
-                            Creada: {createdAt ? formatDateTime(createdAt) : "Sin timestamp"}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
+            <div className="metric-smart-icon"><Users className="h-5 w-5" /></div>
+          </section>
+          <footer className="metric-footer">Actualizado en vivo desde pedidos y gastos · Jornada operacional 05:00–05:00{demoOnly ? " · Los pedidos demo están identificados para no confundirlos con ventas reales." : ""}</footer>
+        </>}
       </div>
     </main>
   );

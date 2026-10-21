@@ -65,6 +65,8 @@ export async function createOrder(
     totals: { subtotal: number; delivery: number; total: number };
     paymentMethod: string;
     channel: string;
+    acquisitionSource?: "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
+    acquisitionCampaign?: string;
     customerId?: string;
     customerPhoneNormalized?: string;
   },
@@ -105,6 +107,8 @@ export async function createOrder(
       channel: input.channel,
       paymentMethod: input.paymentMethod,
       paymentStatus: "pending",
+      ...(input.acquisitionSource ? { acquisitionSource: input.acquisitionSource } : {}),
+      ...(input.acquisitionCampaign ? { acquisitionCampaign: input.acquisitionCampaign } : {}),
       customer: input.customer,
       items: input.items,
       totals: input.totals,

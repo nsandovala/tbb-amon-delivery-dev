@@ -11,6 +11,8 @@ ERP/outbox/storefront.
 - crear ruta admin protegida con `AdminGuard`
 - soportar periodos `today`, `last7`, `last30`
 - calcular KPIs desde Firestore live
+- pulir la UI con cuatro KPI prioritarios, tendencia interactiva y temas claro/oscuro
+- medir atribución manual en POS separada del canal técnico del pedido
 - reutilizar `orders` y `expenses`
 - unificar helper de timestamps y dia operacional donde habia duplicacion
 - documentar reglas del dashboard
@@ -25,7 +27,11 @@ ERP/outbox/storefront.
 - [x] split `web` vs `admin_pos`
 - [x] alerta de ordenes `admin_pos` activas sin cerrar
 - [x] advertencia de caja visible
-- [x] sin cambios en Functions, storefront o ERP
+- [x] sin cambios en storefront o ERP
+- [x] atribución manual opcional desde POS, persistida en la orden existente
+- [x] resumen live de tendencia, pagos, productos y origen social
+- [x] modo claro mate y modo oscuro, con preferencia compartida con Operaciones
+- [x] mini sprint de fixes de revisión Codex CI: comparación operacional, alcance del neto y máximo del gráfico según métrica
 
 ## Cambios implementados
 
@@ -40,6 +46,11 @@ ERP/outbox/storefront.
   reutilizan helpers compartidos en vez de mantener logica duplicada.
 - `apps/admin/src/hooks/use-live-expenses.ts` ahora permite consumidores sin
   limite explicito; `/gastos` conserva `50`.
+- La revisión de UX aprobada reemplaza el diseño anterior en `/metricas` por cuatro
+  tarjetas, un gráfico semanal con tooltip accesible, pagos, productos, adquisición
+  y observación de Finanzas Smart; el cálculo sigue usando listeners live.
+- El POS añade origen y campaña/publicación opcionales; Functions valida y guarda
+  esos campos en la orden existente, sin cambiar el canal técnico `admin_pos`.
 
 ### Why it changed
 
@@ -78,14 +89,26 @@ Caja estimada no considera saldo inicial ni cierre formal de caja.
 - `apps/admin/src/app/metricas/page.tsx`
 - `apps/admin/src/hooks/use-live-expenses.ts`
 - `apps/admin/src/lib/time.ts`
+- `apps/admin/src/app/globals.css`
+- `apps/admin/src/app/pos/page.tsx`
+- `apps/admin/src/lib/api/orders.ts`
+- `apps/admin/src/lib/firebase/queries/orders.ts`
+- `apps/functions/src/schemas/order.shared.ts`
+- `apps/functions/src/services/pos.service.ts`
+- `apps/functions/src/repositories/firestore-orders.repo.ts`
+- `packages/shared/src/types/order.ts`
+- `packages/shared/src/schemas/order.schema.ts`
+- `e2e/api/orders.contract.spec.ts`
+- `contracts/api-contracts.md`
+- `docs/architecture/customer-order-contract.md`
 - `docs/architecture/operational-metrics-contract.md`
 - `roadmap/sprint-metrics.md`
 
 ## Contracts affected
 
 - Nuevo: `docs/architecture/operational-metrics-contract.md`
-- Sin cambios en Firestore schema
-- Sin cambios en contracts HTTP de Functions
+- Los documentos order pueden incluir `acquisitionSource` y `acquisitionCampaign`, sin migración de datos.
+- El contrato de `createPosSale` acepta origen y campaña opcionales; checkout web y `channel` no cambian.
 - Sin cambios en rules
 
 ## Validation commands
@@ -102,18 +125,13 @@ python tools/amon_guard.py --all
 
 ## Validation result
 
-- `apps/admin build`: OK
-- `apps/functions build`: OK
-- `seed`: OK
-- `test:e2e:api`: OK, 16 passed
-- `rules anon`: OK, 6/6
-- `git diff --check`: limpio, con warnings LF->CRLF del worktree
-- `amon_guard --all`: FAIL por hallazgos preexistentes ajenos a M6D
-
-Findings actuales de `amon_guard --all`:
-- `.claude/skills/render-deploy/references/configuration-guide.md`
-- `.github/workflows/security-gate.yml`
-- `tools/amon_guard.py`
+- Typecheck de Admin: OK.
+- Build de Admin: OK (advertencias de raíz multi-lockfile y caché Webpack, sin fallo).
+- Build de Functions: OK.
+- Typecheck de Shared: OK.
+- Smoke del esquema POS: origen/campaña válidos aceptados; campaña sin origen rechazada.
+- `git diff --check`: OK.
+- API E2E, emuladores y revisión visual local: pendientes; Firebase Emulator CLI no está instalado en este entorno.
 
 ## Remaining risks
 
@@ -123,8 +141,25 @@ Findings actuales de `amon_guard --all`:
 - Caja estimada no reemplaza arqueo ni cierre formal.
 - El baseline del repo no deja `amon_guard --all` en verde todavia.
 
+## Mini sprint de revisión Codex CI
+
+### Objetivo
+
+Corregir tres interpretaciones erróneas detectadas después del QA visual: los
+períodos comparables deben conservar la jornada operacional; el neto no debe
+mezclar ventas de un canal con gastos sin atribución; y el día destacado debe
+seguir la métrica activa del gráfico.
+
+### Validación
+
+- `e2e/unit/m7-metrics-review-fixes.spec.ts`: 4/4 OK.
+- Typecheck Admin: OK.
+- Build Admin: OK; Next completó compilación y prerender. Reportó avisos de caché Webpack y múltiples lockfiles ya observados en este repo.
+- Prueba API local reportada por Nelson: 14/14 Orders API, cubre atribución POS; no cubre cálculos del dashboard.
+- No merge ni deploy dentro de este mini sprint.
+
 ## Next step
 
-Validacion manual de operador en `/metricas` con sesion admin y datos reales del
-emulador. Despues de eso, el siguiente paso razonable es permitir filtros por canal
-y mover el corte operacional a settings del tenant.
+Validación manual de operador en `/metricas` y del selector de origen POS en
+escritorio/móvil, ambos temas y con Firebase Emulator Suite. No hacer deploy. El
+commit/push queda pendiente de autorización.

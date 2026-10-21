@@ -70,6 +70,7 @@ type PosOrder = {
 
 const tenantId = "tbb";
 const COUNTER_CUSTOMER_NAME = "Cliente mostrador";
+type AcquisitionSource = "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
 
 /**
  * A sale stays operationally open until it is handed over. Only a closed (delivered)
@@ -111,6 +112,8 @@ export default function PosPage() {
     detail?: string;
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | "card" | "pending">("pending");
+  const [acquisitionSource, setAcquisitionSource] = useState<AcquisitionSource | "">("");
+  const [acquisitionCampaign, setAcquisitionCampaign] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [todayOrders, setTodayOrders] = useState<PosOrder[]>([]);
@@ -324,6 +327,8 @@ export default function PosPage() {
     setNotes("");
     setFulfillmentType("pickup");
     setPaymentMethod("pending");
+    setAcquisitionSource("");
+    setAcquisitionCampaign("");
     setCustomerMode("counter");
     setVerifiedLiveOrder(null);
   }
@@ -355,6 +360,8 @@ export default function PosPage() {
         },
         fulfillmentType,
         paymentMethod,
+        ...(acquisitionSource ? { acquisitionSource } : {}),
+        ...(acquisitionCampaign.trim() ? { acquisitionCampaign: acquisitionCampaign.trim() } : {}),
       });
 
       setPendingLiveOrder({ orderId, displayCode });
@@ -835,6 +842,43 @@ export default function PosPage() {
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="space-y-2 border-t border-white/8 pt-3" aria-label="Origen del pedido">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="pos-acquisition-source" className="text-xs font-semibold text-neutral-200">
+                    Origen del pedido
+                  </label>
+                  <span className="text-[10px] text-neutral-500">Opcional · se mide en Métricas</span>
+                </div>
+                <select
+                  id="pos-acquisition-source"
+                  value={acquisitionSource}
+                  onChange={(event) => {
+                    const next = event.target.value as AcquisitionSource | "";
+                    setAcquisitionSource(next);
+                    if (!next || (next !== "instagram" && next !== "facebook" && next !== "whatsapp")) {
+                      setAcquisitionCampaign("");
+                    }
+                  }}
+                  className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                >
+                  <option value="">Sin atribuir</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="in_person">Presencial</option>
+                  <option value="other">Otro</option>
+                </select>
+                {acquisitionSource && ["instagram", "facebook", "whatsapp"].includes(acquisitionSource) ? (
+                  <input
+                    value={acquisitionCampaign}
+                    onChange={(event) => setAcquisitionCampaign(event.target.value.slice(0, 100))}
+                    placeholder="Campaña o publicación (opcional)"
+                    maxLength={100}
+                    className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white outline-none placeholder:text-neutral-500 focus:border-emerald-400/30"
+                  />
+                ) : null}
               </div>
 
               {fulfillmentType === "delivery" ? (
