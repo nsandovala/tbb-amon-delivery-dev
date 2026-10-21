@@ -3,6 +3,37 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-21 — Mini sprint: correcciones de revisión Codex CI en Métricas
+
+### Qué cambió
+- Las comparaciones de hoy, últimos 7 y últimos 30 días desplazan ambos extremos por el mismo número de días calendario, conservando la hora local y el corte operacional. Los períodos personalizados mantienen una comparación previa de igual duración.
+- AMON Finanzas Smart ya no calcula un neto con ventas Web/POS filtradas y gastos de toda la tienda. Con un canal seleccionado, explica el alcance y oculta el neto; con todos los canales, conserva el cálculo global.
+- El gráfico destaca el día de mayor venta en modo Ventas y el día con más pedidos en modo Pedidos, con una etiqueta acorde a cada selección.
+- Se agregaron pruebas unitarias puras para los tres casos.
+
+### Archivos modificados
+- `apps/admin/src/app/metricas/page.tsx`
+- `apps/admin/src/lib/metrics.ts`
+- `e2e/unit/m7-metrics-review-fixes.spec.ts`
+- `docs/architecture/operational-metrics-contract.md`
+- `roadmap/sprint-metrics.md`
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- No cambia la persistencia, Firestore, los pedidos ni el contrato API.
+- El contrato de comparación ahora explicita ventanas con la misma hora local; gastos continúan sin atribución por canal.
+
+### Validación
+- `npx playwright test e2e/unit/m7-metrics-review-fixes.spec.ts --config=playwright.config.ts`: 4/4 OK.
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`: OK.
+- `npm --workspace apps/admin run build`: OK; compiló y generó las páginas. Next reportó avisos de caché Webpack y múltiples lockfiles.
+- `git diff --check`: OK.
+- La suite Orders API de Nelson reportó 14/14 antes de estos cambios; valida persistencia de atribución POS, no esta lógica visual.
+
+### Riesgos y siguiente paso
+- La comparación personalizada continúa siendo un intervalo inmediatamente anterior de igual duración, no una jornada operacional semántica.
+- No se hizo commit, push, merge ni deploy. Tras validar, revisar el diff y actualizar el PR abierto.
+
 ## 2026-10-21 — Sprint de UX y atribución manual en Métricas
 
 ### Qué cambió

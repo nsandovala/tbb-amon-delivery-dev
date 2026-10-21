@@ -48,6 +48,12 @@ last7   = from current operational-day start minus 6 days to now
 last30  = from current operational-day start minus 29 days to now
 ```
 
+When comparison is enabled, preset windows compare the same local-time slice
+shifted by one matching period (1, 7, or 30 calendar days). This keeps an
+in-progress operational day aligned with the same hours of the previous day.
+Custom ranges compare against the immediately preceding interval of equal
+elapsed duration.
+
 Orders are filtered by:
 
 ```txt
@@ -142,6 +148,11 @@ Sales comparison shown for:
 web
 admin_pos
 ```
+
+The channel filter applies to order-derived metrics only. Expenses have no
+channel attribution, so the operational net is suppressed while a single sales
+channel is selected. With all channels selected, net is all-channel sales minus
+active expenses for the selected dates.
 
 ### Manual acquisition attribution
 

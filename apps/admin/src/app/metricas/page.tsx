@@ -18,6 +18,7 @@ import { type AdminExpense } from "../../lib/firebase/queries/expenses";
 import { type AdminOrder } from "../../lib/firebase/queries/orders";
 import { auth, db } from "../../lib/firebase/client";
 import { getOperationalDayStart, OPERATIONAL_DAY_CUTOFF_HOUR, toDate } from "../../lib/time";
+import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay } from "../../lib/metrics";
 
 const tenantId = "tbb";
 type Period = "today" | "last7" | "last30" | "custom";
@@ -80,11 +81,6 @@ function rangeFor(period: Period, now: Date, customStart: string, customEnd: str
   start.setDate(start.getDate() - (days - 1));
   return { start, end };
 }
-function previousRange(range: Range): Range {
-  const length = Math.max(1, range.end.getTime() - range.start.getTime() + 1);
-  const end = new Date(range.start.getTime() - 1);
-  return { start: new Date(end.getTime() - length + 1), end };
-}
 function amount(order: AdminOrder) {
   return order.totals?.total ?? 0;
 }
@@ -139,8 +135,7 @@ function SalesTrend({ days, mode, setMode }: { days: DayPoint[]; mode: "sales" |
   const maxValue = Math.max(1, ...days.map((day) => mode === "sales" ? day.sales : day.count));
   const total = days.reduce((sum, day) => sum + (mode === "sales" ? day.sales : day.count), 0);
   const average = days.length ? total / days.length : 0;
-  const activeDays = days.filter((day) => day.count > 0);
-  const topDay = activeDays.reduce<DayPoint | null>((best, day) => !best || day.sales > best.sales ? day : best, null);
+  const topDay = getTopMetricsDay(days, mode);
 
   return (
     <section className="metric-surface metric-panel min-w-0" aria-labelledby="trend-title">
@@ -188,7 +183,7 @@ function SalesTrend({ days, mode, setMode }: { days: DayPoint[]; mode: "sales" |
       <footer className="metric-chart-footer">
         <span><i className="metric-legend-dot is-active" /> {mode === "sales" ? "Ventas registradas" : "Pedidos registrados"}</span>
         <span><i className="metric-legend-dot" /> Sin pedidos registrados</span>
-        <span className="metric-chart-summary">{topDay ? `Mayor movimiento: ${dayName(topDay.date)} · ${topDay.count} ${topDay.count === 1 ? "pedido" : "pedidos"}` : "Aún no hay pedidos en este período"}</span>
+        <span className="metric-chart-summary">{topDay ? mode === "sales" ? `Mayor venta: ${dayName(topDay.date)} · ${money(topDay.sales)}` : `Más pedidos: ${dayName(topDay.date)} · ${topDay.count} ${topDay.count === 1 ? "pedido" : "pedidos"}` : "Aún no hay pedidos en este período"}</span>
       </footer>
       <p className="metric-muted mt-2 text-[11px]">Promedio diario: {mode === "sales" ? money(average) : `${average.toFixed(1)} pedidos`} · Pasa el cursor o enfoca una barra para ver el detalle.</p>
     </section>
@@ -325,7 +320,7 @@ export default function MetricasPage() {
 
   const now = useMemo(() => new Date(nowMs), [nowMs]);
   const range = useMemo(() => rangeFor(period, now, customStart, customEnd), [period, now, customStart, customEnd]);
-  const earlierRange = useMemo(() => previousRange(range), [range]);
+  const earlierRange = useMemo(() => getPreviousMetricsRange(range, period), [range, period]);
   const channelOrders = useMemo(() => orders.filter((order) => channel === "all" || order.channel === channel), [orders, channel]);
   const selectedOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), range)), [channelOrders, range]);
   const previousOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), earlierRange)), [channelOrders, earlierRange]);
@@ -368,9 +363,9 @@ export default function MetricasPage() {
       pendingTransferAmount, pendingTransferCount: pendingTransfers.length,
       unclassifiedAmount, unclassifiedCount: unclassifiedOrders.length,
       averageTicket: validOrders.length ? sales / validOrders.length : 0,
-      expensesAmount, net: sales - expensesAmount,
+      expensesAmount, net: getOperationalNet(sales, expensesAmount, channel),
     };
-  }, [selectedOrders, selectedExpenses]);
+  }, [channel, selectedOrders, selectedExpenses]);
   const previousSummary = useMemo(() => {
     const valid = previousOrders.filter((order) => order.status !== "cancelled");
     const sales = valid.reduce((sum, order) => sum + amount(order), 0);
@@ -460,7 +455,7 @@ export default function MetricasPage() {
           <section className="metric-smart-panel" aria-labelledby="smart-title">
             <div className="metric-smart-mark">A</div>
             <div className="min-w-0 flex-1"><p className="metric-label">Observación del período</p><h2 id="smart-title" className="metric-heading mt-1">AMON Finanzas Smart</h2>
-              <p className="metric-smart-copy mt-2">{summary.pendingTransferAmount > 0 ? <>Hay <strong>{money(summary.pendingTransferAmount)} en transferencia pendiente</strong>. </> : <>No se detectan transferencias pendientes en este período. </>}{demoOnly && summary.validOrders.length <= 5 ? "La muestra todavía es pequeña para identificar días o productos con rendimiento consistente." : `Se registran ${money(summary.expensesAmount)} en gastos activos y un neto operacional preliminar de ${money(summary.net)}.`}</p>
+              <p className="metric-smart-copy mt-2">{summary.pendingTransferAmount > 0 ? <>Hay <strong>{money(summary.pendingTransferAmount)} en transferencia pendiente</strong>. </> : <>No se detectan transferencias pendientes en este período. </>}{demoOnly && summary.validOrders.length <= 5 ? "La muestra todavía es pequeña para identificar días o productos con rendimiento consistente." : summary.net === null ? `Se registran ${money(summary.expensesAmount)} en gastos activos de toda la tienda. El neto se oculta porque el filtro ${channel === "web" ? "Web" : "POS"} solo aplica a ventas.` : `Se registran ${money(summary.expensesAmount)} en gastos activos y un neto operacional preliminar de ${money(summary.net)}.`}</p>
               <p className="metric-muted mt-3 text-[11px]">Basado en pedidos y gastos · sin proyecciones ni conexión con Meta · {pendingAttribution} pedido{pendingAttribution === 1 ? "" : "s"} sin origen</p>
             </div>
             <div className="metric-smart-icon"><Users className="h-5 w-5" /></div>

@@ -31,6 +31,7 @@ ERP/outbox/storefront.
 - [x] atribución manual opcional desde POS, persistida en la orden existente
 - [x] resumen live de tendencia, pagos, productos y origen social
 - [x] modo claro mate y modo oscuro, con preferencia compartida con Operaciones
+- [x] mini sprint de fixes de revisión Codex CI: comparación operacional, alcance del neto y máximo del gráfico según métrica
 
 ## Cambios implementados
 
@@ -139,6 +140,23 @@ python tools/amon_guard.py --all
 - El corte `05:00` sigue hardcodeado hasta que exista configuracion por tenant.
 - Caja estimada no reemplaza arqueo ni cierre formal.
 - El baseline del repo no deja `amon_guard --all` en verde todavia.
+
+## Mini sprint de revisión Codex CI
+
+### Objetivo
+
+Corregir tres interpretaciones erróneas detectadas después del QA visual: los
+períodos comparables deben conservar la jornada operacional; el neto no debe
+mezclar ventas de un canal con gastos sin atribución; y el día destacado debe
+seguir la métrica activa del gráfico.
+
+### Validación
+
+- `e2e/unit/m7-metrics-review-fixes.spec.ts`: 4/4 OK.
+- Typecheck Admin: OK.
+- Build Admin: OK; Next completó compilación y prerender. Reportó avisos de caché Webpack y múltiples lockfiles ya observados en este repo.
+- Prueba API local reportada por Nelson: 14/14 Orders API, cubre atribución POS; no cubre cálculos del dashboard.
+- No merge ni deploy dentro de este mini sprint.
 
 ## Next step
 
