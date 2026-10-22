@@ -3,6 +3,41 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-22 — SEC-01: autenticación obligatoria en `createExpense`
+
+### Qué cambió
+- `createExpense` ahora exige Firebase ID token con claim `admin:true`. Sin token devuelve 401 (`UNAUTHENTICATED`); autenticado sin claim devuelve 403 (`FORBIDDEN`). El auth gate corre antes de parsear body o tocar Firestore.
+- `apps/admin/src/lib/api/expenses.ts` adjunta un ID token fresco por llamada, reutilizando `auth.currentUser.getIdToken()`.
+- Contract tests ampliados: 3 pruebas negativas (sin token, token basura, staff sin claim) + round-trip admin que verifica categoría, importe, método de pago y `occurredAt` preservados. Suite completa 46/46 API + 96/96 unit = **142/142 OK**.
+
+### Archivos modificados
+- `apps/functions/src/routes/expenses.ts`
+- `apps/admin/src/lib/api/expenses.ts`
+- `e2e/api/expenses.contract.spec.ts`
+- `e2e/api/m6j-store-operation.contract.spec.ts` (dos llamadas a `createExpense` agregan `bearer(adminToken)`)
+- `roadmap/sprint-sec-01-expense-auth.md` (nuevo)
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- Autenticación de `/createExpense` ahora exigida (igual que endpoints `/setStoreOperation`, `/getStoreControl`, `/closeCashSession`). Mismo claim `admin:true` que `isAdmin()` en `firestore.rules`.
+- Claim `admin` sigue siendo global y permite operar sobre cualquier `tenantId` enviado al endpoint. SEC-01 cierra la escritura anónima, pero no constituye autorización multi-tenant. SEC-BASE debe resolver identidad, membresías por tenant, roles granulares y trazabilidad antes de SEC-02.
+- Sin cambios en reglas Firestore, schemas, esquemas de documentos ni UI de `/gastos`.
+
+### Validación
+- `npm --prefix apps/functions run build`: OK.
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`: OK.
+- `npx playwright test e2e/api/expenses.contract.spec.ts --config=playwright.config.ts`: 13/13 OK.
+- `npx playwright test e2e/api/m6j-store-operation.contract.spec.ts --config=playwright.config.ts`: 19/19 OK (regresión cierre de caja).
+- `npx playwright test e2e/api --config=playwright.config.ts`: 46/46 OK.
+- `npx playwright test e2e/unit --config=playwright.config.ts`: 96/96 OK.
+- `git diff --check`: OK.
+
+### Riesgos y siguiente paso
+- Las capturas de `/gastos` muestran un registro exitoso. Queda pendiente QA humano en DevTools para confirmar el Bearer token y un rechazo negativo; `AdminGuard` por sí solo no sustituye esa evidencia.
+- Riesgo residual: `admin:true` global no limita el acceso al `tenantId` solicitado. AMON Shop debe ser multi-tenant seguro desde sus cimientos y estar listo para producción, sin atajos de demo.
+- Fuera de SEC-01 pero ya documentado en la auditoría: `createPosSale`, `updateOrderStatus` y `getOrder` siguen sin auth (abordados en SEC-02/03/04). Claim no scoped-by-tenant permanece.
+- Siguiente ticket: SEC-BASE. Bloquea SEC-02 para no extender `admin:true` global. Cada sprint requiere PR, QA humano y aprobación antes del merge. Sin cambios de producción ni despliegue.
+
 ## 2026-10-21 — Mini sprint: correcciones de revisión Codex CI en Métricas
 
 ### Qué cambió

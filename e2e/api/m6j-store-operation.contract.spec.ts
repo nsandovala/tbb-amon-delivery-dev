@@ -364,6 +364,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       });
 
       const expense = await api.post("createExpense", {
+        headers: bearer(adminToken),
         data: {
           tenantId,
           category: "supplies",
@@ -537,6 +538,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       expect((await reopen.json()).error.code).toBe("CASH_ALREADY_CLOSED");
 
       const retroactiveExpense = await api.post("createExpense", {
+        headers: bearer(adminToken),
         data: {
           tenantId,
           category: "supplies",
