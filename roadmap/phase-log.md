@@ -84,6 +84,66 @@ Total output lines: 901
 ### Release gate
 - Sin merge ni despliegue. Ejecutar las pruebas locales antes de continuar con el estudio de UX de métricas.
 
+## 2026-10-21 — M8 follow-up: historial y reimpresión de comprobantes
+
+### Qué cambió
+- POS muestra un historial en vivo de las últimas 50 ventas POS guardadas y permite volver a abrir cada comprobante.
+- `/pedidos` permite abrir el comprobante interno del pedido seleccionado, incluidos pedidos web.
+- El comprobante se reconstruye desde el pedido Firestore existente; los pedidos cancelados quedan marcados como cancelados.
+
+### Por qué cambió
+- El primer diseño sólo mostraba el comprobante inmediatamente después de vender. El operador necesitaba volver a consultarlo desde POS y el historial operativo de Pedidos.
+- El intento de aplicar el parche en Windows se detuvo porque quiso agregar el logo TBB que ya existía localmente; no llegó a incorporar el test ni la pantalla. El parche corregido omite el binario del logo.
+
+### Contratos afectados
+- Ninguno. No hay cambios a Functions, APIs, escrituras, colecciones, reglas ni datos del ERP.
+
+### Validación
+- `npx playwright test e2e/unit/m8-pos-receipt.spec.ts --config=playwright.config.ts`: 3/3 OK.
+- Typecheck de Admin y build de Admin: OK; Next emitió avisos de caché Webpack y múltiples lockfiles.
+- `git diff --check`: OK.
+
+### Release gate
+- Sin commit, push, PR, merge ni despliegue. Mantener el logo existente en `apps/admin/public/images/stubs/logotbb.png` al aplicar el parche.
+
+## 2026-10-21 — POS: comprobante interno e impresión nativa
+
+### Qué cambió
+- `/pos` muestra tienda TBB y operador autenticado, ofrece modo claro/oscuro y al registrar una venta abre un comprobante interno con los datos guardados.
+- El comprobante puede compartirse como texto, copiarse o imprimirse desde el diálogo nativo del navegador/sistema.
+- Se agregó el logo TBB al paquete de Admin y una regresión para contenido, totales y etiqueta no tributaria.
+
+### Por qué cambió
+- Aplicar el mockup de POS aprobado y probar el flujo de comprobante antes de estudiar SII o integrar hardware/proveedores.
+
+### Archivos modificados
+- `apps/admin/src/app/pos/page.tsx`
+- `apps/admin/src/app/globals.css`
+- `apps/admin/src/components/pos/pos-receipt-dialog.tsx`
+- `apps/admin/src/lib/pos-receipt.ts`
+- `apps/admin/src/lib/api/orders.ts`
+- `apps/admin/public/images/stubs/logotbb.png`
+- `e2e/unit/m8-pos-receipt.spec.ts`
+- `docs/architecture/pos-receipt-contract.md`
+- `roadmap/sprint-pos-receipt-ux.md`
+
+### Contratos afectados
+- Sin cambio de esquema Firestore ni escritura backend. El POS reutiliza `createPosSale` y lee el pedido guardado con `getOrder`.
+- El documento impreso se rotula expresamente como interno y no tributario.
+
+### Validación
+- `e2e/unit/m8-pos-receipt.spec.ts`: 2/2 aprobadas.
+- Typecheck Admin y build Admin aprobados. Next reportó avisos conocidos de lockfiles múltiples y caché Webpack, pero completó compilación y prerender.
+- Impresión física y ajustes de papel quedan pendientes de QA manual en Windows.
+
+### Riesgos restantes
+- El logo adjunto es PNG opaco; una impresora térmica podría gastar demasiada tinta/papel en el fondo negro.
+- El navegador no confirma ni controla la impresora elegida.
+- Sin commit, push, PR, merge ni despliegue.
+
+### Próximo paso
+- Ejecutar validación local. Luego probar en Windows el diálogo nativo y la impresora disponible antes de decidir una variante monocroma o una integración directa.
+
 ## 2026-10-16 — Mini sprint: correcciones de revisión de fechas especiales
 
 ### Qué cambió

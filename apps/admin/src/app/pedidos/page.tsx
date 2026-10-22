@@ -6,7 +6,9 @@ import { collection, getDocs } from "firebase/firestore";
 import { useLiveOrders } from "../../hooks/use-live-orders";
 import { updateOrderStatusApi } from "../../lib/api/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
+import { PosReceiptDialog } from "../../components/pos/pos-receipt-dialog";
 import { db } from "../../lib/firebase/client";
+import { receiptFromOrder, type PosReceipt } from "../../lib/pos-receipt";
 import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
 import {
   getHumanOrderLabel,
@@ -319,6 +321,7 @@ export default function OrdersPage() {
   const [pendingStatusChange, setPendingStatusChange] = useState<{ orderId: string; status: OrderStatus } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [receipt, setReceipt] = useState<PosReceipt | null>(null);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -780,12 +783,21 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
+                  <button
+                    type="button"
+                    onClick={() => setReceipt(receiptFromOrder(selectedOrder))}
+                    className="w-full rounded-xl border border-[#c4a46a]/45 bg-[#c4a46a]/10 px-4 py-3 text-sm font-semibold text-[#e4ca92] transition-colors hover:bg-[#c4a46a]/15"
+                  >
+                    Ver comprobante interno
+                  </button>
+
                 </div>
               ) : null}
             </aside>
           </div>
         )}
       </div>
+      {receipt ? <PosReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} actionLabel="Cerrar" onNewSale={() => setReceipt(null)} /> : null}
     </main>
   );
 }
