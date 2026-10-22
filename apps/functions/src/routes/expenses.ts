@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { createExpenseSchema } from "../schemas/expense.schema";
 import { handleCreateExpense } from "../services/expenses.service";
+import { requireAdmin } from "../lib/admin-auth";
 import { ValidationError, AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import type { ApiResponse } from "../types/api";
@@ -10,7 +11,9 @@ const DEFAULT_TENANT = "tbb";
 /**
  * POST /expenses
  * Records an operating expense in tenants/{tenantId}/expenses.
- * This is the only write path: Firestore rules deny direct client writes.
+ * Admin-only: requires a Firebase ID token with the `admin` custom claim.
+ * The admin claim remains global. Tenant-scoped membership and roles are a
+ * blocking SEC-BASE prerequisite before expanding admin endpoints in SEC-02.
  */
 export const createExpense = onRequest(
   { cors: true },
@@ -20,6 +23,9 @@ export const createExpense = onRequest(
         res.status(405).json({ ok: false, error: { code: "METHOD_NOT_ALLOWED", message: "POST only" } } satisfies ApiResponse);
         return;
       }
+
+      // Auth gate runs BEFORE schema parsing or any Firestore side effect.
+      await requireAdmin(req);
 
       const body = req.body;
       if (!body) {

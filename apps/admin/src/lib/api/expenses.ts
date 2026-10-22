@@ -1,3 +1,4 @@
+import { auth } from "../firebase/client";
 import type {
   ExpenseCategory,
   ExpensePaymentMethod,
@@ -71,14 +72,22 @@ interface CreateExpenseResponse {
 
 /**
  * Records an operating expense through the createExpense Function.
- * Firestore rules deny direct client writes to tenants/{tenantId}/expenses,
- * so this HTTP call is the only write path from the admin.
+ * The endpoint is admin-only; this call attaches the current Firebase ID token.
+ * The token is fetched per request (not stored) and expired/invalid tokens are
+ * rejected server-side.
  */
 export async function createExpenseApi(
   payload: CreateExpensePayload
 ): Promise<CreateExpenseResponse> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("Sesión admin expirada. Vuelve a ingresar.");
+  }
+  const token = await user.getIdToken();
+
   return apiFetch<CreateExpenseResponse>(`${FUNCTIONS_BASE}/createExpense`, {
     method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
 }
