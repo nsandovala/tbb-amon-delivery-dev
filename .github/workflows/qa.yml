@@ -75,5 +75,12 @@ jobs:
           npm --workspace packages/shared run build
           npm --workspace apps/functions run build
 
+      - name: Verify standalone pilot Functions package
+        run: |
+          node tools/prepare-firebase-pilot.mjs
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+          node -e 'const p="./.firebase-pilot/functions/"; const z=require(p+"node_modules/zod/package.json").version; if (!z.startsWith("4.")) throw Error(`Expected Zod 4, got ${z}`); require(p+"lib/index.js")'
+
       - name: Run API contracts against local emulators
         run: npx --yes firebase-tools@15.34.1 emulators:exec --project "$FIREBASE_PROJECT_ID" --only auth,firestore,functions 'npm run test:e2e:api'

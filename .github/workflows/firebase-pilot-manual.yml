@@ -71,6 +71,13 @@ jobs:
           npm --workspace packages/shared run build
           npm --workspace apps/functions run build
 
+      - name: Prepare and verify standalone Functions package
+        run: |
+          node tools/prepare-firebase-pilot.mjs
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+          node -e 'const p="./.firebase-pilot/functions/"; const z=require(p+"node_modules/zod/package.json").version; if (!z.startsWith("4.")) throw Error(`Expected Zod 4, got ${z}`); require(p+"lib/index.js")'
+
       - name: Authenticate with approved pilot identity
         uses: google-github-actions/auth@v3
         with:
@@ -78,4 +85,4 @@ jobs:
           service_account: ${{ vars.FIREBASE_PILOT_SERVICE_ACCOUNT }}
 
       - name: Deploy pilot Functions codebase only
-        run: npx --yes firebase-tools@15.34.1 deploy --project "$FIREBASE_PROJECT_ID" --only functions:amon-functions --non-interactive
+        run: npx --yes firebase-tools@15.34.1 deploy --config firebase.pilot.json --project "$FIREBASE_PROJECT_ID" --only functions:amon-functions --non-interactive
