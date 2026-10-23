@@ -34,7 +34,10 @@ No cambian endpoints, modelos, reglas Firestore ni datos. Solo cambia el project
 
 ## Validación
 
-En CI: `npm ci`, builds existentes, y `firebase emulators:exec --project demo-amon-ci --only auth,firestore,functions 'npm run test:e2e:api'`. El resultado de la primera ejecución del PR draft debe revisarse antes de marcarlo listo.
+- En local: `npm ci`, builds de Shared y Functions, análisis de ambos YAML y `git diff --check` aprobaron. La ejecución local de emuladores se detuvo porque Firebase CLI intentó escribir credenciales y caché fuera del checkout permitido; no se amplió ese acceso.
+- [GitHub Actions del PR draft](https://github.com/nsandovala/tbb-amon-delivery-dev/actions/runs/40016010981): el job `api-contracts` ejecutó **46/46 pruebas aprobadas** en Auth, Firestore y Functions emulados con `demo-amon-ci`. El job `qa` compiló Web, Admin y Functions. Ambos terminaron correctamente.
+- [Security Gate](https://github.com/nsandovala/tbb-amon-delivery-dev/actions/runs/40016011011): aprobado.
+- El preflight manual se probó localmente con valores ficticios: rechazó `DEPLOY_ENABLED=false` y rechazó `minerp-sentinel`, incluso cuando los demás controles tenían valores.
 
 ## Riesgos y próximo paso
 
