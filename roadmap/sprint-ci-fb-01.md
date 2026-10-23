@@ -13,9 +13,9 @@ Agregar los contratos API al CI y dejar un camino de despliegue manual de Functi
 
 ## Cambios y razón
 
-- `.github/workflows/qa.yml`: añade un job `api-contracts` para ejecutar Auth, Firestore y Functions emulados con un namespace local `demo-amon-ci`. No solicita credenciales ni accede a Firebase real. Instala Java para Firestore y Firebase CLI con versión fijada.
+- `.github/workflows/qa.yml`: añade un job `api-contracts` para ejecutar Auth, Firestore y Functions emulados con un namespace local `demo-amon-ci`. Corre los contratos primero con la configuración habitual y luego con `firebase.pilot.json`, que carga el paquete autónomo que se enviaría al piloto. No solicita credenciales ni accede a Firebase real. Instala Java para Firestore y Firebase CLI con versión fijada.
 - `playwright.config.ts`, `e2e/support/emulator-fixtures.ts`, `e2e/api/expenses.contract.spec.ts`: leen `FIREBASE_PROJECT_ID` para que URL de Functions, Firestore y Auth coincidan con el proyecto emulado. Sin la variable, conservan el valor local anterior.
-- `.github/workflows/firebase-pilot-manual.yml`: permite únicamente `workflow_dispatch` desde `main`, con confirmación literal, ID igual al aprobado en una variable, habilitación explícita y rechazo de `minerp-sentinel`/`minierp-sentinel` y proyectos `demo-*`. Usa identidad federada y limita el despliegue a la codebase de Functions `amon-functions`.
+- `.github/workflows/firebase-pilot-manual.yml`: permite únicamente `workflow_dispatch` desde `main`, con confirmación literal, ID igual al aprobado en una variable, habilitación explícita y rechazo de `minerp-sentinel`/`minierp-sentinel` y proyectos `demo-*`. El preflight transmite al job de despliegue la identidad federada que validó, evitando que variables del environment sustituyan silenciosamente el proveedor o la cuenta de servicio. Limita el despliegue a la codebase de Functions `amon-functions`.
 - `tools/prepare-firebase-pilot.mjs` y `firebase.pilot.json`: preparan una fuente temporal autónoma para Functions. El código compilado no importa `@amon/shared` en runtime; el script comprueba esa condición y genera un manifiesto sin esa dependencia de workspace. CI crea un lockfile acorde, ejecuta `npm ci --omit=dev` sobre el paquete y carga su entrada antes de permitir el deploy. El CLI usa esta fuente temporal mediante `--config firebase.pilot.json`.
 
 ## Barreras de liberación
@@ -40,6 +40,7 @@ No cambian endpoints, modelos, reglas Firestore ni datos. Solo cambia el project
 - [Security Gate](https://github.com/nsandovala/tbb-amon-delivery-dev/actions/runs/40016011011): aprobado.
 - El preflight manual se probó localmente con valores ficticios: rechazó `DEPLOY_ENABLED=false` y rechazó `minerp-sentinel`, incluso cuando los demás controles tenían valores.
 - Tras el comentario de revisión del PR #79 se detectó que `apps/functions/package-lock.json` no corresponde al manifiesto actual: omitía `@amon/shared` y resolvía Zod 3. El paquete piloto temporal evita usar ese lockfile obsoleto. En local, su `npm ci --omit=dev` y la carga de `lib/index.js` aprobaron con Node 20 y Zod 4.6.7. La misma comprobación quedó incorporada a CI; revisar la nueva ejecución antes de cerrar el comentario.
+- La revisión externa detectó dos brechas adicionales: las pruebas API no ejercitaban el paquete piloto (M1) y la autenticación podía leer variables del environment distintas de las verificadas en preflight (M2). Se añadió la segunda ejecución de contratos con `firebase.pilot.json` y se pasó la identidad verificada mediante outputs del job. La ejecución de CI del nuevo commit debe confirmarse antes del merge.
 
 ## Riesgos y próximo paso
 
@@ -47,4 +48,5 @@ No cambian endpoints, modelos, reglas Firestore ni datos. Solo cambia el project
 - `main` no tenía protección de rama en la inspección inicial. Configurar protección y revisores del environment antes de cualquier liberación.
 - La cuenta federada debe tener permisos mínimos para desplegar la codebase y su confianza OIDC debe restringirse a este repositorio y rama `main`.
 - Si Functions empieza a importar `@amon/shared` en runtime, la preparación fallará hasta que se diseñe un paquete compartido desplegable. Esto evita omitir una dependencia real sin advertencia.
+- El lockfile del paquete piloto se genera en cada ejecución y no está fijado en Git. Antes de habilitar el despliegue real, revisar y decidir el pin de versiones y el lockfile (M3 de la revisión externa).
 - Revisar el PR #79, cerrar QA humano y decidir el proyecto piloto/identidad por separado. No ejecutar el workflow manual durante CI-FB-01.

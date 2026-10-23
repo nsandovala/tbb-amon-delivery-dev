@@ -84,3 +84,6 @@ jobs:
 
       - name: Run API contracts against local emulators
         run: npx --yes firebase-tools@15.34.1 emulators:exec --project "$FIREBASE_PROJECT_ID" --only auth,firestore,functions 'npm run test:e2e:api'
+
+      - name: Run API contracts against pilot package
+        run: npx --yes firebase-tools@15.34.1 emulators:exec --config firebase.pilot.json --project "$FIREBASE_PROJECT_ID" --only auth,firestore,functions 'npm run test:e2e:api'

@@ -23,6 +23,9 @@ jobs:
   preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      wif_provider: ${{ steps.verify.outputs.wif_provider }}
+      service_account: ${{ steps.verify.outputs.service_account }}
     env:
       REQUESTED_PROJECT: ${{ inputs.project_id }}
       CONFIRMATION: ${{ inputs.confirmation }}
@@ -32,6 +35,7 @@ jobs:
       SERVICE_ACCOUNT: ${{ vars.FIREBASE_PILOT_SERVICE_ACCOUNT }}
     steps:
       - name: Verify explicit pilot approval and main branch
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
@@ -44,6 +48,8 @@ jobs:
             minerp-sentinel|minierp-sentinel|demo-*) echo '::error::This is not an approved real pilot project.'; exit 1 ;;
           esac
           test -n "$WIF_PROVIDER" && test -n "$SERVICE_ACCOUNT" || { echo '::error::Pilot identity configuration is incomplete.'; exit 1; }
+          printf 'wif_provider=%s\n' "$WIF_PROVIDER" >> "$GITHUB_OUTPUT"
+          printf 'service_account=%s\n' "$SERVICE_ACCOUNT" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: preflight
@@ -81,8 +87,8 @@ jobs:
       - name: Authenticate with approved pilot identity
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ vars.FIREBASE_PILOT_WIF_PROVIDER }}
-          service_account: ${{ vars.FIREBASE_PILOT_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ needs.preflight.outputs.wif_provider }}
+          service_account: ${{ needs.preflight.outputs.service_account }}
 
       - name: Deploy pilot Functions codebase only
         run: npx --yes firebase-tools@15.34.1 deploy --config firebase.pilot.json --project "$FIREBASE_PROJECT_ID" --only functions:amon-functions --non-interactive
