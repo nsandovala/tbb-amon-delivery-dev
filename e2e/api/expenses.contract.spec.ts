@@ -12,7 +12,7 @@ import { bearer, createUserToken, uniqueTenantId } from "../support/emulator-fix
  * el round-trip de SEC-01, leyendo el documento directo del emulador.
  */
 
-const PROJECT_ID = "minerp-sentinel";
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "minerp-sentinel";
 const FIRESTORE_DOCS = `http://127.0.0.1:8080/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const OWNER_HEADERS = { Authorization: "Bearer owner" };
 

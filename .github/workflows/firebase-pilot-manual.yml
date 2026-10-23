@@ -1,0 +1,81 @@
+name: Firebase pilot manual deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: Approved Firebase pilot project ID
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY_PILOT to confirm this manual release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-pilot-manual
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REQUESTED_PROJECT: ${{ inputs.project_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      APPROVED_PROJECT: ${{ vars.FIREBASE_PILOT_PROJECT_ID }}
+      DEPLOY_ENABLED: ${{ vars.FIREBASE_PILOT_DEPLOY_ENABLED }}
+      WIF_PROVIDER: ${{ vars.FIREBASE_PILOT_WIF_PROVIDER }}
+      SERVICE_ACCOUNT: ${{ vars.FIREBASE_PILOT_SERVICE_ACCOUNT }}
+    steps:
+      - name: Verify explicit pilot approval and main branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo '::error::Run only from main after an approved merge.'; exit 1; }
+          test "$CONFIRMATION" = 'DEPLOY_PILOT' || { echo '::error::Manual confirmation is missing.'; exit 1; }
+          test "$DEPLOY_ENABLED" = 'true' || { echo '::error::Pilot deploy is not enabled.'; exit 1; }
+          test -n "$APPROVED_PROJECT" || { echo '::error::Approved pilot project is unset.'; exit 1; }
+          test "$REQUESTED_PROJECT" = "$APPROVED_PROJECT" || { echo '::error::Project does not match the approved pilot.'; exit 1; }
+          case "$APPROVED_PROJECT" in
+            minerp-sentinel|minierp-sentinel|demo-*) echo '::error::This is not an approved real pilot project.'; exit 1 ;;
+          esac
+          test -n "$WIF_PROVIDER" && test -n "$SERVICE_ACCOUNT" || { echo '::error::Pilot identity configuration is incomplete.'; exit 1; }
+
+  deploy:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: firebase-pilot
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      FIREBASE_PROJECT_ID: ${{ inputs.project_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies and build Functions
+        run: |
+          npm ci
+          npm --workspace packages/shared run build
+          npm --workspace apps/functions run build
+
+      - name: Authenticate with approved pilot identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_PILOT_WIF_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_PILOT_SERVICE_ACCOUNT }}
+
+      - name: Deploy pilot Functions codebase only
+        run: npx --yes firebase-tools@15.34.1 deploy --project "$FIREBASE_PROJECT_ID" --only functions:amon-functions --non-interactive
