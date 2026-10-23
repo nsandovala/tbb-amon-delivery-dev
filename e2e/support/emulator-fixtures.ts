@@ -9,7 +9,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
  * - Los usuarios admin se crean en el emulador de Auth con claim `admin: true`.
  */
 
-const PROJECT_ID = "minerp-sentinel";
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "minerp-sentinel";
 const FIRESTORE_DOCS = `http://127.0.0.1:8080/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const AUTH_BASE = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1";
 const OWNER = { Authorization: "Bearer owner" };

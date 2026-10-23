@@ -42,3 +42,48 @@ jobs:
 
       - name: Build Firebase functions
         run: npm --workspace apps/functions run build
+
+  api-contracts:
+    name: api-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT_ID: demo-amon-ci
+      FUNCTIONS_BASE_URL: http://127.0.0.1:5001/demo-amon-ci/us-central1/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared contracts and Functions
+        run: |
+          npm --workspace packages/shared run build
+          npm --workspace apps/functions run build
+
+      - name: Verify standalone pilot Functions package
+        run: |
+          node tools/prepare-firebase-pilot.mjs
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+          node -e 'const p="./.firebase-pilot/functions/"; const z=require(p+"node_modules/zod/package.json").version; if (!z.startsWith("4.")) throw Error(`Expected Zod 4, got ${z}`); require(p+"lib/index.js")'
+
+      - name: Run API contracts against local emulators
+        run: npx --yes firebase-tools@15.34.1 emulators:exec --project "$FIREBASE_PROJECT_ID" --only auth,firestore,functions 'npm run test:e2e:api'
+
+      - name: Run API contracts against pilot package
+        run: npx --yes firebase-tools@15.34.1 emulators:exec --config firebase.pilot.json --project "$FIREBASE_PROJECT_ID" --only auth,firestore,functions 'npm run test:e2e:api'
