@@ -10,6 +10,7 @@ import {
   type Weekday,
 } from "@/lib/api/store";
 import { formatOperationalDate } from "@/lib/store-status";
+import { useActiveTenant } from "@/components/tenant-provider";
 
 type ExceptionMode = StoreDateException["mode"];
 
@@ -36,6 +37,7 @@ export function SpecialDatesEditor({
   today: string;
   onChanged: () => Promise<void> | void;
 }) {
+  const { tenantId } = useActiveTenant();
   const [date, setDate] = useState(today);
   const [mode, setMode] = useState<ExceptionMode>("closed");
   const [open, setOpen] = useState("17:30");
@@ -90,7 +92,7 @@ export function SpecialDatesEditor({
         ...(mode === "custom_hours" ? { open, close } : {}),
         ...(customerMessage.trim() ? { customerMessage: customerMessage.trim() } : {}),
       };
-      await updateStoreDateExceptionApi(exception);
+      await updateStoreDateExceptionApi(tenantId, exception);
       setMessage({ ok: true, text: `Excepción del ${formatOperationalDate(date)} guardada.` });
       resetForm(date);
       await onChanged();
@@ -109,7 +111,7 @@ export function SpecialDatesEditor({
     setBusy(true);
     setMessage(null);
     try {
-      await deleteStoreDateExceptionApi(exception.date);
+      await deleteStoreDateExceptionApi(tenantId, exception.date);
       if (editingDate === exception.date) resetForm();
       setMessage({ ok: true, text: `Excepción del ${formatOperationalDate(exception.date)} eliminada.` });
       await onChanged();

@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback } from "react";
 import { fetchStoreStatus } from "@/lib/api/store";
 import { usePolledStoreStatus } from "@/hooks/use-store-status";
+import { useActiveTenant } from "@/components/tenant-provider";
 import {
   formatCountdown,
   formatStoreClock,
@@ -18,7 +20,9 @@ import {
  * Solo lectura; las acciones viven en /operacion.
  */
 export function StoreStatusStrip() {
-  const { data: status, error, nowMs } = usePolledStoreStatus(fetchStoreStatus);
+  const { tenantId } = useActiveTenant();
+  const load = useCallback(() => fetchStoreStatus(tenantId), [tenantId]);
+  const { data: status, error, nowMs } = usePolledStoreStatus(load);
 
   if (!status) {
     return (

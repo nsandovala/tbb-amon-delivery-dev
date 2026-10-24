@@ -1,4 +1,4 @@
-//import { db } from "../firebase/client";
+import { auth } from "../firebase/client";
 
 const USE_EMULATOR = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
 const FUNCTIONS_BASE = USE_EMULATOR
@@ -50,6 +50,20 @@ async function apiFetch<T>(
   return (data as { ok: true; data: T }).data;
 }
 
+/**
+ * SEC-BASE/P1-1: cualquier endpoint admin exige un ID token fresco. El token
+ * se obtiene por request y nunca se cachea; expirado o inválido lo rechaza
+ * el servidor (401/403).
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("Sesión admin expirada. Vuelve a ingresar.");
+  }
+  const token = await user.getIdToken();
+  return { Authorization: `Bearer ${token}` };
+}
+
 interface CreateOrderPayload {
   tenantId?: string;
   items: { productId: string; qty: number }[];
@@ -82,7 +96,7 @@ export async function createOrderApi(
 }
 
 interface CreatePosSalePayload {
-  tenantId?: string;
+  tenantId: string;
   items: { productId: string; qty: number }[];
   customer: {
     name: string;
@@ -91,9 +105,9 @@ interface CreatePosSalePayload {
     address?: string;
     notes?: string;
   };
-  fulfillmentType?: "delivery" | "pickup";
-  paymentMethod?: "pending" | "cash" | "card" | "transfer";
-  acquisitionSource?: "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
+  fulfillmentType: "delivery" | "pickup";
+  paymentMethod: "cash" | "card" | "transfer" | "pending";
+  acquisitionSource?: string;
   acquisitionCampaign?: string;
 }
 
@@ -123,34 +137,38 @@ export async function createPosSaleApi(
 ): Promise<CreatePosSaleResponse> {
   return apiFetch<CreatePosSaleResponse>(`${FUNCTIONS_BASE}/createPosSale`, {
     method: "POST",
+    headers: await authHeaders(),
     body: JSON.stringify(payload),
   });
 }
 
-export async function getOrderApi(orderId: string, tenantId = "tbb"): Promise<PosOrderSnapshot> {
+export async function getOrderApi(
+  orderId: string,
+  tenantId: string
+): Promise<PosOrderSnapshot> {
   return apiFetch<PosOrderSnapshot>(
     `${FUNCTIONS_BASE}/getOrder/${encodeURIComponent(orderId)}?tenantId=${encodeURIComponent(tenantId)}`
   );
 }
 
-interface UpdateOrderStatusPayload {
-  status: "queued" | "preparing" | "ready" | "on_the_way" | "delivered" | "cancelled";
-}
+type OrderStatus = "queued" | "preparing" | "ready" | "on_the_way" | "delivered" | "cancelled";
 
 interface UpdateOrderStatusResponse {
   orderId: string;
-  status: UpdateOrderStatusPayload["status"];
+  status: OrderStatus;
 }
 
 export async function updateOrderStatusApi(
   orderId: string,
-  status: UpdateOrderStatusPayload["status"]
+  status: OrderStatus,
+  tenantId: string
 ): Promise<UpdateOrderStatusResponse> {
-  return apiFetch<UpdateOrderStatusResponse>(
-    `${FUNCTIONS_BASE}/updateOrderStatus?orderId=${orderId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
-    }
-  );
+  const url =
+    `${FUNCTIONS_BASE}/updateOrderStatus` +
+    `?orderId=${encodeURIComponent(orderId)}&tenantId=${encodeURIComponent(tenantId)}`;
+  return apiFetch<UpdateOrderStatusResponse>(url, {
+    method: "PATCH",
+    headers: await authHeaders(),
+    body: JSON.stringify({ status, tenantId }),
+  });
 }

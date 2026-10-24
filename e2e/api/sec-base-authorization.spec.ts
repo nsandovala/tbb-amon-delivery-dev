@@ -180,6 +180,63 @@ test.describe("SEC-BASE multi-tenant authorization", () => {
     expect(foreign.status()).toBe(403);
   });
 
+  test("P1-1: createPosSale exige membresía en el tenant", async () => {
+    const salePayload = (tenant: string) => ({
+      tenantId: tenant,
+      items: [{ productId: "unknown-product", qty: 1 }],
+      customer: { name: "Mostrador" },
+      fulfillmentType: "pickup" as const,
+      paymentMethod: "cash" as const,
+    });
+
+    // Anónimo → 401.
+    const anon = await api.post("createPosSale", { data: salePayload(tenantA) });
+    expect(anon.status()).toBe(401);
+
+    // Autenticado sin membresía → 403.
+    const noMember = await api.post("createPosSale", {
+      headers: bearer(unaffiliated.token),
+      data: salePayload(tenantA),
+    });
+    expect(noMember.status()).toBe(403);
+
+    // Owner-A intenta operar en tenantB → 403.
+    const cross = await api.post("createPosSale", {
+      headers: bearer(ownerA.token),
+      data: salePayload(tenantB),
+    });
+    expect(cross.status()).toBe(403);
+
+    // Falta `tenantId` → 400 (no fallback silencioso).
+    const noTenant = await api.post("createPosSale", {
+      headers: bearer(ownerA.token),
+      data: { ...salePayload(tenantA), tenantId: undefined },
+    });
+    expect(noTenant.status()).toBe(400);
+  });
+
+  test("P1-1: updateOrderStatus exige membresía en el tenant", async () => {
+    // Anónimo → 401 (antes de validar body/payload).
+    const anon = await api.patch(`updateOrderStatus?orderId=xxx&tenantId=${tenantA}`, {
+      data: { status: "preparing", tenantId: tenantA },
+    });
+    expect(anon.status()).toBe(401);
+
+    // Sin tenantId → 400.
+    const noTenant = await api.patch("updateOrderStatus?orderId=xxx", {
+      headers: bearer(ownerA.token),
+      data: { status: "preparing" },
+    });
+    expect(noTenant.status()).toBe(400);
+
+    // Owner-A intenta mutar un pedido en tenantB → 403 ANTES de buscar la orden.
+    const cross = await api.patch(`updateOrderStatus?orderId=xxx&tenantId=${tenantB}`, {
+      headers: bearer(ownerA.token),
+      data: { status: "preparing", tenantId: tenantB },
+    });
+    expect(cross.status()).toBe(403);
+  });
+
   test("H-04: listMyMemberships devuelve solo los tenants autorizados por el servidor", async () => {
     // ownerA está en tenantA; no debe aparecer tenantB.
     const resOwner = await api.get("listMyMemberships", {

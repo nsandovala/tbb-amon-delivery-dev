@@ -19,6 +19,8 @@ export const PERMISSIONS = [
   "store.manage_hours",
   "cash.read_summary",
   "cash.close_session",
+  "orders.update_status",
+  "pos.create_sale",
   "members.manage",
 ] as const;
 
@@ -31,6 +33,8 @@ const OPERATIONAL_PERMISSIONS: Permission[] = [
   "store.manage_hours",
   "cash.read_summary",
   "cash.close_session",
+  "orders.update_status",
+  "pos.create_sale",
 ];
 
 const ROLE_PERMISSIONS: Record<MembershipRole, ReadonlySet<Permission>> = {

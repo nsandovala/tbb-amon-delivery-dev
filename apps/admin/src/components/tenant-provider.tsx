@@ -30,11 +30,17 @@ import { ACTIVE_TENANT_STORAGE_KEY } from "@/lib/tenant";
  */
 
 interface TenantContextValue {
-  status: "loading" | "authenticated" | "unauthenticated" | "no-memberships";
+  status:
+    | "loading"
+    | "authenticated"
+    | "unauthenticated"
+    | "no-memberships"
+    | "error";
   uid: string | null;
   email: string | null;
   memberships: MembershipSummary[];
   activeTenant: MembershipSummary | null;
+  errorMessage: string | null;
   setActiveTenant: (tenantId: string) => void;
   refresh: () => Promise<void>;
 }
@@ -69,6 +75,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<MembershipSummary[]>([]);
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const resolve = useCallback(async () => {
     const current = auth.currentUser;
@@ -78,13 +85,17 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setEmail(null);
       setMemberships([]);
       setActiveTenantId(null);
+      setErrorMessage(null);
       writeStoredTenant(null);
       return;
     }
 
     try {
       const result = await fetchMyMemberships();
+      setErrorMessage(null);
       if (!result) {
+        // Backend respondió 401/403: la sesión del cliente está activa en
+        // Firebase Auth pero el servidor rechazó el token (p. ej. revocado).
         setStatus("unauthenticated");
         setUid(null);
         setEmail(null);
@@ -120,10 +131,13 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         setActiveTenantId(null);
       }
       setStatus("authenticated");
-    } catch {
-      setStatus("unauthenticated");
-      setMemberships([]);
-      setActiveTenantId(null);
+    } catch (err) {
+      // Fallo transitorio: red, 5xx, DNS, etc. Mantenemos la sesión Firebase
+      // activa, no limpiamos memberships previas (si existían, siguen siendo
+      // la mejor aproximación), y marcamos "error" para que el guard muestre
+      // retry sin redirigir a /login. Prevenimos el loop /login↔/pedidos.
+      setStatus("error");
+      setErrorMessage(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
@@ -158,10 +172,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       email,
       memberships,
       activeTenant,
+      errorMessage,
       setActiveTenant,
       refresh: resolve,
     }),
-    [status, uid, email, memberships, activeTenant, setActiveTenant, resolve]
+    [status, uid, email, memberships, activeTenant, errorMessage, setActiveTenant, resolve]
   );
 
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;

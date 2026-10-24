@@ -543,7 +543,7 @@ export default function PosPage() {
     setClosingIds((prev) => new Set(prev).add(orderId));
 
     try {
-      await updateOrderStatusApi(orderId, "delivered");
+      await updateOrderStatusApi(orderId, "delivered", tenantId);
       setToast({
         type: "success",
         message: `${humanLabel} cerrada`,

@@ -469,7 +469,7 @@ export default function OrdersPage() {
     try {
       setUpdatingIds((prev) => new Set([...prev, orderId]));
       setPendingStatusChange({ orderId, status: nextStatus });
-      await updateOrderStatusApi(orderId, nextStatus);
+      await updateOrderStatusApi(orderId, nextStatus, tenantId);
     } catch (error) {
       console.error("Error actualizando estado:", error);
       setPendingStatusChange(null);

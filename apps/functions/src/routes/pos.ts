@@ -1,13 +1,25 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequest, type Request } from "firebase-functions/v2/https";
 import { updateOrderStatusSchema } from "../schemas/update-order-status.schema";
 import { createPosSaleSchema } from "../schemas/create-pos-sale.schema";
 import { handleUpdateOrderStatus } from "../services/orders.service";
 import { handleCreatePosSale } from "../services/pos.service";
+import { requireMembershipPermission } from "../lib/authz";
 import { ValidationError, NotFoundError, AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import type { ApiResponse } from "../types/api";
 
-const DEFAULT_TENANT = "tbb";
+/**
+ * SEC-BASE/P1-1: ambos endpoints son operaciones admin — exigen membresía
+ * activa en el tenant y el permiso correspondiente. El tenant debe venir
+ * explícito; no hay fallback a `tbb`.
+ */
+function readTenantFromQueryOrBody(req: Request): string {
+  const fromQuery =
+    typeof req.query.tenantId === "string" ? req.query.tenantId.trim() : "";
+  const fromBody =
+    req.body && typeof req.body.tenantId === "string" ? req.body.tenantId.trim() : "";
+  return fromQuery || fromBody || "";
+}
 
 /**
  * PATCH /orders/:id/status
@@ -40,12 +52,17 @@ export const updateOrderStatus = onRequest(
         return;
       }
 
+      const tenantId = readTenantFromQueryOrBody(req);
+      if (!tenantId) {
+        throw new ValidationError("tenantId is required");
+      }
+
+      await requireMembershipPermission(req, tenantId, "orders.update_status");
+
       const parsed = updateOrderStatusSchema.safeParse(body);
       if (!parsed.success) {
         throw new ValidationError("Invalid status payload", parsed.error.issues);
       }
-
-      const tenantId = DEFAULT_TENANT;
 
       await handleUpdateOrderStatus(tenantId, orderId, parsed.data);
 
@@ -78,12 +95,18 @@ export const createPosSale = onRequest(
         return;
       }
 
+      const tenantId = readTenantFromQueryOrBody(req);
+      if (!tenantId) {
+        throw new ValidationError("tenantId is required");
+      }
+
+      await requireMembershipPermission(req, tenantId, "pos.create_sale");
+
       const parsed = createPosSaleSchema.safeParse(body);
       if (!parsed.success) {
         throw new ValidationError("Invalid POS sale payload", parsed.error.issues);
       }
 
-      const tenantId = parsed.data.tenantId || DEFAULT_TENANT;
       const result = await handleCreatePosSale(tenantId, parsed.data);
 
       res.status(201).json({

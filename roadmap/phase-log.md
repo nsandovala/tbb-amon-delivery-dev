@@ -118,6 +118,39 @@ Total output lines: 901
 - `firebase emulators:exec --project demo-sec-base --only auth,firestore,functions 'npm run test:e2e:api'`: **62/62 OK** (33 M6J + 14 expenses + 14 SEC-BASE + 1 listener-revocation).
 - Bootstrap matrix (7 escenarios ejecutados contra emulador): todos los exit codes esperados.
 
+### Remediación PR #80 (2026-10-24, post-Codex)
+
+**CI-FIX**: `firebase.pilot.json` carecía de `firestore` → el job pilot del CI arrancaba el emulador sin `firestore.rules`, aplicando reglas abiertas. 60/62 PASS encubría todos los chequeos negativos de aislamiento.
+
+Fix:
+- `firebase.pilot.json` incluye `"firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }`. El workflow sigue limitando el deploy manual a Functions.
+- Nueva spec `e2e/api/sec-base-rules-closed.spec.ts`: fail-closed que escribe anónimamente a `expenses/*` y exige 403. Si alguien vuelve a quitar las rules del config, CI cae en vez de dar verde falso.
+
+**P1-1**: `updateOrderStatus` y `createPosSale` autorizados.
+- Nuevos permisos `orders.update_status` y `pos.create_sale` (owner y admin).
+- `routes/pos.ts`: ambos handlers requieren `tenantId` explícito + `requireMembershipPermission`.
+- `apps/admin/src/lib/api/orders.ts`: `authHeaders()` adjunta ID token fresco por request; firmas aceptan `tenantId`.
+- `/pedidos` y `/pos` propagan `useActiveTenant().tenantId`.
+- Nuevos contract tests cross-tenant.
+
+**P1-3**: `STORE_TENANT_ID` eliminado de `apps/admin/src/lib/api/store.ts`. Todas las funciones aceptan `tenantId` como primer argumento. Call-sites migrados en `operacion/page.tsx` y los paneles (cash, store, schedule, special-dates).
+
+**P1-2**: `AdminGuard` envuelve children con `<div key={activeTenant.tenantId}>`. Cambio de tenant remonta toda la rama bajo el guard: carrito, listeners, formularios y pending orders se descartan.
+
+**P2**: `TenantContext` tiene nuevo `status: "error"` para fallos transitorios (red / 5xx). AdminGuard renderiza UI de retry sin redirigir. Login maneja el error sin auto-redirect. Rompe el loop `/login ↔ /pedidos`.
+
+Validación:
+- Builds + typechecks (admin / web / shared / functions): OK.
+- Playwright API contra stack live (reglas reales): **65/65 PASS**.
+- Playwright unit: **96/96 PASS**.
+- Fail-closed de rules (CI-FIX): verificado contra firebase.json (equivalente al pilot ahora que incluye el mismo campo `firestore`).
+- `git diff --check`: limpio.
+
+Riesgos residuales:
+- BUILD-01 (lockfile Functions) sigue pendiente; bloqueante antes del deploy piloto.
+- Revocación con listener activo: ventana no-instantánea documentada en H-03.
+- `createOrder`/`getOrder` siguen públicos por diseño (storefront + tracking futuro).
+
 ### Fix post-QA (2026-10-24, H-03b)
 QA humano reportó 5/5 FAIL en `sec-base-listener-revocation.spec.ts` ejecutando bare (sin `FIREBASE_PROJECT_ID`) con `permission-denied` en snapshot inicial. Root cause: fallback de projectId en ese spec era `demo-sec-base` cuando el resto del repo defaultea a `minerp-sentinel`. Fixtures REST escribían la membresía en un namespace y el Firebase Web SDK leía desde otro.
 

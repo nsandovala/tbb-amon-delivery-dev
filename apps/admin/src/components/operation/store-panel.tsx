@@ -17,6 +17,7 @@ import {
   STORE_STATE_LABELS,
   TONE_CLASSES,
 } from "@/lib/store-status";
+import { useActiveTenant } from "@/components/tenant-provider";
 
 type Action = "open" | "close" | "resume_schedule";
 
@@ -47,6 +48,7 @@ export function StorePanel({
   nowMs: number;
   onChanged: () => Promise<void> | void;
 }) {
+  const { tenantId } = useActiveTenant();
   const { status } = control;
   const toneKey = getStoreTone(status.state);
   const tone = TONE_CLASSES[toneKey];
@@ -76,7 +78,7 @@ export function StorePanel({
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await setStoreOperationApi(action, reason.trim());
+      const result = await setStoreOperationApi(tenantId, action, reason.trim());
       setFeedback({
         ok: true,
         text: result.changed
@@ -97,7 +99,7 @@ export function StorePanel({
     setBusy(true);
     setFeedback(null);
     try {
-      await updateStoreHoursApi(control.defaultConfig, "Horario inicial 17:30–22:30");
+      await updateStoreHoursApi(tenantId, control.defaultConfig, "Horario inicial 17:30–22:30");
       setFeedback({ ok: true, text: "Horario 17:30–22:30 creado. Revísalo abajo." });
       await onChanged();
     } catch (err) {

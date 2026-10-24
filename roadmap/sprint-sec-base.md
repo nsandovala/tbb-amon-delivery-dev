@@ -37,6 +37,8 @@ cualquier alta posterior pasan por Admin SDK (ver `tools/bootstrap-owner.mjs`).
 | `store.manage_hours`      |   ✅   |   ✅   |
 | `cash.read_summary`       |   ✅   |   ✅   |
 | `cash.close_session`      |   ✅   |   ✅   |
+| `orders.update_status`    |   ✅   |   ✅   |
+| `pos.create_sale`         |   ✅   |   ✅   |
 | `members.manage`          |   ✅   |   ❌   |
 
 Fuente única: `apps/functions/src/lib/permissions.ts`.
@@ -224,6 +226,58 @@ Matriz de resultados contra el emulador:
 | `--uid == --created-by-uid`               | 2    | rechaza autoproclamación                   |
 | sin `FIRESTORE_EMULATOR_HOST` ni flag prod | 5    | rechaza por seguridad                     |
 
+### Remediación PR #80 (2026-10-24, post-Codex)
+
+#### CI-FIX — `firebase.pilot.json` abría rules por omisión
+
+Causa raíz: `firebase.pilot.json` no incluía `firestore` → el job
+"Run API contracts against pilot package" iniciaba el emulador sin
+`firestore.rules` ni `firestore.indexes.json`. El emulador advierte en
+stderr "Rules not available" y aplica permisivas (`allow read, write: if true`).
+Toda prueba negativa de aislamiento pasaba en falso en esa segunda corrida.
+
+Fix: `firebase.pilot.json` ahora declara `"firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }`. El workflow sigue limitando el deploy manual a Functions (el `firebase deploy --only functions:amon-functions` no publica rules).
+
+Fail-closed de defensa en profundidad: nuevo spec `e2e/api/sec-base-rules-closed.spec.ts` escribe anónimamente a `tenants/{tenantId}/expenses/anonymous-poke` y exige 403. Si el emulador vuelve a quedar abierto por un edit futuro de los configs, este spec detona antes que el resto de la suite dé verde falso.
+
+#### P1-1 — Autorización efectiva de `updateOrderStatus` y `createPosSale`
+
+Antes: ambos endpoints hardcodeaban `DEFAULT_TENANT = "tbb"` y no exigían token. `/pedidos` ya consultaba el tenant activo pero el backend lo ignoraba.
+
+Fix:
+- `apps/functions/src/lib/permissions.ts` incorpora `orders.update_status` y `pos.create_sale` a la lista `OPERATIONAL_PERMISSIONS` (owner y admin reciben ambos).
+- `apps/functions/src/routes/pos.ts`: ambos handlers resuelven tenantId explícito (query o body) y pasan por `requireMembershipPermission(req, tenantId, permission)`. Sin fallback silencioso.
+- `apps/admin/src/lib/api/orders.ts`: nuevo helper `authHeaders()` que obtiene un ID token fresco por request. `createPosSaleApi`, `updateOrderStatusApi` adjuntan `Authorization: Bearer <token>`; firmas ahora exigen `tenantId` explícito.
+- `/pedidos` y `/pos` pasan `tenantId` desde `useActiveTenant()`.
+- Nuevos tests en `sec-base-authorization.spec.ts`: anónimo → 401, no-afiliado → 403, cross-tenant → 403, sin tenantId → 400.
+- `e2e/api/orders.contract.spec.ts` y el loop `expectBothChannelsRejected` de m6j ahora adjuntan `bearer(adminToken)` a cualquier `createPosSale`.
+
+#### P1-3 — Eliminación de `STORE_TENANT_ID`
+
+`apps/admin/src/lib/api/store.ts`: eliminada la constante `STORE_TENANT_ID`. Todas las funciones (`fetchStoreStatus`, `fetchStoreControl`, `setStoreOperationApi`, `updateStoreHoursApi`, `updateStoreDateExceptionApi`, `deleteStoreDateExceptionApi`, `fetchCashCloseDay`, `closeCashSessionApi`) reciben `tenantId` como primer argumento. El cliente lo propaga desde `useActiveTenant()`.
+
+Call-sites migrados: `app/operacion/page.tsx`, `components/store-status-strip.tsx`, `components/operation/cash-panel.tsx`, `components/operation/store-panel.tsx`, `components/operation/schedule-editor.tsx`, `components/operation/special-dates-editor.tsx`.
+
+#### P1-2 — Reset de estado POS al cambiar tenant
+
+`apps/admin/src/components/admin-guard.tsx` envuelve `children` con `<div key={activeTenant.tenantId}>`. En cambio de tenant, React remonta toda la rama bajo el guard. Resultado:
+- Carrito y formulario de cliente reiniciados.
+- Catálogo de productos y precios se re-fetchean.
+- Listeners de órdenes del día e historial POS se desuscriben y reabren contra la nueva colección.
+- Pending orders y receipts internos se descartan.
+
+Garantía: un ítem agregado al carrito en el tenant A no puede terminar en una venta persistida bajo B porque el componente que la crea deja de existir.
+
+#### P2 — Estado "error" en `TenantProvider`
+
+Antes: cualquier fallo transitorio en `fetchMyMemberships` degradaba a `status: "unauthenticated"`, el guard redirigía a `/login`, el login detectaba sesión Firebase viva + fetch exitoso y volvía a `/pedidos` — loop.
+
+Fix:
+- Nuevo `status: "error"` en `TenantContext` + campo `errorMessage` para debugging.
+- Resolver distingue: `auth.currentUser === null` → `unauthenticated`; `fetchMyMemberships() === null` (401/403) → `unauthenticated`; throw (red/5xx) → `error`.
+- `AdminGuard` renderiza una UI con "Reintentar" y "Cerrar sesión" cuando `status === "error"`. **No** redirige: rompe el loop.
+- Login maneja igual el error: muestra mensaje sin autoredirigir ni auto-logout.
+
 ### H-03b — Fix de reproducibilidad del test de revocación (2026-10-24, post-QA)
 
 QA humano con `npx playwright test e2e/api/sec-base-listener-revocation.spec.ts --workers=1 --repeat-each=5` reportó 5/5 FAIL con `unexpected error on initial snapshot: permission-denied` en el snapshot inicial.
@@ -330,6 +384,8 @@ mantienen desde la primera iteración de SEC-BASE.
 | `store.manage_hours`      |   ✅   |   ✅   |
 | `cash.read_summary`       |   ✅   |   ✅   |
 | `cash.close_session`      |   ✅   |   ✅   |
+| `orders.update_status`    |   ✅   |   ✅   |
+| `pos.create_sale`         |   ✅   |   ✅   |
 | `members.manage`          |   ✅   |   ❌   |
 
 ### Mapeo endpoint → permiso
@@ -348,8 +404,8 @@ mantienen desde la primera iteración de SEC-BASE.
 | `GET /listMyMemberships`       | (requiere token válido; devuelve lista vacía si no hay memberships) |
 | `GET /getStoreStatus`          | público (sin token)     |
 | `POST /createOrder`            | público (storefront)    |
-| `POST /createPosSale`          | **sin auth — bloqueante para prod, cubierto por SEC-02** |
-| `PATCH /updateOrderStatus`     | **sin auth — bloqueante para prod, cubierto por SEC-02** |
+| `POST /createPosSale`          | `pos.create_sale`       |
+| `PATCH /updateOrderStatus`     | `orders.update_status`  |
 | `GET /getOrder`                | público (tracking futuro) |
 
 El aislamiento es por membresía: un usuario puede tener memberships en
@@ -359,10 +415,10 @@ una "sesión multi-tenant" implícita.
 
 ## Riesgos residuales
 
-- `updateOrderStatus`, `createPosSale`, `createOrder` y `getOrder` siguen
-  sin autenticación. SEC-01 solo cubrió gastos; SEC-BASE deja la fachada
-  lista para SEC-02. Antes de producción deben pasar por
-  `requireMembershipPermission` o un contrato público explícito.
+- `createOrder` y `getOrder` siguen siendo rutas públicas por diseño
+  (storefront + tracking futuro). SEC-BASE no las toca.
+  `updateOrderStatus` y `createPosSale` quedaron autorizados en la
+  remediación PR #80 (P1-1).
 - Revocación de membresía con listener Firestore activo: NO es
   instantánea en UI. La propiedad precisa está documentada en H-03.
   Mitigación cliente ya instalada. Invalidación inmediata requiere

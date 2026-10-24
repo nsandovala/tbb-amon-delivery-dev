@@ -19,18 +19,29 @@ export default function LoginPage() {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const result = await fetchMyMemberships();
-          if (result && result.memberships.length > 0) {
-            router.replace("/pedidos");
-            return;
-          }
-        } catch {
-          // Caímos al form de ingreso; el usuario reintenta con credenciales.
-        }
+      if (!user) {
+        setChecking(false);
+        return;
       }
-      setChecking(false);
+      try {
+        const result = await fetchMyMemberships();
+        if (result && result.memberships.length > 0) {
+          router.replace("/pedidos");
+          return;
+        }
+        // Resultado 401/403 (sesión cliente activa pero servidor la rechaza)
+        // o lista vacía: nos quedamos en /login; usuario puede reintentar.
+        setChecking(false);
+      } catch (err) {
+        // P2: fallo transitorio consultando membresías. NO redirigir ni
+        // auto-cerrar sesión — eso provocaba el loop /login↔/pedidos.
+        setError(
+          err instanceof Error
+            ? `Error de red: ${err.message}`
+            : "Error consultando tus empresas. Intenta de nuevo."
+        );
+        setChecking(false);
+      }
     });
     return unsub;
   }, [router]);
