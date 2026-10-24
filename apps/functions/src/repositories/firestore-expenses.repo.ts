@@ -34,7 +34,8 @@ export async function createExpense(
   expenseId: string,
   input: Omit<CreateExpenseInput, "occurredAt"> & {
     occurredAt: admin.firestore.Timestamp | admin.firestore.FieldValue;
-  }
+  },
+  actor: { uid: string; email: string | null }
 ): Promise<void> {
   const now = admin.firestore.FieldValue.serverTimestamp();
   const occurredAt = input.occurredAt instanceof admin.firestore.Timestamp
@@ -56,6 +57,8 @@ export async function createExpense(
       occurredAt: input.occurredAt,
       createdAt: now,
       updatedAt: now,
+      createdByUid: actor.uid,
+      ...(actor.email ? { createdByEmail: actor.email } : {}),
     });
   });
 
@@ -64,5 +67,6 @@ export async function createExpense(
     expenseId,
     category: input.category,
     amount: input.amount,
+    createdByUid: actor.uid,
   });
 }

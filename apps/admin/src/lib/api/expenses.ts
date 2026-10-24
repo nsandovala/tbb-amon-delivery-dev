@@ -55,7 +55,7 @@ async function apiFetch<T>(
 }
 
 interface CreateExpensePayload {
-  tenantId?: string;
+  tenantId: string;
   category: ExpenseCategory;
   description: string;
   amount: number;

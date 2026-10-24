@@ -20,8 +20,7 @@ import {
   getOperationalDayStart,
   toDate,
 } from "../../lib/time";
-
-const tenantId = "tbb";
+import { useActiveTenant } from "@/components/tenant-provider";
 
 const LEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   queued: ["preparing", "cancelled"],
@@ -312,6 +311,7 @@ function OrderCard({
 }
 
 export default function OrdersPage() {
+  const { tenantId } = useActiveTenant();
   const { orders, loading, error: ordersError } = useLiveOrders(tenantId);
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -469,7 +469,7 @@ export default function OrdersPage() {
     try {
       setUpdatingIds((prev) => new Set([...prev, orderId]));
       setPendingStatusChange({ orderId, status: nextStatus });
-      await updateOrderStatusApi(orderId, nextStatus);
+      await updateOrderStatusApi(orderId, nextStatus, tenantId);
     } catch (error) {
       console.error("Error actualizando estado:", error);
       setPendingStatusChange(null);

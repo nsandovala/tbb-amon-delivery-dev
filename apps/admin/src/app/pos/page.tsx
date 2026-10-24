@@ -12,7 +12,12 @@ import {
 } from "firebase/firestore";
 import { normalizeChileanPhone, isValidChileanPhone } from "../../lib/phone";
 import { auth, db } from "../../lib/firebase/client";
+import {
+  isAuthorizationLost,
+  tearDownAuthorizedSession,
+} from "../../lib/auth/handle-authz-loss";
 import { createPosSaleApi, getOrderApi, updateOrderStatusApi } from "../../lib/api/orders";
+import { useActiveTenant } from "@/components/tenant-provider";
 import { StoreStatusStrip } from "@/components/store-status-strip";
 import { getHumanOrderLabel } from "../../lib/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
@@ -76,7 +81,6 @@ type PosOrder = {
   };
 };
 
-const tenantId = "tbb";
 const COUNTER_CUSTOMER_NAME = "Cliente mostrador";
 type AcquisitionSource = "instagram" | "facebook" | "whatsapp" | "in_person" | "other";
 
@@ -100,6 +104,7 @@ function getFallbackImage(product: PosProduct) {
 }
 
 export default function PosPage() {
+  const { tenantId } = useActiveTenant();
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -219,6 +224,11 @@ export default function PosPage() {
         setTodayOrders(nextOrders);
       },
       (error) => {
+        if (isAuthorizationLost(error)) {
+          setTodayOrders([]);
+          void tearDownAuthorizedSession();
+          return;
+        }
         console.error("Error cargando órdenes del día:", error);
       }
     );
@@ -236,7 +246,14 @@ export default function PosPage() {
         id: doc.id,
         ...(doc.data() as Omit<PosOrder, "id">),
       }))),
-      (error) => console.error("Error cargando historial POS:", error)
+      (error) => {
+        if (isAuthorizationLost(error)) {
+          setPosHistoryOrders([]);
+          void tearDownAuthorizedSession();
+          return;
+        }
+        console.error("Error cargando historial POS:", error);
+      }
     );
   }, []);
 
@@ -526,7 +543,7 @@ export default function PosPage() {
     setClosingIds((prev) => new Set(prev).add(orderId));
 
     try {
-      await updateOrderStatusApi(orderId, "delivered");
+      await updateOrderStatusApi(orderId, "delivered", tenantId);
       setToast({
         type: "success",
         message: `${humanLabel} cerrada`,

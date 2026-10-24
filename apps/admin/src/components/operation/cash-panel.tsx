@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/store";
 import { formatClp } from "@/lib/clp";
 import { formatLocalDateTime, formatOperationalDate, parseCountedClp } from "@/lib/store-status";
+import { useActiveTenant } from "@/components/tenant-provider";
 
 const BLOCKER_COPY = {
   ACTIVE_POS_SALES: "Ventas POS sin cerrar",
@@ -72,6 +73,7 @@ function CloseReceipt({ close }: { close: CashCloseRecord }) {
 }
 
 export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }) {
+  const { tenantId } = useActiveTenant();
   const [day, setDay] = useState<CashCloseDay | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [counted, setCounted] = useState("");
@@ -86,12 +88,12 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
 
   const load = useCallback(async () => {
     try {
-      setDay(await fetchCashCloseDay());
+      setDay(await fetchCashCloseDay(tenantId));
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "No se pudo leer la caja.");
     }
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     void load();
@@ -112,7 +114,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
     setBusy(true);
     setError(null);
     try {
-      await closeCashSessionApi({
+      await closeCashSessionApi(tenantId, {
         operationalDate: day.operationalDate,
         countedCash: countedParsed.value,
         transfersConfirmed: transfersParsed.value,

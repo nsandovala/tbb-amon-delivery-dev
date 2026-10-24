@@ -8,10 +8,15 @@ import { logger } from "../lib/logger";
  *
  * occurredAt lets the operator backdate an expense they are logging late.
  * When absent it falls back to the server clock, so the field is always set.
+ *
+ * `actor.uid` se persiste como `createdByUid` para trazabilidad SEC-BASE. Los
+ * gastos históricos no reciben autoría inventada: solo se setea en gastos
+ * creados tras esta migración.
  */
 export async function handleCreateExpense(
   tenantId: string,
-  input: CreateExpenseInput
+  input: CreateExpenseInput,
+  actor: { uid: string; email: string | null }
 ): Promise<{ expenseId: string }> {
   const expenseId = generateExpenseId(tenantId);
 
@@ -19,7 +24,7 @@ export async function handleCreateExpense(
     ? admin.firestore.Timestamp.fromDate(new Date(input.occurredAt))
     : admin.firestore.FieldValue.serverTimestamp();
 
-  await createExpense(tenantId, expenseId, { ...input, occurredAt });
+  await createExpense(tenantId, expenseId, { ...input, occurredAt }, actor);
 
   logger.info("Expense recorded", {
     tenantId,
@@ -27,6 +32,7 @@ export async function handleCreateExpense(
     category: input.category,
     amount: input.amount,
     paymentMethod: input.paymentMethod,
+    actor: actor.uid,
   });
 
   return { expenseId };

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { StoreApiError, updateStoreHoursApi, type StoreDateException, type StoreHoursConfig, type Weekday } from "@/lib/api/store";
 import { isValidScheduleTime } from "@/lib/schedule";
 import { WEEKDAY_LABELS, WEEKDAY_ORDER } from "@/lib/store-status";
+import { useActiveTenant } from "@/components/tenant-provider";
 import { SpecialDatesEditor } from "./special-dates-editor";
 
 function toMinutes(value: string): number {
@@ -50,6 +51,7 @@ export function ScheduleEditor({
   updatedBy: string | null;
   onSaved: () => Promise<void> | void;
 }) {
+  const { tenantId } = useActiveTenant();
   const [draft, setDraft] = useState<StoreHoursConfig>(config ?? defaultConfig);
   const [dirty, setDirty] = useState(false);
   const [reason, setReason] = useState("");
@@ -73,7 +75,7 @@ export function ScheduleEditor({
     setBusy(true);
     setMessage(null);
     try {
-      await updateStoreHoursApi(draft, reason.trim());
+      await updateStoreHoursApi(tenantId, draft, reason.trim());
       setDirty(false);
       setReason("");
       setMessage({ ok: true, text: "Horario guardado. Aplica de inmediato." });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { AuditLog } from "@/components/operation/audit-log";
@@ -8,8 +8,9 @@ import { CashPanel } from "@/components/operation/cash-panel";
 import { ScheduleEditor } from "@/components/operation/schedule-editor";
 import { StorePanel } from "@/components/operation/store-panel";
 import { usePolledStoreStatus } from "@/hooks/use-store-status";
-import { fetchStoreControl, STORE_TENANT_ID } from "@/lib/api/store";
+import { fetchStoreControl } from "@/lib/api/store";
 import { auth, db } from "@/lib/firebase/client";
+import { useActiveTenant } from "@/components/tenant-provider";
 import { formatOperationalDate } from "@/lib/store-status";
 
 type TenantIdentity = {
@@ -18,7 +19,9 @@ type TenantIdentity = {
 };
 
 export default function OperacionPage() {
-  const { data: control, error, nowMs, refresh } = usePolledStoreStatus(fetchStoreControl);
+  const { tenantId } = useActiveTenant();
+  const loadControl = useCallback(() => fetchStoreControl(tenantId), [tenantId]);
+  const { data: control, error, nowMs, refresh } = usePolledStoreStatus(loadControl);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [operatorEmail, setOperatorEmail] = useState<string | null>(null);
   const [tenant, setTenant] = useState<TenantIdentity | null>(null);
@@ -29,7 +32,7 @@ export default function OperacionPage() {
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => setOperatorEmail(user?.email ?? null));
     let active = true;
-    void getDoc(doc(db, "tenants", STORE_TENANT_ID)).then((snapshot) => {
+    void getDoc(doc(db, "tenants", tenantId)).then((snapshot) => {
       if (active && snapshot.exists()) setTenant(snapshot.data() as TenantIdentity);
     }).catch(() => {
       // La operación sigue disponible si falla la lectura pública del nombre del tenant.
@@ -39,7 +42,7 @@ export default function OperacionPage() {
       active = false;
       unsubscribeAuth();
     };
-  }, []);
+  }, [tenantId]);
 
   function toggleTheme() {
     setTheme((current) => {
@@ -62,7 +65,7 @@ export default function OperacionPage() {
           <div className="px-4 py-3">
             <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Negocio / tenant</span>
             <strong className="ops-text mt-1 block truncate text-xs font-semibold text-white">{tenant?.name ?? "Cargando tienda…"}</strong>
-            <small className="ops-muted mt-0.5 block text-[10px] text-neutral-400">Tenant {STORE_TENANT_ID.toUpperCase()}</small>
+            <small className="ops-muted mt-0.5 block text-[10px] text-neutral-400">Tenant {tenantId.toUpperCase()}</small>
           </div>
           <div className="border-t border-white/10 px-4 py-3 sm:border-l sm:border-t-0">
             <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Local activo</span>

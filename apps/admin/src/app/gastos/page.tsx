@@ -12,8 +12,7 @@ import {
 } from "../../lib/firebase/queries/expenses";
 import { formatClp, parseClpAmount } from "../../lib/clp";
 import { toDate } from "../../lib/time";
-
-const tenantId = "tbb";
+import { useActiveTenant } from "@/components/tenant-provider";
 
 const CATEGORIES = Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[];
 const PAYMENT_METHODS = Object.keys(
@@ -45,6 +44,7 @@ function formatDate(value: unknown) {
 }
 
 export default function GastosPage() {
+  const { tenantId } = useActiveTenant();
   const { expenses, loading, error } = useLiveExpenses(tenantId, 50);
 
   const [category, setCategory] = useState<ExpenseCategory>("supplies");

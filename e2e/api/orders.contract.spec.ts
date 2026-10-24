@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { createOpenFixtureTenant, FIXTURE_PRODUCT } from "../support/emulator-fixtures";
+import {
+  bearer,
+  createOpenFixtureTenant,
+  FIXTURE_PRODUCT,
+} from "../support/emulator-fixtures";
 
 /**
  * Capa 1 — Contrato de la API de orders contra Firebase Emulator.
@@ -13,6 +17,7 @@ import { createOpenFixtureTenant, FIXTURE_PRODUCT } from "../support/emulator-fi
  */
 
 let TENANT = "";
+let OWNER_TOKEN = "";
 
 const validOrder = () => ({
   tenantId: TENANT,
@@ -44,7 +49,9 @@ test.beforeAll(async ({ playwright, baseURL }) => {
     baseURL,
     extraHTTPHeaders: { "Content-Type": "application/json" },
   });
-  TENANT = (await createOpenFixtureTenant(api, "orders")).tenantId;
+  const fixture = await createOpenFixtureTenant(api, "orders");
+  TENANT = fixture.tenantId;
+  OWNER_TOKEN = fixture.owner.token;
   await api.dispose();
 });
 
@@ -114,7 +121,7 @@ test.describe("Orders API contract emulator", () => {
   });
 
   test("createPosSale retorna 201 para venta POS", async ({ request }) => {
-    const res = await request.post("createPosSale", { data: validPosSale() });
+    const res = await request.post("createPosSale", { headers: bearer(OWNER_TOKEN), data: validPosSale() });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -126,6 +133,7 @@ test.describe("Orders API contract emulator", () => {
 
   test("createPosSale conserva el origen manual y la campaña opcional", async ({ request }) => {
     const res = await request.post("createPosSale", {
+      headers: bearer(OWNER_TOKEN),
       data: {
         ...validPosSale(),
         acquisitionSource: "instagram",
@@ -145,6 +153,7 @@ test.describe("Orders API contract emulator", () => {
 
   test("createPosSale delivery cobra fee y persiste en getOrder", async ({ request }) => {
     const res = await request.post("createPosSale", {
+      headers: bearer(OWNER_TOKEN),
       data: {
         ...validPosSale(),
         fulfillmentType: "delivery",
@@ -173,6 +182,7 @@ test.describe("Orders API contract emulator", () => {
 
   test("createPosSale delivery sin dirección retorna 400", async ({ request }) => {
     const res = await request.post("createPosSale", {
+      headers: bearer(OWNER_TOKEN),
       data: { ...validPosSale(), fulfillmentType: "delivery" },
     });
 
@@ -180,7 +190,7 @@ test.describe("Orders API contract emulator", () => {
   });
 
   test("createPosSale con cliente normal y teléfono retorna 201", async ({ request }) => {
-    const res = await request.post("createPosSale", { data: validPosSale() });
+    const res = await request.post("createPosSale", { headers: bearer(OWNER_TOKEN), data: validPosSale() });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -194,7 +204,7 @@ test.describe("Orders API contract emulator", () => {
 
   test("createPosSale sin fulfillmentType persiste pickup y delivery cero", async ({ request }) => {
     const { fulfillmentType: _, ...posSaleWithoutFulfillment } = validPosSale();
-    const res = await request.post("createPosSale", { data: posSaleWithoutFulfillment });
+    const res = await request.post("createPosSale", { headers: bearer(OWNER_TOKEN), data: posSaleWithoutFulfillment });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
@@ -214,6 +224,7 @@ test.describe("Orders API contract emulator", () => {
 
   test("createPosSale pickup sin telefono persiste venta mostrador y no crea customerId", async ({ request }) => {
     const res = await request.post("createPosSale", {
+      headers: bearer(OWNER_TOKEN),
       data: {
         tenantId: TENANT,
         items: [{ productId: FIXTURE_PRODUCT.id, qty: 1 }],

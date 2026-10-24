@@ -3,6 +3,164 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-23 — SEC-BASE: identidad, membresías y aislamiento multi-tenant
+
+### Qué cambió
+- Nueva fachada central `requireMembershipPermission(req, tenantId, permission)` en `apps/functions/src/lib/authz.ts` que verifica Firebase ID token, existencia del tenant, membresía activa en `tenants/{tenantId}/members/{uid}` y permiso contra la matriz central. Sin bypass por claim `admin:true`.
+- Modelo de membresías: `apps/functions/src/schemas/membership.schema.ts` define roles (`owner`, `admin`) y estados (`active`, `revoked`). Repositorio `firestore-memberships.repo.ts` lee el documento sin caché cross-request; la memoización ocurre solo dentro de una misma solicitud vía `WeakMap<Request, …>`.
+- Matriz central de permisos en `apps/functions/src/lib/permissions.ts`. El owner recibe permisos operacionales + `members.manage`; el admin recibe únicamente permisos operacionales.
+- Rutas migradas:
+  - `createExpense` ahora exige `expenses.create` y rechaza `tenantId` ausente (sin fallback silencioso).
+  - 7 handlers de `routes/store.ts` migrados a `requireMembershipPermission` con permisos específicos (`store.read_control`, `store.manage_operation`, `store.manage_hours`, `cash.read_summary`, `cash.close_session`). Operaciones privadas requieren tenant explícito.
+  - `getStoreStatus` conserva fallback público al tenant `tbb` (storefront).
+  - Nuevo endpoint `getMyMembership?tenantId=X` que devuelve rol + permisos resueltos.
+- Eliminado `apps/functions/src/lib/admin-auth.ts` (no se deja wrapper legacy; cualquier caller nuevo pasa por la fachada).
+- Firestore rules reescritas (`firestore.rules`): `isAdmin()` reemplazado por `hasActiveMembership(tenantId)`. `members/{uid}` queda read-only (self o owner) y write-deny desde cliente. Nuevas colecciones `cashCloseSessions` y `auditEvents` también gateadas por membresía.
+- Admin UI migrada:
+  - `components/admin-guard.tsx` consulta `getMyMembership` en vez de `token.claims.admin`.
+  - `app/login/page.tsx` autentica + verifica membresía; cierra sesión si no hay membresía válida.
+  - `lib/api/expenses.ts` exige `tenantId` obligatorio en el payload.
+  - Nuevo helper `lib/api/membership.ts` y `lib/tenant.ts` (tenant activo = `tbb` durante SEC-BASE).
+- Fixtures Playwright: nuevo helper `createMembership` + `revokeMembership`. `createUser` deja de setear `admin:true` por defecto; se mantiene opt-in `legacyAdminClaim` solo para pruebas negativas. `createOpenFixtureTenant` ahora devuelve `{ tenantId, owner }` (reemplaza `adminToken`).
+- Nueva spec `e2e/api/sec-base-authorization.spec.ts` con 11 casos cross-tenant: owner-A opera A; owner-A rechazado en B; admin-B no lee A; sin membresía → 403; miembro revocado → 403; claim legacy sin membresía → 403; tenant inexistente → 403; anónimo → 401; storefront público intacto; `getMyMembership` para owner y 403 para foráneo; promoción directa de membresía vía SDK bloqueada por rules.
+- Bootstrap privilegiado idempotente en `tools/bootstrap-owner.mjs`. Exige `--tenant`, `--uid` y `--created-by-uid` distintos (no autoproclamación). Primero contra Firebase Emulator; funciona también contra proyecto real con Admin SDK autenticado.
+
+### Archivos modificados
+- `apps/functions/src/lib/authz.ts` (nuevo)
+- `apps/functions/src/lib/permissions.ts` (nuevo)
+- `apps/functions/src/lib/admin-auth.ts` (eliminado)
+- `apps/functions/src/schemas/membership.schema.ts` (nuevo)
+- `apps/functions/src/repositories/firestore-memberships.repo.ts` (nuevo)
+- `apps/functions/src/routes/expenses.ts`
+- `apps/functions/src/routes/store.ts`
+- `apps/functions/src/routes/membership.ts` (nuevo)
+- `apps/functions/src/index.ts`
+- `firestore.rules`
+- `apps/admin/src/components/admin-guard.tsx`
+- `apps/admin/src/app/login/page.tsx`
+- `apps/admin/src/lib/api/expenses.ts`
+- `apps/admin/src/lib/api/membership.ts` (nuevo)
+- `apps/admin/src/lib/tenant.ts` (nuevo)
+- `e2e/support/emulator-fixtures.ts`
+- `e2e/api/expenses.contract.spec.ts`
+- `e2e/api/m6j-store-operation.contract.spec.ts`
+- `e2e/api/sec-base-authorization.spec.ts` (nuevo)
+- `tools/bootstrap-owner.mjs` (nuevo)
+- `roadmap/sprint-sec-base.md` (nuevo)
+- `roadmap/phase-log.md`
+
+### Contratos afectados
+- `/createExpense`: body ahora exige `tenantId` explícito; sin él responde 400 `VALIDATION_ERROR`.
+- `/getStoreControl`, `/setStoreOperation`, `/updateStoreHours`, `/updateStoreDateException`, `/deleteStoreDateException`, `/getCashCloseSummary`, `/closeCashSession`: exigen membresía activa en el tenant con el permiso correspondiente. Antes aceptaban `tenantId` opcional con default a `tbb`; ahora el default solo aplica al endpoint público `getStoreStatus`.
+- Nuevo endpoint `/getMyMembership?tenantId=X` (GET). Devuelve `{ uid, tenantId, role, permissions }` o 401/403.
+- Firestore rules: `isAdmin()` → `hasActiveMembership(tenantId)`. Colección `tenants/{tenantId}/members/{uid}` solo lectura (self u owner), write deny desde cliente.
+- Admin UI consume `getMyMembership` para toda decisión de visibilidad; `token.claims.admin` ya no se lee en ningún punto.
+- Trazabilidad: el `AuthorizedActor` conserva el shape `{ uid, email }` como `StoreActor` para no inventar identidades en registros históricos; agrega `tenantId` y `role` para auditoría futura.
+
+### Validación (2026-10-23)
+- `npm --workspace apps/functions run build`: OK.
+- `npm --prefix packages/shared run typecheck`: OK.
+- `./node_modules/.bin/tsc -p apps/admin/tsconfig.json --noEmit`: OK.
+- `./node_modules/.bin/tsc -p apps/web/tsconfig.json --noEmit`: OK.
+- `firebase emulators:exec --project demo-sec-base --only auth,firestore,functions 'npm run test:e2e:api'`: **59/59 OK** (incluye 13 SEC-BASE cross-tenant + 13 expenses + 33 m6j).
+
+### Riesgos residuales
+- Endpoints `updateOrderStatus`, `createPosSale`, `createOrder` y `getOrder` siguen sin autenticación. SEC-01 solo cubrió gastos; SEC-BASE deja la fachada lista para que SEC-02 los gatee también. Antes de producción deben pasar por `requireMembershipPermission` o un contrato público explícito con tracking token (ver "Next Recommended Phase" en AGENTS.md).
+- `apps/functions/package-lock.json` sigue desalineado respecto al manifiesto (SEC-01 lo documentó); el workflow piloto lo esquiva. Pendiente follow-up.
+- Variables `FIREBASE_PILOT_WIF_PROVIDER`/`SERVICE_ACCOUNT` pueden ser sobre-escritas a nivel de environment; el workflow piloto lo tolera (riesgo bajo porque requiere cambio en Settings).
+
+### Próximo paso
+- Nueva auditoría cruzada GPT/Claude (post H-01..H-04 + BUILD-01).
+- QA humano en emulador (bootstrap owner, login multi-tenant, revocación con listener).
+- Cerrar BUILD-01 (`roadmap/build-01-functions-lockfile.md`) como follow-up aislado antes del deploy piloto.
+- Al merge, planificar bootstrap real del owner de TBB antes de habilitar el workflow piloto. SEC-02 continúa BLOCKED hasta esta rama.
+
+## 2026-10-24 — SEC-BASE / auditoría cruzada: H-01..H-04 + BUILD-01
+
+### Qué cambió
+- **H-01**: `createExpense` persiste `createdByUid` + `createdByEmail?` desde el actor autenticado (`handleCreateExpense` ahora recibe `actor`). Prueba de contrato nueva en `expenses.contract.spec.ts`. No se backfillean gastos históricos.
+- **H-02**: `tools/bootstrap-owner.mjs` exige `--i-understand-this-is-not-emulator` fuera del emulador y `--reactivate` para membresías revocadas. Idempotencia preservada. Matriz de 7 casos documentada en `sprint-sec-base.md`.
+- **H-03**: `apps/admin/src/lib/auth/handle-authz-loss.ts` detecta `permission-denied` en listeners Firestore y ejecuta `signOut` + `window.location.assign("/login")`. Instalado en `useLiveExpenses`, `useLiveOrders`, y los dos listeners privados de `/pos`. Nueva spec `sec-base-listener-revocation.spec.ts` prueba la propagación real del SDK (requiere write post-revoke) y documenta la ventana no-instantánea.
+- **H-04**: Nuevo endpoint `GET /listMyMemberships` (collectionGroup). `firestore.indexes.json` declara el índice compuesto; `firebase.json` lo apunta. `TenantProvider` + `TenantSelector` + `TenantBadge` + `ActiveTenantCard` reemplazan el `ACTIVE_TENANT_ID = "tbb"` hardcoded. `AdminGuard` ahora maneja estados `loading / unauthenticated / no-memberships / selector / authenticated`. Páginas `/pedidos`, `/pos`, `/gastos`, `/metricas` consumen `useActiveTenant()`.
+- **BUILD-01** registrado como follow-up bloqueante en `roadmap/build-01-functions-lockfile.md`. **No se cierra en SEC-BASE**.
+
+### Archivos modificados (adicionales)
+- `apps/functions/src/services/expenses.service.ts` (actor arg)
+- `apps/functions/src/repositories/firestore-expenses.repo.ts` (persist createdByUid/Email)
+- `apps/functions/src/repositories/firestore-memberships.repo.ts` (listActiveMembershipsForUid)
+- `apps/functions/src/routes/expenses.ts` (pasa actor)
+- `apps/functions/src/routes/membership.ts` (listMyMemberships)
+- `apps/functions/src/index.ts` (export)
+- `apps/admin/src/components/tenant-provider.tsx` (nuevo)
+- `apps/admin/src/components/tenant-selector.tsx` (nuevo)
+- `apps/admin/src/components/tenant-badge.tsx` (nuevo)
+- `apps/admin/src/components/admin-guard.tsx` (delega al contexto)
+- `apps/admin/src/app/layout.tsx` (envuelve con TenantProvider + sidebar card)
+- `apps/admin/src/app/login/page.tsx` (fetchMyMemberships)
+- `apps/admin/src/app/pedidos/page.tsx`, `pos/page.tsx`, `gastos/page.tsx`, `metricas/page.tsx` (useActiveTenant)
+- `apps/admin/src/hooks/use-live-expenses.ts`, `use-live-orders.ts` (handle-authz-loss)
+- `apps/admin/src/lib/auth/handle-authz-loss.ts` (nuevo)
+- `apps/admin/src/lib/api/membership.ts` (fetchMyMemberships + tipos)
+- `apps/admin/src/lib/tenant.ts` (storage key)
+- `tools/bootstrap-owner.mjs` (endurecido)
+- `firestore.indexes.json` (nuevo) + `firebase.json`
+- `e2e/support/emulator-fixtures.ts` (ya actualizado en primera iteración)
+- `e2e/api/expenses.contract.spec.ts` (H-01 test)
+- `e2e/api/sec-base-authorization.spec.ts` (H-04 test)
+- `e2e/api/sec-base-listener-revocation.spec.ts` (nuevo)
+- `roadmap/sprint-sec-base.md` (hallazgos + matriz final + rollback)
+- `roadmap/build-01-functions-lockfile.md` (nuevo)
+- `roadmap/phase-log.md`
+
+### Validación (2026-10-24)
+- `npm --workspace apps/functions run build`: OK.
+- Typechecks admin / web / shared: OK.
+- `firebase emulators:exec --project demo-sec-base --only auth,firestore,functions 'npm run test:e2e:api'`: **62/62 OK** (33 M6J + 14 expenses + 14 SEC-BASE + 1 listener-revocation).
+- Bootstrap matrix (7 escenarios ejecutados contra emulador): todos los exit codes esperados.
+
+### Remediación PR #80 (2026-10-24, post-Codex)
+
+**CI-FIX**: `firebase.pilot.json` carecía de `firestore` → el job pilot del CI arrancaba el emulador sin `firestore.rules`, aplicando reglas abiertas. 60/62 PASS encubría todos los chequeos negativos de aislamiento.
+
+Fix:
+- `firebase.pilot.json` incluye `"firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }`. El workflow sigue limitando el deploy manual a Functions.
+- Nueva spec `e2e/api/sec-base-rules-closed.spec.ts`: fail-closed que escribe anónimamente a `expenses/*` y exige 403. Si alguien vuelve a quitar las rules del config, CI cae en vez de dar verde falso.
+
+**P1-1**: `updateOrderStatus` y `createPosSale` autorizados.
+- Nuevos permisos `orders.update_status` y `pos.create_sale` (owner y admin).
+- `routes/pos.ts`: ambos handlers requieren `tenantId` explícito + `requireMembershipPermission`.
+- `apps/admin/src/lib/api/orders.ts`: `authHeaders()` adjunta ID token fresco por request; firmas aceptan `tenantId`.
+- `/pedidos` y `/pos` propagan `useActiveTenant().tenantId`.
+- Nuevos contract tests cross-tenant.
+
+**P1-3**: `STORE_TENANT_ID` eliminado de `apps/admin/src/lib/api/store.ts`. Todas las funciones aceptan `tenantId` como primer argumento. Call-sites migrados en `operacion/page.tsx` y los paneles (cash, store, schedule, special-dates).
+
+**P1-2**: `AdminGuard` envuelve children con `<div key={activeTenant.tenantId}>`. Cambio de tenant remonta toda la rama bajo el guard: carrito, listeners, formularios y pending orders se descartan.
+
+**P2**: `TenantContext` tiene nuevo `status: "error"` para fallos transitorios (red / 5xx). AdminGuard renderiza UI de retry sin redirigir. Login maneja el error sin auto-redirect. Rompe el loop `/login ↔ /pedidos`.
+
+Validación:
+- Builds + typechecks (admin / web / shared / functions): OK.
+- Playwright API contra stack live (reglas reales): **65/65 PASS**.
+- Playwright unit: **96/96 PASS**.
+- Fail-closed de rules (CI-FIX): verificado contra firebase.json (equivalente al pilot ahora que incluye el mismo campo `firestore`).
+- `git diff --check`: limpio.
+
+Riesgos residuales:
+- BUILD-01 (lockfile Functions) sigue pendiente; bloqueante antes del deploy piloto.
+- Revocación con listener activo: ventana no-instantánea documentada en H-03.
+- `createOrder`/`getOrder` siguen públicos por diseño (storefront + tracking futuro).
+
+### Fix post-QA (2026-10-24, H-03b)
+QA humano reportó 5/5 FAIL en `sec-base-listener-revocation.spec.ts` ejecutando bare (sin `FIREBASE_PROJECT_ID`) con `permission-denied` en snapshot inicial. Root cause: fallback de projectId en ese spec era `demo-sec-base` cuando el resto del repo defaultea a `minerp-sentinel`. Fixtures REST escribían la membresía en un namespace y el Firebase Web SDK leía desde otro.
+
+Fix: `PROJECT_ID` + `FIRESTORE_DOCS` exportados desde `emulator-fixtures.ts`; el spec los importa (fuente única de verdad). Chequeo defensivo pre-listener que falla con mensaje accionable si la membresía no es visible en el namespace actual. Sin cambios en rules.
+
+Verificación: `firebase emulators:exec --project minerp-sentinel 'npx playwright test e2e/api/sec-base-listener-revocation.spec.ts --workers=1 --repeat-each=5'` → **5/5 PASS**. Suite API completa bare-run: **62/62 PASS**. Suite API con `FIREBASE_PROJECT_ID=demo-sec-base`: **62/62 PASS**. Unit tests: **96/96 PASS**.
+
+### Estado
+READY FOR REVIEW. Esperando nueva revisión GPT + QA humano antes de commit/push/PR.
+
 ## 2026-10-22 — SEC-01: autenticación obligatoria en `createExpense`
 
 ### Qué cambió

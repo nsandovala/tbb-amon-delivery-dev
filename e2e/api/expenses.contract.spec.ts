@@ -1,31 +1,27 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
-import { bearer, createUserToken, uniqueTenantId } from "../support/emulator-fixtures";
+import {
+  bearer,
+  createFixtureTenant,
+  createMembership,
+  createUser,
+  revokeMembership,
+  type TestUser,
+} from "../support/emulator-fixtures";
 
 /**
  * Capa 1 — Contrato de la API de expenses contra Firebase Emulator.
  *
- * Pre-req:
- * - npm run dev:emulators corriendo
+ * Pre-req: `npm run dev:emulators` corriendo con Auth + Firestore + Functions.
  *
- * No hay getExpense: la lectura es admin-only vía Firestore rules,
- * así que el contrato se verifica sobre la respuesta de createExpense y, para
- * el round-trip de SEC-01, leyendo el documento directo del emulador.
+ * SEC-BASE: la autorización verifica membresía activa en el tenant. Las rutas
+ * admin requieren tenantId explícito y rechazan el claim legacy `admin:true`.
+ * No hay getExpense: la lectura es admin-only; verificamos el round-trip
+ * leyendo el documento con el token `owner` del emulador.
  */
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "minerp-sentinel";
 const FIRESTORE_DOCS = `http://127.0.0.1:8080/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const OWNER_HEADERS = { Authorization: "Bearer owner" };
-
-// Tenant fixture aislado: la suite no escribe gastos de prueba en `tbb`.
-const TENANT = uniqueTenantId("expenses");
-
-const validExpense = {
-  tenantId: TENANT,
-  category: "supplies" as const,
-  description: "Caja de tomates",
-  amount: 12000,
-  paymentMethod: "cash" as const,
-};
 
 type FirestoreDoc = { name: string; fields: Record<string, unknown> };
 
@@ -58,63 +54,103 @@ async function readExpense(
 
 test.describe("Expenses API contract emulator", () => {
   let api: APIRequestContext;
-  let adminToken: string;
-  let nonAdminToken: string;
+  let tenantId: string;
+  let owner: TestUser;
+  let nonMember: TestUser;
+  let revokedMember: TestUser;
+  let legacyClaimOnly: TestUser;
+
+  const validExpense = () => ({
+    tenantId,
+    category: "supplies" as const,
+    description: "Caja de tomates",
+    amount: 12000,
+    paymentMethod: "cash" as const,
+  });
 
   test.beforeAll(async ({ playwright, baseURL }) => {
     api = await playwright.request.newContext({
       baseURL,
       extraHTTPHeaders: { "Content-Type": "application/json" },
     });
-    adminToken = (await createUserToken(api, { admin: true, label: "expenses-admin" })).token;
-    nonAdminToken = (await createUserToken(api, { admin: false, label: "expenses-staff" })).token;
+
+    tenantId = await createFixtureTenant(api, "expenses");
+    owner = await createUser(api, { label: "expenses-owner" });
+    await createMembership(api, { tenantId, uid: owner.uid, role: "owner" });
+
+    nonMember = await createUser(api, { label: "expenses-nomember" });
+    revokedMember = await createUser(api, { label: "expenses-revoked" });
+    await createMembership(api, { tenantId, uid: revokedMember.uid, role: "admin" });
+    await revokeMembership(api, tenantId, revokedMember.uid);
+
+    legacyClaimOnly = await createUser(api, {
+      label: "expenses-legacyclaim",
+      legacyAdminClaim: true,
+    });
   });
 
   test.afterAll(async () => {
     await api.dispose();
   });
 
-  test.describe("autorización (SEC-01)", () => {
+  test.describe("autorización (SEC-BASE)", () => {
     test("sin token: 401 y cero escrituras", async () => {
-      const tenant = uniqueTenantId("expenses-noauth");
-      const res = await api.post("createExpense", {
-        data: { ...validExpense, tenantId: tenant },
-      });
+      const before = await listExpenses(api, tenantId);
+      const res = await api.post("createExpense", { data: validExpense() });
       expect(res.status(), await res.text()).toBe(401);
       expect((await res.json()).error.code).toBe("UNAUTHENTICATED");
-      expect(await listExpenses(api, tenant)).toHaveLength(0);
+      expect(await listExpenses(api, tenantId)).toHaveLength(before.length);
     });
 
     test("token inválido: 401 y cero escrituras", async () => {
-      const tenant = uniqueTenantId("expenses-badtoken");
+      const before = await listExpenses(api, tenantId);
       const res = await api.post("createExpense", {
         headers: bearer("not-a-valid-firebase-id-token"),
-        data: { ...validExpense, tenantId: tenant },
+        data: validExpense(),
       });
       expect(res.status(), await res.text()).toBe(401);
       expect((await res.json()).error.code).toBe("UNAUTHENTICATED");
-      expect(await listExpenses(api, tenant)).toHaveLength(0);
+      expect(await listExpenses(api, tenantId)).toHaveLength(before.length);
     });
 
-    test("usuario sin claim admin: 403 y cero escrituras", async () => {
-      const tenant = uniqueTenantId("expenses-staff");
+    test("usuario autenticado sin membresía: 403 y cero escrituras", async () => {
+      const before = await listExpenses(api, tenantId);
       const res = await api.post("createExpense", {
-        headers: bearer(nonAdminToken),
-        data: { ...validExpense, tenantId: tenant },
+        headers: bearer(nonMember.token),
+        data: validExpense(),
       });
       expect(res.status(), await res.text()).toBe(403);
       expect((await res.json()).error.code).toBe("FORBIDDEN");
-      expect(await listExpenses(api, tenant)).toHaveLength(0);
+      expect(await listExpenses(api, tenantId)).toHaveLength(before.length);
     });
 
-    test("admin autorizado: round-trip conserva categoría, importe, método y fecha", async () => {
-      const tenant = uniqueTenantId("expenses-roundtrip");
+    test("miembro revocado: 403 y cero escrituras", async () => {
+      const before = await listExpenses(api, tenantId);
+      const res = await api.post("createExpense", {
+        headers: bearer(revokedMember.token),
+        data: validExpense(),
+      });
+      expect(res.status(), await res.text()).toBe(403);
+      expect(await listExpenses(api, tenantId)).toHaveLength(before.length);
+    });
+
+    test("claim legacy admin:true sin membresía: 403", async () => {
+      const before = await listExpenses(api, tenantId);
+      const res = await api.post("createExpense", {
+        headers: bearer(legacyClaimOnly.token),
+        data: validExpense(),
+      });
+      expect(res.status(), await res.text()).toBe(403);
+      expect(await listExpenses(api, tenantId)).toHaveLength(before.length);
+    });
+
+    test("owner autorizado: round-trip conserva categoría, importe, método y fecha", async () => {
       const occurredAt = "2026-07-01T14:30:00.000Z";
 
       const res = await api.post("createExpense", {
-        headers: bearer(adminToken),
+        headers: bearer(owner.token),
         data: {
-          tenantId: tenant,
+          tenantId,
           category: "fuel",
           description: "Diesel foodtruck",
           amount: 25500,
@@ -125,46 +161,55 @@ test.describe("Expenses API contract emulator", () => {
       expect(res.status(), await res.text()).toBe(201);
       const { expenseId } = (await res.json()).data;
 
-      const fields = await readExpense(api, tenant, expenseId);
+      const fields = await readExpense(api, tenantId, expenseId);
       expect(fields.category.stringValue).toBe("fuel");
       expect(fields.description.stringValue).toBe("Diesel foodtruck");
       expect(Number(fields.amount.integerValue ?? fields.amount.doubleValue)).toBe(25500);
       expect(fields.paymentMethod.stringValue).toBe("transfer");
-      // Firestore REST normaliza timestamps (omite ms terminados en 0); comparamos como Date.
       expect(new Date(fields.occurredAt.timestampValue).toISOString()).toBe(occurredAt);
+    });
+
+    test("H-01: gasto persistido referencia al UID del actor autenticado", async () => {
+      const res = await api.post("createExpense", {
+        headers: bearer(owner.token),
+        data: validExpense(),
+      });
+      expect(res.status(), await res.text()).toBe(201);
+      const { expenseId } = (await res.json()).data;
+
+      const fields = await readExpense(api, tenantId, expenseId);
+      expect(fields.createdByUid?.stringValue).toBe(owner.uid);
+      expect(fields.createdByEmail?.stringValue).toBe(owner.email);
     });
   });
 
   test("createExpense retorna 201 con expenseId y tenant solicitado", async () => {
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: validExpense,
+      headers: bearer(owner.token),
+      data: validExpense(),
     });
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.data.expenseId).toBeTruthy();
-    expect(body.data.tenantId).toBe(TENANT);
+    expect(body.data.tenantId).toBe(tenantId);
   });
 
-  test("createExpense sin tenantId usa el tenant por defecto", async () => {
-    const { tenantId: _, ...expenseWithoutTenant } = validExpense;
+  test("createExpense sin tenantId retorna 400 (sin fallback silencioso)", async () => {
+    const { tenantId: _, ...payloadWithoutTenant } = validExpense();
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: expenseWithoutTenant,
+      headers: bearer(owner.token),
+      data: payloadWithoutTenant,
     });
-    expect(res.status(), await res.text()).toBe(201);
-
-    const body = await res.json();
-    // Único caso que escribe en el tenant piloto: verifica el default del backend.
-    expect(body.data.tenantId).toBe("tbb");
+    expect(res.status(), await res.text()).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
   test("createExpense sin paymentMethod aplica default cash", async () => {
-    const { paymentMethod: _, ...expenseWithoutPayment } = validExpense;
+    const { paymentMethod: _, ...expenseWithoutPayment } = validExpense();
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
+      headers: bearer(owner.token),
       data: expenseWithoutPayment,
     });
     expect(res.status(), await res.text()).toBe(201);
@@ -176,8 +221,8 @@ test.describe("Expenses API contract emulator", () => {
 
   test("createExpense acepta occurredAt ISO para backdatear", async () => {
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: { ...validExpense, occurredAt: "2026-07-01T14:30:00.000Z" },
+      headers: bearer(owner.token),
+      data: { ...validExpense(), occurredAt: "2026-07-01T14:30:00.000Z" },
     });
     expect(res.status(), await res.text()).toBe(201);
 
@@ -187,8 +232,8 @@ test.describe("Expenses API contract emulator", () => {
 
   test("createExpense con amount negativo retorna 400", async () => {
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: { ...validExpense, amount: -500 },
+      headers: bearer(owner.token),
+      data: { ...validExpense(), amount: -500 },
     });
 
     expect(res.status()).toBe(400);
@@ -200,8 +245,8 @@ test.describe("Expenses API contract emulator", () => {
 
   test("createExpense con amount cero retorna 400", async () => {
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: { ...validExpense, amount: 0 },
+      headers: bearer(owner.token),
+      data: { ...validExpense(), amount: 0 },
     });
 
     expect(res.status()).toBe(400);
@@ -210,8 +255,8 @@ test.describe("Expenses API contract emulator", () => {
 
   test("createExpense con categoría desconocida retorna 400", async () => {
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: { ...validExpense, category: "crypto" },
+      headers: bearer(owner.token),
+      data: { ...validExpense(), category: "crypto" },
     });
 
     expect(res.status()).toBe(400);
@@ -220,8 +265,8 @@ test.describe("Expenses API contract emulator", () => {
 
   test("createExpense con description muy corta retorna 400", async () => {
     const res = await api.post("createExpense", {
-      headers: bearer(adminToken),
-      data: { ...validExpense, description: "x" },
+      headers: bearer(owner.token),
+      data: { ...validExpense(), description: "x" },
     });
 
     expect(res.status()).toBe(400);

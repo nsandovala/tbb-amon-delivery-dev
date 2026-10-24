@@ -2,12 +2,33 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAdmin() {
-      return request.auth != null
-        && request.auth.token.admin == true;
+    // SEC-BASE: la autorización administrativa depende SIEMPRE de una membresía
+    // activa en `tenants/{tenantId}/members/{uid}`. El claim legacy
+    // `request.auth.token.admin` ya NO concede acceso. Toda escritura
+    // administrativa pasa por Cloud Functions (admin SDK) y aplica
+    // `requireMembershipPermission`; esta capa es defensa en profundidad.
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function membershipPath(tenantId) {
+      return /databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid);
+    }
+
+    function hasActiveMembership(tenantId) {
+      return isAuthed()
+        && exists(membershipPath(tenantId))
+        && get(membershipPath(tenantId)).data.status == 'active';
+    }
+
+    function hasActiveMembershipWithRole(tenantId, role) {
+      return hasActiveMembership(tenantId)
+        && get(membershipPath(tenantId)).data.role == role;
     }
 
     match /tenants/{tenantId} {
+      // Lectura del contrato público del tenant (storefront). Sin filtros
+      // sensibles — ningún dato privado vive en el documento raíz.
       allow read: if true;
       allow write: if false;
 
@@ -21,26 +42,6 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      match /orders/{orderId} {
-        allow read: if isAdmin();
-        allow write: if false;
-      }
-
-      match /customers/{customerId} {
-        allow read: if isAdmin();
-        allow write: if false;
-      }
-
-      match /settings/{settingId} {
-        allow read: if isAdmin();
-        allow write: if false;
-      }
-
-      match /expenses/{expenseId} {
-        allow read: if isAdmin();
-        allow write: if false;
-      }
-
       match /modifiers/{modifierId} {
         allow read: if true;
         allow write: if false;
@@ -48,6 +49,52 @@ service cloud.firestore {
 
       match /modifierGroups/{groupId} {
         allow read: if true;
+        allow write: if false;
+      }
+
+      // Datos operativos privados: lectura requiere membresía activa; las
+      // escrituras siguen deshabilitadas desde cliente (pasan por Functions).
+      match /orders/{orderId} {
+        allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      match /customers/{customerId} {
+        allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      match /settings/{settingId} {
+        allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      match /expenses/{expenseId} {
+        allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      match /cashCloseSessions/{sessionId} {
+        allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      match /auditEvents/{eventId} {
+        allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      // Membresías: cada miembro puede leer su propio documento para que la
+      // app de admin pueda consultar su rol/estado. El owner puede listar los
+      // miembros del tenant. La escritura queda bloqueada desde cliente para
+      // evitar escalamiento de privilegios — el bootstrap y futuras altas
+      // pasan por Admin SDK (ver `tools/bootstrap-owner.mjs`).
+      match /members/{memberUid} {
+        allow get: if isAuthed() && (
+          request.auth.uid == memberUid
+            || hasActiveMembershipWithRole(tenantId, 'owner')
+        );
+        allow list: if hasActiveMembershipWithRole(tenantId, 'owner');
         allow write: if false;
       }
     }

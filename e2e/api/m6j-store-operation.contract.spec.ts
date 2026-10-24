@@ -2,7 +2,8 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import {
   bearer,
   createFixtureTenant,
-  createUserToken,
+  createMembership,
+  createUser,
   FIXTURE_PRODUCT,
   patchFixtureDoc,
   writeFixtureDoc,
@@ -24,6 +25,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
   let api: APIRequestContext;
   let tenantId: string;
   let adminToken: string;
+  let adminUid: string;
   let adminEmail: string;
   let nonAdminToken: string;
   let defaultConfig: Record<string, unknown>;
@@ -67,11 +69,14 @@ test.describe("M6J store operation + cash close (emulator)", () => {
   };
 
   const expectBothChannelsRejected = async (reasonCode: string) => {
-    for (const [endpoint, payload] of [
-      ["createOrder", webOrder()],
-      ["createPosSale", posSale()],
+    for (const [endpoint, payload, needsAuth] of [
+      ["createOrder", webOrder(), false],
+      ["createPosSale", posSale(), true],
     ] as const) {
-      const res = await api.post(endpoint, { data: payload });
+      const res = await api.post(endpoint, {
+        ...(needsAuth ? { headers: bearer(adminToken) } : {}),
+        data: payload,
+      });
       expect(res.status(), `${endpoint}: ${await res.text()}`).toBe(409);
       const body = await res.json();
       expect(body.error.code).toBe("STORE_CLOSED");
@@ -86,10 +91,12 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       extraHTTPHeaders: { "Content-Type": "application/json" },
     });
     tenantId = await createFixtureTenant(api, "m6j");
-    const adminUser = await createUserToken(api, { admin: true, label: "m6j-admin" });
+    const adminUser = await createUser(api, { label: "m6j-admin" });
+    await createMembership(api, { tenantId, uid: adminUser.uid, role: "admin" });
     adminToken = adminUser.token;
+    adminUid = adminUser.uid;
     adminEmail = adminUser.email;
-    nonAdminToken = (await createUserToken(api, { admin: false, label: "m6j-staff" })).token;
+    nonAdminToken = (await createUser(api, { label: "m6j-staff" })).token;
   });
 
   test.afterAll(async () => {
@@ -105,7 +112,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     await expectBothChannelsRejected("CONFIG_MISSING");
   });
 
-  test("endpoints de control exigen token admin", async () => {
+  test("endpoints de control exigen membresía activa", async () => {
     const anonymous = await api.post("setStoreOperation", { data: { tenantId, action: "open" } });
     expect(anonymous.status()).toBe(401);
 
@@ -242,6 +249,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
 
   test("el panel administra todas las excepciones futuras, incluso fuera del año y sobre 100", async () => {
     const listingTenantId = await createFixtureTenant(api, "special-date-list");
+    await createMembership(api, { tenantId: listingTenantId, uid: adminUid, role: "admin" });
     const initialControl = await api.get(`getStoreControl?tenantId=${listingTenantId}`, {
       headers: bearer(adminToken),
     });
@@ -314,7 +322,10 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     const web = await api.post("createOrder", { data: webOrder() });
     expect(web.status(), await web.text()).toBe(201);
     activeWebOrderId = (await web.json()).data.orderId;
-    const pos = await api.post("createPosSale", { data: posSale() });
+    const pos = await api.post("createPosSale", {
+      headers: bearer(adminToken),
+      data: posSale(),
+    });
     expect(pos.status(), await pos.text()).toBe(201);
     activePosOrderId = (await pos.json()).data.orderId;
 
@@ -349,9 +360,15 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     const idempotencyKey = `m6j-${Date.now()}`;
 
     test("resumen separa efectivo, pendientes y bloqueos", async () => {
-      const cash = await api.post("createPosSale", { data: posSale("cash") });
+      const cash = await api.post("createPosSale", {
+        headers: bearer(adminToken),
+        data: posSale("cash"),
+      });
       expect(cash.status(), await cash.text()).toBe(201);
-      const pending = await api.post("createPosSale", { data: posSale("pending") });
+      const pending = await api.post("createPosSale", {
+        headers: bearer(adminToken),
+        data: posSale("pending"),
+      });
       expect(pending.status(), await pending.text()).toBe(201);
 
       const cashOrderId: string = (await cash.json()).data.orderId;

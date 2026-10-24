@@ -12,8 +12,6 @@ const FUNCTIONS_BASE = USE_EMULATOR
   : (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??
     "http://127.0.0.1:5001/minerp-sentinel/us-central1");
 
-export const STORE_TENANT_ID = "tbb";
-
 export type StoreState =
   | "scheduled_closed"
   | "scheduled_open"
@@ -206,71 +204,95 @@ async function storeFetch<T>(
   return body.data as T;
 }
 
-const tenantQuery = `tenantId=${STORE_TENANT_ID}`;
+/**
+ * SEC-BASE/P1-3: todas las funciones aceptan `tenantId` explícito. El cliente
+ * resuelve el tenant desde el contexto de membresía (`useActiveTenant`) y
+ * nunca lo asume.
+ */
 
 /** Público: el mismo estado que ve el storefront. Sin token. */
-export function fetchStoreStatus(): Promise<PublicStoreStatus> {
-  return storeFetch<PublicStoreStatus>(`getStoreStatus?${tenantQuery}`, { admin: false });
+export function fetchStoreStatus(tenantId: string): Promise<PublicStoreStatus> {
+  return storeFetch<PublicStoreStatus>(
+    `getStoreStatus?tenantId=${encodeURIComponent(tenantId)}`,
+    { admin: false }
+  );
 }
 
-export function fetchStoreControl(): Promise<StoreControl> {
-  return storeFetch<StoreControl>(`getStoreControl?${tenantQuery}`);
+export function fetchStoreControl(tenantId: string): Promise<StoreControl> {
+  return storeFetch<StoreControl>(
+    `getStoreControl?tenantId=${encodeURIComponent(tenantId)}`
+  );
 }
 
 export function setStoreOperationApi(
+  tenantId: string,
   action: "open" | "close" | "resume_schedule",
   reason?: string
 ): Promise<{ changed: boolean; status: StoreStatus }> {
   return storeFetch(`setStoreOperation`, {
     method: "POST",
-    body: JSON.stringify({ tenantId: STORE_TENANT_ID, action, reason: reason || undefined }),
+    body: JSON.stringify({ tenantId, action, reason: reason || undefined }),
   });
 }
 
 export function updateStoreHoursApi(
+  tenantId: string,
   config: StoreHoursConfig,
   reason?: string
 ): Promise<{ status: StoreStatus }> {
   return storeFetch(`updateStoreHours`, {
     method: "POST",
-    body: JSON.stringify({ tenantId: STORE_TENANT_ID, config, reason: reason || undefined }),
+    body: JSON.stringify({ tenantId, config, reason: reason || undefined }),
   });
 }
 
 export function updateStoreDateExceptionApi(
+  tenantId: string,
   exception: Omit<StoreDateException, "createdAt" | "createdBy" | "updatedAt" | "updatedBy">,
   reason?: string
 ): Promise<{ changed: boolean; status: StoreStatus }> {
   return storeFetch("updateStoreDateException", {
     method: "POST",
-    body: JSON.stringify({ tenantId: STORE_TENANT_ID, exception, reason: reason || undefined }),
+    body: JSON.stringify({ tenantId, exception, reason: reason || undefined }),
   });
 }
 
-export function deleteStoreDateExceptionApi(date: string, reason?: string): Promise<{ changed: boolean }> {
+export function deleteStoreDateExceptionApi(
+  tenantId: string,
+  date: string,
+  reason?: string
+): Promise<{ changed: boolean }> {
   return storeFetch("deleteStoreDateException", {
     method: "POST",
-    body: JSON.stringify({ tenantId: STORE_TENANT_ID, date, reason: reason || undefined }),
+    body: JSON.stringify({ tenantId, date, reason: reason || undefined }),
   });
 }
 
-export function fetchCashCloseDay(operationalDate?: string): Promise<CashCloseDay> {
+export function fetchCashCloseDay(
+  tenantId: string,
+  operationalDate?: string
+): Promise<CashCloseDay> {
   const date = operationalDate ? `&operationalDate=${operationalDate}` : "";
-  return storeFetch<CashCloseDay>(`getCashCloseSummary?${tenantQuery}${date}`);
+  return storeFetch<CashCloseDay>(
+    `getCashCloseSummary?tenantId=${encodeURIComponent(tenantId)}${date}`
+  );
 }
 
-export function closeCashSessionApi(input: {
-  operationalDate: string;
-  countedCash: number;
-  transfersConfirmed: number;
-  observation?: string;
-  overrideReason?: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; close: CashCloseRecord }> {
+export function closeCashSessionApi(
+  tenantId: string,
+  input: {
+    operationalDate: string;
+    countedCash: number;
+    transfersConfirmed: number;
+    observation?: string;
+    overrideReason?: string;
+    idempotencyKey: string;
+  }
+): Promise<{ replayed: boolean; close: CashCloseRecord }> {
   return storeFetch(`closeCashSession`, {
     method: "POST",
     body: JSON.stringify({
-      tenantId: STORE_TENANT_ID,
+      tenantId,
       operationalDate: input.operationalDate,
       countedCash: input.countedCash,
       transfersConfirmed: input.transfersConfirmed,
