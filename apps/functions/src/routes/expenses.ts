@@ -1,19 +1,24 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequest, type Request } from "firebase-functions/v2/https";
 import { createExpenseSchema } from "../schemas/expense.schema";
 import { handleCreateExpense } from "../services/expenses.service";
-import { requireAdmin } from "../lib/admin-auth";
+import { requireMembershipPermission } from "../lib/authz";
 import { ValidationError, AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import type { ApiResponse } from "../types/api";
 
-const DEFAULT_TENANT = "tbb";
+/**
+ * SEC-BASE: operación privada. El tenant es obligatorio y explícito en el
+ * body — ya no hay fallback silencioso al pilot. La autorización se resuelve
+ * contra `tenants/{tenantId}/members/{uid}` con el permiso `expenses.create`.
+ */
+function resolveTenantFromBody(req: Request): string | null {
+  const raw = req.body && typeof req.body.tenantId === "string" ? req.body.tenantId.trim() : "";
+  return raw.length > 0 ? raw : null;
+}
 
 /**
- * POST /expenses
- * Records an operating expense in tenants/{tenantId}/expenses.
- * Admin-only: requires a Firebase ID token with the `admin` custom claim.
- * The admin claim remains global. Tenant-scoped membership and roles are a
- * blocking SEC-BASE prerequisite before expanding admin endpoints in SEC-02.
+ * POST /createExpense
+ * Admin-only: requiere membresía activa con `expenses.create` en el tenant.
  */
 export const createExpense = onRequest(
   { cors: true },
@@ -24,26 +29,31 @@ export const createExpense = onRequest(
         return;
       }
 
-      // Auth gate runs BEFORE schema parsing or any Firestore side effect.
-      await requireAdmin(req);
-
       const body = req.body;
       if (!body) {
         res.status(400).json({ ok: false, error: { code: "MISSING_BODY", message: "Request body required" } } satisfies ApiResponse);
         return;
       }
 
+      const tenantId = resolveTenantFromBody(req);
+      if (!tenantId) {
+        throw new ValidationError("tenantId is required");
+      }
+
+      // Autorización ANTES de validar el payload: así una payload inválida de
+      // un no-autorizado se trata como 403 (no filtra la forma del contrato).
+      const actor = await requireMembershipPermission(req, tenantId, "expenses.create");
+
       const parsed = createExpenseSchema.safeParse(body);
       if (!parsed.success) {
         throw new ValidationError("Invalid expense payload", parsed.error.issues);
       }
 
-      const tenantId = parsed.data.tenantId || DEFAULT_TENANT;
-      const result = await handleCreateExpense(tenantId, parsed.data);
+      const result = await handleCreateExpense(actor.tenantId, parsed.data, actor);
 
       res.status(201).json({
         ok: true,
-        data: { expenseId: result.expenseId, tenantId },
+        data: { expenseId: result.expenseId, tenantId: actor.tenantId },
       } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);

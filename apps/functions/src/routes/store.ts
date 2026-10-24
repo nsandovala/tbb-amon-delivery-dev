@@ -1,5 +1,5 @@
 import { onRequest, type Request } from "firebase-functions/v2/https";
-import { requireAdmin } from "../lib/admin-auth";
+import { requireMembershipPermission } from "../lib/authz";
 import { ValidationError, AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import {
@@ -21,15 +21,37 @@ import {
 } from "../services/cash-close.service";
 import type { ApiResponse } from "../types/api";
 
-const DEFAULT_TENANT = "tbb";
+/**
+ * Fallback público solo para `getStoreStatus`, que lo consulta el storefront
+ * sin sesión. Las rutas administrativas usan `resolvePrivateTenant` y nunca
+ * caen a este valor.
+ */
+const PUBLIC_FALLBACK_TENANT = "tbb";
 
 type Res = { status: (code: number) => { json: (body: ApiResponse) => void } };
 
-function resolveTenant(req: Request): string {
+function readTenant(req: Request): string {
   const fromQuery = typeof req.query.tenantId === "string" ? req.query.tenantId.trim() : "";
   const fromBody =
     req.body && typeof req.body.tenantId === "string" ? req.body.tenantId.trim() : "";
-  return fromQuery || fromBody || DEFAULT_TENANT;
+  return fromQuery || fromBody || "";
+}
+
+function resolvePublicTenant(req: Request): string {
+  return readTenant(req) || PUBLIC_FALLBACK_TENANT;
+}
+
+/**
+ * Resuelve el tenantId exigido por operaciones privadas. Lanza 400 si no se
+ * recibe explícitamente: SEC-BASE elimina los fallbacks silenciosos entre
+ * tenants.
+ */
+function resolvePrivateTenant(req: Request): string {
+  const tenantId = readTenant(req);
+  if (!tenantId) {
+    throw new ValidationError("tenantId is required");
+  }
+  return tenantId;
 }
 
 function methodNotAllowed(res: Res, allowed: string): void {
@@ -45,7 +67,7 @@ export const getStoreStatus = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");
-      const data = await getPublicStoreStatus(resolveTenant(req));
+      const data = await getPublicStoreStatus(resolvePublicTenant(req));
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);
@@ -62,8 +84,9 @@ export const getStoreControl = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");
-      await requireAdmin(req);
-      const data = await loadStoreControl(resolveTenant(req));
+      const tenantId = resolvePrivateTenant(req);
+      await requireMembershipPermission(req, tenantId, "store.read_control");
+      const data = await loadStoreControl(tenantId);
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);
@@ -80,12 +103,13 @@ export const setStoreOperation = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
-      const actor = await requireAdmin(req);
+      const tenantId = resolvePrivateTenant(req);
+      const actor = await requireMembershipPermission(req, tenantId, "store.manage_operation");
       const parsed = storeOperationInputSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         throw new ValidationError("Invalid store operation payload", parsed.error.issues);
       }
-      const data = await applyStoreOperation(resolveTenant(req), actor, parsed.data);
+      const data = await applyStoreOperation(tenantId, actor, parsed.data);
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);
@@ -102,13 +126,14 @@ export const updateStoreHours = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST" && req.method !== "PUT") return methodNotAllowed(res, "POST/PUT");
-      const actor = await requireAdmin(req);
+      const tenantId = resolvePrivateTenant(req);
+      const actor = await requireMembershipPermission(req, tenantId, "store.manage_hours");
       const parsed = updateStoreHoursInputSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         throw new ValidationError("Invalid store hours payload", parsed.error.issues);
       }
       const data = await saveStoreHours(
-        resolveTenant(req),
+        tenantId,
         actor,
         parsed.data.config,
         parsed.data.reason
@@ -129,11 +154,12 @@ export const updateStoreDateException = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST" && req.method !== "PUT") return methodNotAllowed(res, "POST/PUT");
-      const actor = await requireAdmin(req);
+      const tenantId = resolvePrivateTenant(req);
+      const actor = await requireMembershipPermission(req, tenantId, "store.manage_hours");
       const parsed = updateStoreDateExceptionInputSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError("Invalid special date payload", parsed.error.issues);
       const data = await saveStoreDateException(
-        resolveTenant(req), actor, parsed.data.exception, parsed.data.reason
+        tenantId, actor, parsed.data.exception, parsed.data.reason
       );
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
@@ -151,11 +177,12 @@ export const deleteStoreDateException = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
-      const actor = await requireAdmin(req);
+      const tenantId = resolvePrivateTenant(req);
+      const actor = await requireMembershipPermission(req, tenantId, "store.manage_hours");
       const parsed = deleteStoreDateExceptionInputSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError("Invalid special date payload", parsed.error.issues);
       const data = await removeStoreDateException(
-        resolveTenant(req), actor, parsed.data.date, parsed.data.reason
+        tenantId, actor, parsed.data.date, parsed.data.reason
       );
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
@@ -172,12 +199,13 @@ export const getCashCloseSummary = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");
-      await requireAdmin(req);
+      const tenantId = resolvePrivateTenant(req);
+      await requireMembershipPermission(req, tenantId, "cash.read_summary");
       const requested =
         typeof req.query.operationalDate === "string" && req.query.operationalDate
           ? req.query.operationalDate
           : undefined;
-      const data = await loadCashCloseSummary(resolveTenant(req), requested);
+      const data = await loadCashCloseSummary(tenantId, requested);
       res.status(200).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);
@@ -195,12 +223,13 @@ export const closeCashSession = onRequest(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
-      const actor = await requireAdmin(req);
+      const tenantId = resolvePrivateTenant(req);
+      const actor = await requireMembershipPermission(req, tenantId, "cash.close_session");
       const parsed = closeCashSessionInputSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         throw new ValidationError("Invalid cash close payload", parsed.error.issues);
       }
-      const data = await registerCashClose(resolveTenant(req), actor, parsed.data);
+      const data = await registerCashClose(tenantId, actor, parsed.data);
       res.status(data.replayed ? 200 : 201).json({ ok: true, data } satisfies ApiResponse);
     } catch (err) {
       handleError(err, res);

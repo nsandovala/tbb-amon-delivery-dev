@@ -10,6 +10,7 @@
 import { createOrder, getOrder } from "./routes/orders";
 import { updateOrderStatus, createPosSale } from "./routes/pos";
 import { createExpense } from "./routes/expenses";
+import { getMyMembership, listMyMemberships } from "./routes/membership";
 import {
   getStoreStatus,
   getStoreControl,
@@ -42,4 +43,8 @@ export {
   deleteStoreDateException,
   getCashCloseSummary,
   closeCashSession,
+
+  // Membership (SEC-BASE)
+  getMyMembership,
+  listMyMemberships,
 };

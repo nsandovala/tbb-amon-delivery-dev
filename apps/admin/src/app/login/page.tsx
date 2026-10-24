@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
-  getIdTokenResult,
   onAuthStateChanged,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
+import { fetchMyMemberships } from "@/lib/api/membership";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,10 +20,14 @@ export default function LoginPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const token = await getIdTokenResult(user);
-        if (token.claims.admin === true) {
-          router.replace("/pedidos");
-          return;
+        try {
+          const result = await fetchMyMemberships();
+          if (result && result.memberships.length > 0) {
+            router.replace("/pedidos");
+            return;
+          }
+        } catch {
+          // Caímos al form de ingreso; el usuario reintenta con credenciales.
         }
       }
       setChecking(false);
@@ -37,11 +41,12 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const credential = await signInWithEmailAndPassword(auth, email, password);
-      const token = await getIdTokenResult(credential.user, true);
+      await signInWithEmailAndPassword(auth, email, password);
 
-      if (token.claims.admin !== true) {
-        setError("Esta cuenta no tiene permisos de administrador.");
+      const result = await fetchMyMemberships();
+      if (!result || result.memberships.length === 0) {
+        await auth.signOut();
+        setError("Esta cuenta no tiene membresías activas.");
         setLoading(false);
         return;
       }

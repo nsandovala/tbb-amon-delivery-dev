@@ -19,8 +19,7 @@ import { type AdminOrder } from "../../lib/firebase/queries/orders";
 import { auth, db } from "../../lib/firebase/client";
 import { getOperationalDayStart, OPERATIONAL_DAY_CUTOFF_HOUR, toDate } from "../../lib/time";
 import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay } from "../../lib/metrics";
-
-const tenantId = "tbb";
+import { useActiveTenant } from "@/components/tenant-provider";
 type Period = "today" | "last7" | "last30" | "custom";
 type Channel = "all" | "web" | "admin_pos";
 type ProductMetric = "units" | "revenue";
@@ -279,6 +278,7 @@ function AcquisitionPanel({ orders }: { orders: AdminOrder[] }) {
 }
 
 export default function MetricasPage() {
+  const { tenantId } = useActiveTenant();
   const { orders, loading: loadingOrders, error: ordersError } = useLiveOrders(tenantId);
   const { expenses, loading: loadingExpenses, error: expensesError } = useLiveExpenses(tenantId);
   const [period, setPeriod] = useState<Period>("today");

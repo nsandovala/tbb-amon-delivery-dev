@@ -1,8 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  type Unsubscribe,
+} from "firebase/firestore";
 import { db } from "../lib/firebase/client";
+import {
+  isAuthorizationLost,
+  tearDownAuthorizedSession,
+} from "../lib/auth/handle-authz-loss";
 import type { AdminOrder } from "../lib/firebase/queries/orders";
 
 export function useLiveOrders(tenantId: string) {
@@ -14,9 +24,12 @@ export function useLiveOrders(tenantId: string) {
     const ref = collection(db, `tenants/${tenantId}/orders`);
     const q = query(ref, orderBy("createdAt", "desc"));
 
-    const unsub = onSnapshot(
+    let active = true;
+    let unsub: Unsubscribe = () => {};
+    unsub = onSnapshot(
       q,
       (snapshot) => {
+        if (!active) return;
         const nextOrders: AdminOrder[] = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...(doc.data() as Omit<AdminOrder, "id">),
@@ -27,13 +40,25 @@ export function useLiveOrders(tenantId: string) {
         setLoading(false);
       },
       (err) => {
+        if (!active) return;
+        if (isAuthorizationLost(err)) {
+          active = false;
+          unsub();
+          setOrders([]);
+          setLoading(false);
+          void tearDownAuthorizedSession();
+          return;
+        }
         console.error("Error leyendo pedidos live:", err);
         setError(err);
         setLoading(false);
       }
     );
 
-    return () => unsub();
+    return () => {
+      active = false;
+      unsub();
+    };
   }, [tenantId]);
 
   return { orders, loading, error };

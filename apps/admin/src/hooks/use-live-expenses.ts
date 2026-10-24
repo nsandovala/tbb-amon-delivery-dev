@@ -8,15 +8,20 @@ import {
   orderBy,
   query,
   type QueryConstraint,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/client";
+import {
+  isAuthorizationLost,
+  tearDownAuthorizedSession,
+} from "../lib/auth/handle-authz-loss";
 import type { AdminExpense } from "../lib/firebase/queries/expenses";
 
 /**
  * Live read of tenants/{tenantId}/expenses.
  *
  * Reads go straight to Firestore because rules already restrict expenses to
- * admins. Writes must go through the createExpense Function.
+ * members activos. Writes must go through the createExpense Function.
  *
  * Ordered by occurredAt because an operator can backdate an expense they log
  * late, so createdAt would not reflect the operational timeline.
@@ -36,9 +41,12 @@ export function useLiveExpenses(tenantId: string, max?: number) {
 
     const q = query(ref, ...constraints);
 
-    const unsub = onSnapshot(
+    let active = true;
+    let unsub: Unsubscribe = () => {};
+    unsub = onSnapshot(
       q,
       (snapshot) => {
+        if (!active) return;
         const nextExpenses: AdminExpense[] = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...(doc.data() as Omit<AdminExpense, "id">),
@@ -49,13 +57,25 @@ export function useLiveExpenses(tenantId: string, max?: number) {
         setLoading(false);
       },
       (err) => {
+        if (!active) return;
+        if (isAuthorizationLost(err)) {
+          active = false;
+          unsub();
+          setExpenses([]);
+          setLoading(false);
+          void tearDownAuthorizedSession();
+          return;
+        }
         console.error("Error leyendo gastos live:", err);
         setError(err);
         setLoading(false);
       }
     );
 
-    return () => unsub();
+    return () => {
+      active = false;
+      unsub();
+    };
   }, [tenantId, max]);
 
   return { expenses, loading, error };
