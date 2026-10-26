@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -23,7 +24,10 @@ import { getHumanOrderLabel } from "../../lib/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
 import { PosReceiptDialog } from "../../components/pos/pos-receipt-dialog";
 import { receiptFromOrder, type PosReceipt } from "../../lib/pos-receipt";
-import { getOperationalDayStart, toDate } from "../../lib/time";
+import { toDate } from "../../lib/time";
+import { useOperationalDayStartMs } from "../../hooks/use-operational-day";
+
+const POS_HISTORY_LIMIT = 50;
 import {
   Minus,
   Plus,
@@ -145,9 +149,12 @@ export default function PosPage() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [operatorEmail, setOperatorEmail] = useState("Operador");
 
-  const startOfDay = useMemo(() => {
-    return Timestamp.fromDate(getOperationalDayStart(new Date()));
-  }, []);
+  // Rota sola al cruzar el corte del día operativo (tablet abierta toda la noche).
+  const operationalDayStartMs = useOperationalDayStartMs();
+  const startOfDay = useMemo(
+    () => Timestamp.fromMillis(operationalDayStartMs),
+    [operationalDayStartMs]
+  );
 
   const normalizedPhone = customerPhone.trim()
     ? normalizeChileanPhone(customerPhone)
@@ -238,8 +245,13 @@ export default function PosPage() {
 
   useEffect(() => {
     const ref = collection(db, `tenants/${tenantId}/orders`);
-    // Single-field query avoids introducing a composite-index requirement.
-    const q = query(ref, where("channel", "==", "admin_pos"));
+    // Acotado: requiere índice compuesto orders(channel ASC, createdAt DESC).
+    const q = query(
+      ref,
+      where("channel", "==", "admin_pos"),
+      orderBy("createdAt", "desc"),
+      limit(POS_HISTORY_LIMIT)
+    );
     return onSnapshot(
       q,
       (snapshot) => setPosHistoryOrders(snapshot.docs.map((doc) => ({

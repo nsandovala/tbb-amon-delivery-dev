@@ -13,7 +13,7 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useLiveExpenses } from "../../hooks/use-live-expenses";
-import { useLiveOrders } from "../../hooks/use-live-orders";
+import { LIVE_ORDERS_HARD_LIMIT, useLiveOrders } from "../../hooks/use-live-orders";
 import { type AdminExpense } from "../../lib/firebase/queries/expenses";
 import { type AdminOrder } from "../../lib/firebase/queries/orders";
 import { auth, db } from "../../lib/firebase/client";
@@ -279,7 +279,6 @@ function AcquisitionPanel({ orders }: { orders: AdminOrder[] }) {
 
 export default function MetricasPage() {
   const { tenantId } = useActiveTenant();
-  const { orders, loading: loadingOrders, error: ordersError } = useLiveOrders(tenantId);
   const { expenses, loading: loadingExpenses, error: expensesError } = useLiveExpenses(tenantId);
   const [period, setPeriod] = useState<Period>("today");
   const [channel, setChannel] = useState<Channel>("all");
@@ -321,6 +320,16 @@ export default function MetricasPage() {
   const now = useMemo(() => new Date(nowMs), [nowMs]);
   const range = useMemo(() => rangeFor(period, now, customStart, customEnd), [period, now, customStart, customEnd]);
   const earlierRange = useMemo(() => getPreviousMetricsRange(range, period), [range, period]);
+  // Solo lo que la pantalla usa: periodo anterior (comparación) y tendencia de 7 días.
+  const ordersSinceMs = useMemo(() => {
+    const trendStart = getOperationalDayStart(now);
+    trendStart.setDate(trendStart.getDate() - 6);
+    return Math.min(earlierRange.start.getTime(), trendStart.getTime());
+  }, [earlierRange, now]);
+  const { orders, loading: loadingOrders, error: ordersError } = useLiveOrders(tenantId, {
+    sinceMs: ordersSinceMs,
+    max: LIVE_ORDERS_HARD_LIMIT,
+  });
   const channelOrders = useMemo(() => orders.filter((order) => channel === "all" || order.channel === channel), [orders, channel]);
   const selectedOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), range)), [channelOrders, range]);
   const previousOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), earlierRange)), [channelOrders, earlierRange]);
