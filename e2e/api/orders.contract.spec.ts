@@ -107,7 +107,7 @@ test.describe("Orders API contract emulator", () => {
     const created = await create.json();
     const orderId = created.data.orderId;
 
-    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`);
+    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`, { headers: bearer(OWNER_TOKEN) });
     expect(get.status(), await get.text()).toBe(200);
 
     const found = await get.json();
@@ -143,7 +143,7 @@ test.describe("Orders API contract emulator", () => {
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
-    const get = await request.get(`getOrder/${body.data.orderId}?tenantId=${TENANT}`);
+    const get = await request.get(`getOrder/${body.data.orderId}?tenantId=${TENANT}`, { headers: bearer(OWNER_TOKEN) });
     expect(get.status(), await get.text()).toBe(200);
     const found = await get.json();
     expect(found.data.channel).toBe("admin_pos");
@@ -170,7 +170,7 @@ test.describe("Orders API contract emulator", () => {
     const orderId: string = body.data.orderId;
     expect(orderId).toBeTruthy();
 
-    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`);
+    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`, { headers: bearer(OWNER_TOKEN) });
     expect(get.status(), await get.text()).toBe(200);
 
     const found = await get.json();
@@ -194,7 +194,7 @@ test.describe("Orders API contract emulator", () => {
     expect(res.status(), await res.text()).toBe(201);
 
     const body = await res.json();
-    const get = await request.get(`getOrder/${body.data.orderId}?tenantId=${TENANT}`);
+    const get = await request.get(`getOrder/${body.data.orderId}?tenantId=${TENANT}`, { headers: bearer(OWNER_TOKEN) });
     expect(get.status(), await get.text()).toBe(200);
 
     const found = await get.json();
@@ -212,7 +212,7 @@ test.describe("Orders API contract emulator", () => {
     const orderId: string = body.data.orderId;
     expect(orderId).toBeTruthy();
 
-    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`);
+    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`, { headers: bearer(OWNER_TOKEN) });
     expect(get.status(), await get.text()).toBe(200);
 
     const found = await get.json();
@@ -238,7 +238,7 @@ test.describe("Orders API contract emulator", () => {
     const orderId: string = body.data.orderId;
     expect(body.data.displayCode).toMatch(/^\d{3,}$/);
 
-    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`);
+    const get = await request.get(`getOrder/${orderId}?tenantId=${TENANT}`, { headers: bearer(OWNER_TOKEN) });
     expect(get.status(), await get.text()).toBe(200);
 
     const found = await get.json();

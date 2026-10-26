@@ -1043,3 +1043,21 @@ git diff --check
 
 ### Release gate
 - Merge antes del 2026-10-30 con CI en verde. Sin despliegue: BUILD-01 no habilita el piloto ni autoriza Blaze.
+
+## 2026-10-26 — SEC-04: lectura privada de pedidos
+
+### Qué cambió
+- `getOrder` exige GET, `orderId` válido, `tenantId` explícito y Firebase ID token con membresía activa y permiso `orders.read_private` (nuevo, owner y admin). Autoriza antes de leer Firestore.
+- El recibo POS (`getOrderApi`) envía el token del operador.
+
+### Por qué cambió
+- `getOrder` devolvía nombre, teléfono y dirección del cliente sin autenticación y con fallback al tenant `tbb`. P0 del Release Backlog v1.
+
+### Archivos
+- Ver `roadmap/sprint-sec-04.md` (contrato del endpoint, validación y riesgos).
+
+### Validación
+- Typecheck de Shared, Admin y Web; build de Functions; suite e2e compilada (15 contratos nuevos). En vivo con emuladores Auth + Functions: 405, 400 ×3 y 401 ×3 correctos y sin datos del pedido. Contratos con Firestore: pendientes de CI.
+
+### Release gate
+- Sin commit, PR ni despliegue hasta auditoría GPT y QA humano. COST-GUARD será el siguiente PR.

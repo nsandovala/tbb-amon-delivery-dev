@@ -19,6 +19,7 @@ export const PERMISSIONS = [
   "store.manage_hours",
   "cash.read_summary",
   "cash.close_session",
+  "orders.read_private",
   "orders.update_status",
   "pos.create_sale",
   "members.manage",
@@ -33,6 +34,8 @@ const OPERATIONAL_PERMISSIONS: Permission[] = [
   "store.manage_hours",
   "cash.read_summary",
   "cash.close_session",
+  // SEC-04: lectura de un pedido con datos personales del cliente (POS/recibo).
+  "orders.read_private",
   "orders.update_status",
   "pos.create_sale",
 ];

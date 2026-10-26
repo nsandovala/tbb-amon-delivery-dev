@@ -37,11 +37,13 @@ cualquier alta posterior pasan por Admin SDK (ver `tools/bootstrap-owner.mjs`).
 | `store.manage_hours`      |   ✅   |   ✅   |
 | `cash.read_summary`       |   ✅   |   ✅   |
 | `cash.close_session`      |   ✅   |   ✅   |
+| `orders.read_private`     |   ✅   |   ✅   |
 | `orders.update_status`    |   ✅   |   ✅   |
 | `pos.create_sale`         |   ✅   |   ✅   |
 | `members.manage`          |   ✅   |   ❌   |
 
 Fuente única: `apps/functions/src/lib/permissions.ts`.
+`orders.read_private` lo agrega SEC-04 para `getOrder` (ver `roadmap/sprint-sec-04.md`).
 `members.manage` queda reservado para SEC-02 (invitaciones y alta de admins).
 
 ## Fachada central
@@ -384,6 +386,7 @@ mantienen desde la primera iteración de SEC-BASE.
 | `store.manage_hours`      |   ✅   |   ✅   |
 | `cash.read_summary`       |   ✅   |   ✅   |
 | `cash.close_session`      |   ✅   |   ✅   |
+| `orders.read_private`     |   ✅   |   ✅   |
 | `orders.update_status`    |   ✅   |   ✅   |
 | `pos.create_sale`         |   ✅   |   ✅   |
 | `members.manage`          |   ✅   |   ❌   |
@@ -406,7 +409,7 @@ mantienen desde la primera iteración de SEC-BASE.
 | `POST /createOrder`            | público (storefront)    |
 | `POST /createPosSale`          | `pos.create_sale`       |
 | `PATCH /updateOrderStatus`     | `orders.update_status`  |
-| `GET /getOrder`                | público (tracking futuro) |
+| `GET /getOrder`                | `orders.read_private` (SEC-04; antes público) |
 
 El aislamiento es por membresía: un usuario puede tener memberships en
 `tenantA` y `tenantB` con roles distintos. Cada request resuelve el permiso
