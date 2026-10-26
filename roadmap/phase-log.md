@@ -1023,3 +1023,23 @@ git diff --check
 
 ### Release gate
 - Sin merge ni despliegue. Ejecutar las pruebas locales antes de continuar con el estudio de UX de métricas.
+
+## 2026-10-26 — BUILD-01: Functions en Node 22 y empaquetado reproducible
+
+### Qué cambió
+- Functions y CI pasan de Node.js 20 a 22. Se elimina `@amon/shared` de Functions (no se importaba en runtime).
+- El paquete piloto usa el `apps/functions/package-lock.json` commiteado y un manifiesto desplegable sin `scripts`; ya no regenera el lock.
+- Guards de empaquetado reproducibles en `tools/test-prepare-firebase-pilot.mjs` (5 casos), ejecutados en `qa.yml`.
+
+### Por qué cambió
+- El runtime Node 20 se retira el 2026-10-30. El lock de Functions estaba desalineado (Zod 3). QA y deploy no garantizaban las mismas versiones.
+- La revisión de Codex del PR #82 detectó que copiar `"build": "tsc"` al paquete precompilado haría fallar Cloud Build, y pidió actualizar esta documentación.
+
+### Archivos
+- Ver `roadmap/build-01-functions-lockfile.md` (detalle completo, validación y riesgos).
+
+### Validación
+- Builds de Shared, Functions, Web y Admin; guards 5/5; `npm ci` del paquete autónomo; carga de 15 funciones; `git diff --check`. CI del PR #82: qa, api-contracts ×2 y Security Gate en verde (commit `435787c`); se revalida tras el ajuste de `scripts`.
+
+### Release gate
+- Merge antes del 2026-10-30 con CI en verde. Sin despliegue: BUILD-01 no habilita el piloto ni autoriza Blaze.

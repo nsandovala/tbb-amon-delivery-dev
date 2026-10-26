@@ -27,7 +27,7 @@ apps/*
 | ----------------- | ---------------------------------------------------------------------- |
 | `apps/web`        | Customer storefront — Next.js App Router, port 3000                    |
 | `apps/admin`      | POS + orders dashboard — Next.js App Router, port 3001                 |
-| `apps/functions`  | Firebase Functions backend — Node 20                                   |
+| `apps/functions`  | Firebase Functions backend — Node 22                                   |
 | `packages/shared` | Zod schemas, types, constants, seeds — edit `src/`, compiled to `lib/` |
 
 ---
