@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -58,7 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Setup Java for Firestore emulator
@@ -77,8 +77,8 @@ jobs:
 
       - name: Verify standalone pilot Functions package
         run: |
+          node tools/test-prepare-firebase-pilot.mjs
           node tools/prepare-firebase-pilot.mjs
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
           npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
           node -e 'const p="./.firebase-pilot/functions/"; const z=require(p+"node_modules/zod/package.json").version; if (!z.startsWith("4.")) throw Error(`Expected Zod 4, got ${z}`); require(p+"lib/index.js")'
 
