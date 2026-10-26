@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { StoreStatusStrip } from "@/components/store-status-strip";
 import { collection, getDocs } from "firebase/firestore";
 import { useLiveOrders } from "../../hooks/use-live-orders";
+import { useOperationalDayStartMs } from "../../hooks/use-operational-day";
+
+/** Ventana del tablero: día operativo actual + el anterior (pedidos que cruzan el corte). */
+const ORDERS_BOARD_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ORDERS_BOARD_MAX = 300;
 import { updateOrderStatusApi } from "../../lib/api/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
 import { PosReceiptDialog } from "../../components/pos/pos-receipt-dialog";
@@ -312,7 +317,11 @@ function OrderCard({
 
 export default function OrdersPage() {
   const { tenantId } = useActiveTenant();
-  const { orders, loading, error: ordersError } = useLiveOrders(tenantId);
+  const operationalDayStartMs = useOperationalDayStartMs();
+  const { orders, loading, error: ordersError } = useLiveOrders(tenantId, {
+    sinceMs: operationalDayStartMs - ORDERS_BOARD_WINDOW_MS,
+    max: ORDERS_BOARD_MAX,
+  });
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [productNames, setProductNames] = useState<ProductNameMap>({});
