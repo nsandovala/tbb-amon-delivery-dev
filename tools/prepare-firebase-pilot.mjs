@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -49,7 +49,12 @@ checkNoWorkspaceImports(sourceLib);
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
 cpSync(sourceLib, join(output, "lib"), { recursive: true });
-cpSync(join(functionsDir, "package.json"), join(output, "package.json"));
+// El paquete se despliega ya compilado (solo `lib/`, sin `src/` ni tsconfig).
+// Cloud Build ejecuta `npm run build`/`gcp-build` si el manifiesto los declara,
+// así que el manifiesto desplegable va sin `scripts`. Dependencias y
+// devDependencies se conservan intactas para que el lock siga coincidiendo.
+const { scripts: _sourceScripts, ...deployManifest } = manifest;
+writeFileSync(join(output, "package.json"), `${JSON.stringify(deployManifest, null, 2)}\n`);
 cpSync(join(functionsDir, "package-lock.json"), join(output, "package-lock.json"));
 
 console.log("Prepared standalone pilot Functions source at .firebase-pilot/functions (committed lockfile)");

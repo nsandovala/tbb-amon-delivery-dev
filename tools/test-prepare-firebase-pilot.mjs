@@ -37,6 +37,19 @@ const cases = [
     mutate: () => {},
   },
   {
+    name: "manifiesto desplegable sin scripts (Cloud Build no recompila)",
+    expectFailure: false,
+    mutate: () => {},
+    verify: (dir) => {
+      const deployed = JSON.parse(readFileSync(join(dir, ".firebase-pilot/functions/package.json"), "utf8"));
+      const source = JSON.parse(readFileSync(join(dir, "apps/functions/package.json"), "utf8"));
+      if (!source.scripts?.build) return "fixture sin scripts.build: el caso no prueba nada";
+      if (deployed.scripts !== undefined) return `scripts presentes: ${JSON.stringify(deployed.scripts)}`;
+      if (JSON.stringify(deployed.dependencies) !== JSON.stringify(source.dependencies)) return "dependencies alteradas";
+      return null;
+    },
+  },
+  {
     name: "@amon/shared re-agregado al manifiesto",
     expectFailure: true,
     message: "workspace dependencies: @amon/shared",
@@ -70,11 +83,19 @@ for (const testCase of cases) {
     const run = spawnSync(process.execPath, [join(dir, "tools/prepare-firebase-pilot.mjs")], { encoding: "utf8" });
     const output = `${run.stdout}${run.stderr}`;
     const failed = run.status !== 0;
-    const ok = testCase.expectFailure ? failed && output.includes(testCase.message) : !failed;
+    let ok = testCase.expectFailure ? failed && output.includes(testCase.message) : !failed;
+    let detail = output.trim().split("\n").slice(-3).join("\n");
+    if (ok && testCase.verify) {
+      const problem = testCase.verify(dir);
+      if (problem) {
+        ok = false;
+        detail = problem;
+      }
+    }
     console.log(`${ok ? "PASS" : "FAIL"}  ${testCase.name}`);
     if (!ok) {
       failures += 1;
-      console.log(output.trim().split("\n").slice(-3).join("\n"));
+      console.log(detail);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
