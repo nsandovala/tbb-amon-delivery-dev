@@ -1,10 +1,10 @@
 import { generateOrderId, createOrder, getOrder, updateOrderStatus } from "../repositories/firestore-orders.repo";
-import { getDb } from "../lib/firebase-admin";
 import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 import { ValidationError } from "../lib/errors";
-import { assertStoreAcceptingOrders } from "./store-operation.service";
+import { assertStoreAcceptingOrders, assertStoreAcceptingOrdersNow } from "./store-operation.service";
+import { loadPricedProducts } from "./product-pricing";
 
 const DELIVERY_FEE = 1500;
 const MAX_DELIVERY_FEE = 10000;
@@ -33,45 +33,25 @@ async function calculateTotals(
   delivery: number;
   total: number;
 }> {
-  const snaps = await Promise.all(
-    items.map(item =>
-      getDb()
-        .collection("tenants")
-        .doc(tenantId)
-        .collection("products")
-        .doc(item.productId)
-        .get()
-    )
+  // COST-GUARD: una lectura por producto distinto; 400 si alguno no está disponible.
+  const products = await loadPricedProducts(
+    tenantId,
+    items.map((item) => item.productId)
   );
 
   const processedItems: ProcessedItem[] = [];
   let subtotal = 0;
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const snap = snaps[i];
-    const data = snap.data() as {
-      name?: string;
-      imageUrl?: string;
-      categoryId?: string;
-      price?: number;
-    } | undefined;
-
-    const price = data?.price;
-    if (price === undefined || price === null) {
-      throw new Error(`Product ${item.productId} has no price`);
-    }
-
-    const lineTotal = price * item.qty;
-    subtotal += lineTotal;
-
+  for (const item of items) {
+    const product = products.get(item.productId)!;
+    subtotal += product.price * item.qty;
     processedItems.push({
       productId: item.productId,
-      productName: data?.name || `Product ${item.productId}`,
+      productName: product.name,
       qty: item.qty,
-      unitPrice: price,
-      imageUrl: data?.imageUrl || null,
-      categoryId: data?.categoryId || null,
+      unitPrice: product.price,
+      imageUrl: product.imageUrl,
+      categoryId: product.categoryId,
     });
   }
 
@@ -98,6 +78,19 @@ export async function handleCreateOrder(
   displayCode: string;
   operationalDate: string;
 }> {
+  // COST-GUARD: validaciones sin costo primero (cero lecturas de Firestore).
+  // Normalize phone for customer identity — reject if invalid
+  const normalizedPhone = normalizeChileanPhone(input.customer.phone);
+  if (!normalizedPhone) {
+    throw new ValidationError("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
+  }
+
+  // COST-GUARD: con la tienda cerrada (o un tenant inexistente, que queda
+  // fail-closed) se rechaza antes de leer productos o abrir la transacción.
+  // Es solo un atajo: el guard transaccional de abajo sigue siendo la fuente
+  // de verdad ante un cierre que ocurra entre ambas lecturas.
+  await assertStoreAcceptingOrdersNow(tenantId);
+
   const orderId = generateOrderId(tenantId);
 
   // Derive delivery fee from fulfillmentType (single source of truth)
@@ -109,12 +102,6 @@ export async function handleCreateOrder(
     input.items,
     fee
   );
-
-  // Normalize phone for customer identity — reject if invalid
-  const normalizedPhone = normalizeChileanPhone(input.customer.phone);
-  if (!normalizedPhone) {
-    throw new ValidationError("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
-  }
 
   const orderMeta = await createOrder(tenantId, orderId, {
     items: processedItems,

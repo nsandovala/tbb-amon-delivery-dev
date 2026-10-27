@@ -3,6 +3,8 @@ import { createOrderSchema } from "../schemas/create-order.schema";
 import { handleCreateOrder, handleGetOrder } from "../services/orders.service";
 import { ValidationError, AppError } from "../lib/errors";
 import { requireMembershipPermission } from "../lib/authz";
+import { assertBodyWithinLimit } from "../lib/request-limits";
+import { ORDER_LIMITS } from "../schemas/order-limits";
 import { logger } from "../lib/logger";
 import type { ApiResponse } from "../types/api";
 
@@ -20,6 +22,8 @@ export const createOrder = onRequest(
         res.status(405).json({ ok: false, error: { code: "METHOD_NOT_ALLOWED", message: "POST only" } } satisfies ApiResponse);
         return;
       }
+
+      assertBodyWithinLimit(req, ORDER_LIMITS.maxBodyBytes);
 
       const body = req.body;
       if (!body) {

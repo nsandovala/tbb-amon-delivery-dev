@@ -1061,3 +1061,23 @@ git diff --check
 
 ### Release gate
 - Sin commit, PR ni despliegue hasta auditoría GPT y QA humano. COST-GUARD será el siguiente PR.
+
+## 2026-10-27 — COST-GUARD v1: límites de costo en endpoints públicos
+
+### Qué cambió
+- `createOrder`/`createPosSale`: máx. 25 líneas, 50 u/línea, 200 u totales, cuerpo ≤ 16 KB (413), IDs seguros y largos máximos del cliente. Productos leídos una vez por ID distinto; inexistente/inactivo → 400 (antes 500/aceptado).
+- `createOrder` valida teléfono y estado de tienda antes de leer productos; el guard transaccional se mantiene.
+- Functions: `maxInstances: 5`, `minInstances: 0`, `timeoutSeconds: 30`, `256MiB`, `us-central1`.
+- Storefront: sin polling de `getStoreStatus` con la pestaña oculta.
+
+### Por qué cambió
+- Un carrito sin límites o un pedido con la tienda cerrada podían generar lecturas ilimitadas sin autenticación, y Functions podía escalar sin tope antes del piloto.
+
+### Archivos
+- Ver `roadmap/sprint-cost-guard.md` (matriz de costos, contratos, validación, riesgos y controles pendientes de aprobación).
+
+### Validación
+- Builds y typechecks de Shared, Functions, Web y Admin; guards de empaquetado; 99 contratos compilados (19 nuevos). En vivo sin Firestore: 7 rechazos tempranos en 12–16 ms sin accesos a la base. Contratos con Firestore: pendientes de CI.
+
+### Release gate
+- Sin commit, PR ni despliegue hasta auditoría GPT y QA humano. No autoriza Blaze.

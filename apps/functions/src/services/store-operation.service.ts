@@ -85,6 +85,24 @@ export async function assertStoreAcceptingOrders(
 }
 
 /**
+ * COST-GUARD: pre-chequeo NO transaccional para rechazar pedidos con la tienda
+ * cerrada antes de leer productos o abrir la transacción de creación. No
+ * reemplaza a `assertStoreAcceptingOrders`, que se sigue ejecutando dentro de
+ * la transacción y es la garantía ante un cierre concurrente.
+ */
+export async function assertStoreAcceptingOrdersNow(
+  tenantId: string,
+  now = new Date()
+): Promise<StoreStatus> {
+  const snapshot = await readStoreSnapshot(tenantId, plainReader, now);
+  if (!snapshot.status.acceptingOrders) {
+    const parsed = snapshot.hoursRaw ? parseStoreHoursConfig(snapshot.hoursRaw) : null;
+    throw new StoreClosedError(snapshot.status, parsed?.ok ? parsed.config.days : null);
+  }
+  return snapshot.status;
+}
+
+/**
  * Evaluates the current state and, when it differs from the last observed
  * one, appends a `schedule` audit event (scheduled open/close, override
  * expiry, config becoming invalid). Manual actions update the observed state

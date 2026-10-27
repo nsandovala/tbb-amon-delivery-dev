@@ -48,3 +48,10 @@ export class ForbiddenError extends AppError {
     this.name = "ForbiddenError";
   }
 }
+
+export class PayloadTooLargeError extends AppError {
+  constructor(maxBytes: number) {
+    super(`Request body exceeds ${maxBytes} bytes`, 413, "PAYLOAD_TOO_LARGE");
+    this.name = "PayloadTooLargeError";
+  }
+}

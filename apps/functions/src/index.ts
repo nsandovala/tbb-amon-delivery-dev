@@ -7,6 +7,8 @@
  * Tenant-aware under tenants/{tenantId}.
  */
 
+// COST-GUARD: las opciones globales deben registrarse antes de definir las rutas.
+import "./lib/global-options";
 import { createOrder, getOrder } from "./routes/orders";
 import { updateOrderStatus, createPosSale } from "./routes/pos";
 import { createExpense } from "./routes/expenses";

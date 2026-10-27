@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOCUMENT_ID_PATTERN, ORDER_LIMITS } from "./order-limits";
 
 export const ORDER_STATUSES = [
   "queued",
@@ -45,7 +46,7 @@ const optionalEmailSchema = z.preprocess(
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : undefined;
   },
-  z.string().email("Email must be valid").optional()
+  z.string().max(ORDER_LIMITS.maxEmailLength).email("Email must be valid").optional()
 );
 
 const optionalTrimmedStringSchema = z.preprocess(
@@ -92,19 +93,51 @@ export const orderCustomerSchema = z.object({
 });
 
 export const createOrderCustomerSchema = z.object({
-  name: z.string().trim().min(1, "Customer name is required"),
-  phone: z.string().trim().min(1, "Customer phone is required"),
+  name: z.string().trim().min(1, "Customer name is required").max(ORDER_LIMITS.maxCustomerNameLength),
+  phone: z.string().trim().min(1, "Customer phone is required").max(ORDER_LIMITS.maxPhoneLength),
   email: optionalEmailSchema,
-  address: z.string().optional().default(""),
-  notes: z.string().optional().default(""),
+  address: z.string().max(ORDER_LIMITS.maxAddressLength).optional().default(""),
+  notes: z.string().max(ORDER_LIMITS.maxNotesLength).optional().default(""),
 });
 
+/**
+ * COST-GUARD: entrada de líneas para createOrder/createPosSale. Acota líneas,
+ * cantidades e IDs antes de cualquier lectura de Firestore.
+ */
+const documentIdSchema = z
+  .string()
+  .min(1)
+  .max(ORDER_LIMITS.maxIdLength)
+  .regex(DOCUMENT_ID_PATTERN, "Invalid document ID");
+
+const orderInputItemsSchema = (emptyMessage: string) =>
+  z
+    .array(
+      z.object({
+        productId: documentIdSchema,
+        qty: z.number().int().positive().max(ORDER_LIMITS.maxQtyPerLine),
+      })
+    )
+    .min(1, emptyMessage)
+    .max(ORDER_LIMITS.maxLines, `Order cannot have more than ${ORDER_LIMITS.maxLines} lines`)
+    .refine(
+      (items) => items.reduce((sum, item) => sum + item.qty, 0) <= ORDER_LIMITS.maxTotalUnits,
+      { message: `Order cannot exceed ${ORDER_LIMITS.maxTotalUnits} units` }
+    );
+
 export const createPosSaleCustomerSchema = z.object({
-  name: z.string().trim().min(1, "Customer name is required"),
-  phone: optionalTrimmedStringSchema,
+  name: z.string().trim().min(1, "Customer name is required").max(ORDER_LIMITS.maxCustomerNameLength),
+  phone: z.preprocess(
+    (value) => {
+      if (typeof value !== "string") return value;
+      const normalized = value.trim();
+      return normalized.length > 0 ? normalized : undefined;
+    },
+    z.string().max(ORDER_LIMITS.maxPhoneLength).optional()
+  ),
   email: optionalEmailSchema,
-  address: z.string().optional().default(""),
-  notes: z.string().optional().default(""),
+  address: z.string().max(ORDER_LIMITS.maxAddressLength).optional().default(""),
+  notes: z.string().max(ORDER_LIMITS.maxNotesLength).optional().default(""),
 });
 
 export const orderSchema = z.object({
@@ -128,11 +161,8 @@ export const orderSchema = z.object({
 });
 
 export const createOrderSchema = z.object({
-  tenantId: z.string().min(1).optional(),
-  items: z.array(z.object({
-    productId: z.string().min(1),
-    qty: z.number().int().positive(),
-  })).min(1, "Order must have at least one item"),
+  tenantId: documentIdSchema.optional(),
+  items: orderInputItemsSchema("Order must have at least one item"),
   customer: createOrderCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema,
   paymentMethod: paymentMethodSchema.optional().default("pending"),
@@ -151,11 +181,8 @@ export const updateOrderStatusSchema = z.object({
 });
 
 export const createPosSaleSchema = z.object({
-  tenantId: z.string().min(1).optional(),
-  items: z.array(z.object({
-    productId: z.string().min(1),
-    qty: z.number().int().positive(),
-  })).min(1, "POS sale must have at least one item"),
+  tenantId: documentIdSchema.optional(),
+  items: orderInputItemsSchema("POS sale must have at least one item"),
   customer: createPosSaleCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema.optional().default("pickup"),
   paymentMethod: paymentMethodSchema.optional().default("pending"),
