@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect, type APIRequestContext } from "@playwright/test";
 
 /**
@@ -209,6 +210,11 @@ export async function revokeMembership(
     revokedAt: new Date().toISOString(),
     revokedByUid: "system:e2e",
   });
+}
+
+/** ORDER-IDEMPOTENCY: clave aleatoria nueva por intento de compra (createOrder/createPosSale). */
+export function newIdempotencyKey(): string {
+  return randomUUID();
 }
 
 export function bearer(token: string): Record<string, string> {

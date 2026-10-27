@@ -48,7 +48,7 @@ async function apiFetch<T>(
         ? `HTTP ${res.status} ${res.statusText} for ${url}${raw ? ` :: ${raw.slice(0, 300)}` : ""}`
         : `HTTP ${res.status}`);
     // `code` permite a la UI distinguir errores de negocio (ej. STORE_CLOSED, M6J).
-    throw Object.assign(new Error(msg), { code: data?.error?.code });
+    throw Object.assign(new Error(msg), { code: data?.error?.code, status: res.status });
   }
 
   return (data as { ok: true; data: T }).data;
@@ -66,6 +66,8 @@ interface CreateOrderPayload {
   };
   fulfillmentType: "delivery" | "pickup";
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
+  /** ORDER-IDEMPOTENCY: misma clave en cada reintento del mismo intento. */
+  idempotencyKey: string;
 }
 
 interface CreateOrderResponse {
@@ -74,6 +76,8 @@ interface CreateOrderResponse {
   displayOrderNumber: number;
   displayCode: string;
   operationalDate: string;
+  /** true si el pedido ya estaba registrado con esta clave (reintento). */
+  replayed?: boolean;
 }
 
 export type PublicStoreDateException = {
@@ -98,6 +102,25 @@ export function fetchPublicStoreAvailability(tenantId: string): Promise<PublicSt
   return apiFetch<PublicStoreAvailability>(
     `${FUNCTIONS_BASE}/getStoreStatus?tenantId=${encodeURIComponent(tenantId)}`
   );
+}
+
+export interface OrderAttemptLookup {
+  found: boolean;
+  orderId?: string;
+  displayOrderNumber?: number;
+  displayCode?: string;
+  operationalDate?: string;
+}
+
+/**
+ * ORDER-IDEMPOTENCY (O-01): verifica, sin crear nada, si un intento quedó
+ * registrado. Solo devuelve identificadores del pedido.
+ */
+export function lookupOrderAttemptApi(tenantId: string, idempotencyKey: string): Promise<OrderAttemptLookup> {
+  return apiFetch<OrderAttemptLookup>(`${FUNCTIONS_BASE}/lookupOrderAttempt`, {
+    method: "POST",
+    body: JSON.stringify({ tenantId, channel: "web", idempotencyKey }),
+  });
 }
 
 export async function createOrderApi(

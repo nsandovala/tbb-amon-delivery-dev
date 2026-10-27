@@ -10,6 +10,7 @@
 // COST-GUARD: las opciones globales deben registrarse antes de definir las rutas.
 import "./lib/global-options";
 import { createOrder, getOrder } from "./routes/orders";
+import { lookupOrderAttempt } from "./routes/order-attempts";
 import { updateOrderStatus, createPosSale } from "./routes/pos";
 import { createExpense } from "./routes/expenses";
 import { getMyMembership, listMyMemberships } from "./routes/membership";
@@ -29,6 +30,7 @@ export {
   createOrder,
   getOrder,
   updateOrderStatus,
+  lookupOrderAttempt,
 
   // POS
   createPosSale,

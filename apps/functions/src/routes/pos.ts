@@ -113,7 +113,9 @@ export const createPosSale = onRequest(
 
       const result = await handleCreatePosSale(tenantId, parsed.data);
 
-      res.status(201).json({
+      // ORDER-IDEMPOTENCY: 201 al crear; 200 + replayed:true al reproducir un
+      // intento ya registrado (mismos identificadores, sin nuevas escrituras).
+      res.status(result.replayed ? 200 : 201).json({
         ok: true,
         data: {
           orderId: result.orderId,
@@ -121,6 +123,7 @@ export const createPosSale = onRequest(
           displayOrderNumber: result.displayOrderNumber,
           displayCode: result.displayCode,
           operationalDate: result.operationalDate,
+          replayed: result.replayed,
         },
       } satisfies ApiResponse);
     } catch (err) {

@@ -6,6 +6,7 @@ import {
   FIRESTORE_DOCS,
   FIXTURE_PRODUCT,
   writeFixtureDoc,
+  newIdempotencyKey,
 } from "../support/emulator-fixtures";
 
 /**
@@ -35,6 +36,7 @@ const order = (tenantId: string, overrides: Record<string, unknown> = {}) => ({
   customer: { name: "Cost Guard", phone: "+56912345678" },
   fulfillmentType: "pickup",
   paymentMethod: "cash",
+  idempotencyKey: newIdempotencyKey(),
   ...overrides,
 });
 
@@ -211,6 +213,7 @@ test.describe("COST-GUARD createPosSale", () => {
     customer: { name: "Cost Guard POS" },
     fulfillmentType: "pickup",
     paymentMethod: "cash",
+    idempotencyKey: newIdempotencyKey(),
     ...overrides,
   });
 

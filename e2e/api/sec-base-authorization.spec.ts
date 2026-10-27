@@ -6,6 +6,7 @@ import {
   createUser,
   revokeMembership,
   type TestUser,
+  newIdempotencyKey,
 } from "../support/emulator-fixtures";
 
 /**
@@ -187,6 +188,7 @@ test.describe("SEC-BASE multi-tenant authorization", () => {
       customer: { name: "Mostrador" },
       fulfillmentType: "pickup" as const,
       paymentMethod: "cash" as const,
+      idempotencyKey: newIdempotencyKey(),
     });
 
     // Anónimo → 401.

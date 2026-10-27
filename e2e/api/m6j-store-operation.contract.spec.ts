@@ -7,6 +7,7 @@ import {
   FIXTURE_PRODUCT,
   patchFixtureDoc,
   writeFixtureDoc,
+  newIdempotencyKey,
 } from "../support/emulator-fixtures";
 
 /**
@@ -38,6 +39,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     customer: { name: "E2E M6J", phone: "+56912345678" },
     fulfillmentType: "pickup",
     paymentMethod,
+    idempotencyKey: newIdempotencyKey(),
   });
 
   const posSale = (paymentMethod = "cash") => ({
@@ -46,6 +48,7 @@ test.describe("M6J store operation + cash close (emulator)", () => {
     customer: { name: "Cliente mostrador" },
     fulfillmentType: "pickup",
     paymentMethod,
+    idempotencyKey: newIdempotencyKey(),
   });
 
   const operate = (action: string, reason?: string) =>
