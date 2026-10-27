@@ -11,7 +11,9 @@ tributario.
 
 1. POS envía la venta por `createPosSale` como hasta ahora.
 2. Tras el éxito, POS lee el pedido guardado con `getOrder` y arma el comprobante
-   con los nombres, precios unitarios y totales persistidos por backend.
+   con los nombres, precios unitarios y totales persistidos por backend. Desde
+   SEC-04 esa lectura es privada: envía el ID token del operador y exige
+   membresía activa con `orders.read_private` (ver `roadmap/sprint-sec-04.md`).
 3. Si esa lectura secundaria falla, no se repite ni revierte la venta; el POS
    conserva el resumen calculado que ya mostró al operador.
 4. El POS y `/pedidos` ofrecen historial de pedidos existentes. Al abrir uno,

@@ -146,8 +146,10 @@ export async function getOrderApi(
   orderId: string,
   tenantId: string
 ): Promise<PosOrderSnapshot> {
+  // SEC-04: lectura privada; exige token y membresía con `orders.read_private`.
   return apiFetch<PosOrderSnapshot>(
-    `${FUNCTIONS_BASE}/getOrder/${encodeURIComponent(orderId)}?tenantId=${encodeURIComponent(tenantId)}`
+    `${FUNCTIONS_BASE}/getOrder/${encodeURIComponent(orderId)}?tenantId=${encodeURIComponent(tenantId)}`,
+    { method: "GET", headers: await authHeaders() }
   );
 }
 
