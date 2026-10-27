@@ -155,3 +155,7 @@ npm --prefix apps/functions run build             # OK
 - métricas y reporting real
 - Flow para pagos online
 - limpieza de artefactos de build antes de commit operativo final
+
+## Límites de entrada (COST-GUARD v1)
+
+`createOrder` y `createPosSale` aceptan como máximo 25 líneas, 50 unidades por línea y 200 unidades totales, con cuerpo JSON de hasta 16 KB. `productId` y `tenantId` deben cumplir `^[A-Za-z0-9_-]+$` (≤ 128). Largos máximos del cliente: nombre 100, teléfono 32, email 254, dirección 300, notas 500. Producto inexistente, sin precio o con `isActive: false` → 400. Fuente: `apps/functions/src/schemas/order-limits.ts`; detalle en `roadmap/sprint-cost-guard.md`.

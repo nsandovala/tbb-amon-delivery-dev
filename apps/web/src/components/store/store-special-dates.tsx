@@ -28,8 +28,20 @@ export function StoreSpecialDates({ tenantId }: { tenantId: string }) {
         .catch(() => { /* La disponibilidad de fechas es informativa; checkout valida el estado real. */ });
     };
     load();
-    const timer = window.setInterval(load, 60_000);
-    return () => { active = false; window.clearInterval(timer); };
+    // COST-GUARD: una pestaña en segundo plano no consulta el estado; al
+    // volver a primer plano se refresca de inmediato.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [tenantId]);
 
   if (!availability) return null;

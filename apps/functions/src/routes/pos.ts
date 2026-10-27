@@ -4,6 +4,8 @@ import { createPosSaleSchema } from "../schemas/create-pos-sale.schema";
 import { handleUpdateOrderStatus } from "../services/orders.service";
 import { handleCreatePosSale } from "../services/pos.service";
 import { requireMembershipPermission } from "../lib/authz";
+import { assertBodyWithinLimit } from "../lib/request-limits";
+import { ORDER_LIMITS } from "../schemas/order-limits";
 import { ValidationError, NotFoundError, AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import type { ApiResponse } from "../types/api";
@@ -88,6 +90,8 @@ export const createPosSale = onRequest(
         res.status(405).json({ ok: false, error: { code: "METHOD_NOT_ALLOWED", message: "POST only" } } satisfies ApiResponse);
         return;
       }
+
+      assertBodyWithinLimit(req, ORDER_LIMITS.maxBodyBytes);
 
       const body = req.body;
       if (!body) {

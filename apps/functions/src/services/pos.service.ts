@@ -1,10 +1,10 @@
 import { generateOrderId, createOrder } from "../repositories/firestore-orders.repo";
-import { getDb } from "../lib/firebase-admin";
 import type { CreatePosSaleInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
 import { ValidationError } from "../lib/errors";
 import { assertStoreAcceptingOrders } from "./store-operation.service";
+import { loadPricedProducts } from "./product-pricing";
 
 const DELIVERY_FEE = 1500;
 
@@ -32,45 +32,25 @@ async function calculateTotals(
   delivery: number;
   total: number;
 }> {
-  const snaps = await Promise.all(
-    items.map(item =>
-      getDb()
-        .collection("tenants")
-        .doc(tenantId)
-        .collection("products")
-        .doc(item.productId)
-        .get()
-    )
+  // COST-GUARD: una lectura por producto distinto; 400 si alguno no está disponible.
+  const products = await loadPricedProducts(
+    tenantId,
+    items.map((item) => item.productId)
   );
 
   const processedItems: ProcessedItem[] = [];
   let subtotal = 0;
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const snap = snaps[i];
-    const data = snap.data() as {
-      name?: string;
-      imageUrl?: string;
-      categoryId?: string;
-      price?: number;
-    } | undefined;
-
-    const price = data?.price;
-    if (price === undefined || price === null) {
-      throw new Error(`Product ${item.productId} has no price`);
-    }
-
-    const lineTotal = price * item.qty;
-    subtotal += lineTotal;
-
+  for (const item of items) {
+    const product = products.get(item.productId)!;
+    subtotal += product.price * item.qty;
     processedItems.push({
       productId: item.productId,
-      productName: data?.name || `Product ${item.productId}`,
+      productName: product.name,
       qty: item.qty,
-      unitPrice: price,
-      imageUrl: data?.imageUrl || null,
-      categoryId: data?.categoryId || null,
+      unitPrice: product.price,
+      imageUrl: product.imageUrl,
+      categoryId: product.categoryId,
     });
   }
 
