@@ -268,3 +268,56 @@ Solo cliente y pruebas. Sin cambios de backend, contratos, Firestore, FIN-01, de
 ## Próximo paso
 
 Auditoría cruzada GPT de la corrección del PR #85. En el PC, con ambas configuraciones de emulador: los 122 contratos y las 22 pruebas de navegador (`emulators:exec ... 'npm run test:e2e:browser'`). Después, el QA manual método A. Con autorización: commit y push a la misma rama; los hilos de Codex se cierran con evidencia.
+
+## 2026-10-28 — Integración de navegador en GitHub Actions
+
+### Auditoría de la línea base
+
+- `main`: `ca93602c079281a435ef7495ce18df7b643d45b0`, merge del PR #85. Checkout limpio antes de crear la rama `ci/order-idempotency-browser`.
+- Los tres workflows existentes son `qa.yml`, `security-gate.yml` y `firebase-pilot-manual.yml`. Ninguno ejecuta `test:e2e:browser` ni usa `playwright.browser.config.ts`. El test estándar excluye `e2e/browser`; los contratos API no ejercitan Chromium.
+- [QA de main, ejecución 40609788041](https://github.com/nsandovala/tbb-amon-delivery-dev/actions/runs/40609788041): `qa` y `api-contracts` verdes. El log del job `122558248324` confirma **122 passed** con `firebase.json` y **122 passed** con `firebase.pilot.json`. Es evidencia previa a este cambio, no una ejecución nueva de navegador.
+- La API de la rama devuelve `protected: false` y checks requeridos vacíos. El [ruleset activo 25894222](https://github.com/nsandovala/tbb-amon-delivery-dev/rules/25894222) también tiene `required_status_checks: []` (y `ref_name.include: []`). El otro ruleset, `heorules`, está desactivado. La lectura del endpoint administrativo `/branches/main/protection` devolvió 403; no se presume acceso administrativo por los permisos del usuario.
+- Hallazgo confirmado: la suite de navegador no está integrada en los workflows actuales y no figura como check obligatorio. Se descarta que el verde de `api-contracts` ya cubra esos 22 casos.
+
+### Cambio y contrato del control
+
+- Archivo nuevo: `.github/workflows/order-idempotency-browser.yml`. Este apartado documenta el cambio; no se modifican tests, código de producto, contratos API, estructura Firestore ni workflows de despliegue.
+- Ejecuta toda la suite existente: **13 casos web + 9 POS**, un worker, sin reintentos y con `forbidOnly` en CI, reutilizando `playwright.browser.config.ts`, el harness y los fixtures aislados.
+- Se dispara en PR hacia `main`, push a `main`, `merge_group` y ejecución manual. Sin filtros por rutas, condiciones para omitir el job ni `continue-on-error`.
+- Node 22, Java 21, `npm ci`, builds de Shared y Functions, Chromium de la versión de Playwright del lock y Firebase CLI `15.34.1`, igual que el CI de contratos.
+- Proyecto fijo `demo-amon-ci`; solo emuladores Auth, Firestore y Functions. Permiso `contents: read`, sin secretos, identidad cloud ni comando de despliegue.
+- Nombre estable del check: **`order-idempotency-browser`**. Un fallo de instalación, build, emulador o test falla el job.
+- Publica siempre que existan el reporte HTML, resultados/trazas de Playwright y logs de emuladores como artefacto, retenido siete días. Las trazas de fallos ya están configuradas en Playwright.
+
+| Riesgo | Cobertura existente que ejecuta el workflow |
+|---|---|
+| Respuesta perdida después de persistir | Web: `respuesta perdida tras crear + recarga real`; POS: respuesta perdida y recuperación de carritos ambiguos |
+| Recuperación tras recarga | Web: recuperación desde sessionStorage; POS: recarga durante la lectura del comprobante |
+| Duplicados/reenvíos concurrentes | Web/POS: replay 200, respuesta 201 antigua, CR-02 con clave compartida y comprobación del número de pedidos |
+| Conflicto HTTP 409 | Web móvil: 409 real desde el checkout, verificación y descarte explícito, conservando datos |
+| Conservación del carrito | Web/POS: carrito modificado mientras se espera y recuperación ambigua sin borrado automático |
+| Resultado todavía desconocido | Web O-04: `found: false`, creación tardía y segunda verificación |
+
+### Reproducción y evidencia
+
+```bash
+npm ci
+npm --workspace packages/shared run build
+npm --workspace apps/functions run build
+npx playwright install --with-deps chromium
+FIREBASE_PROJECT_ID=demo-amon-ci \
+FUNCTIONS_BASE_URL=http://127.0.0.1:5001/demo-amon-ci/us-central1/ \
+CI=true PLAYWRIGHT_HTML_OPEN=never \
+npx --yes firebase-tools@15.34.1 emulators:exec --project demo-amon-ci \
+  --only auth,firestore,functions 'npm run test:e2e:browser -- --reporter=github,html'
+```
+
+- Validación local: `npm ci`; builds de Shared/Functions; `npm --workspace packages/shared run typecheck`; `npx tsc -p apps/web/tsconfig.json --noEmit`; `npx tsc -p apps/admin/tsconfig.json --noEmit`; `node tools/test-prepare-firebase-pilot.mjs` (**5/5**); `npx playwright test e2e/unit --config=playwright.config.ts` (**148/148**); `git diff --check`: **PASS**.
+- `CI=true npm run test:e2e:browser -- --list`: **22 pruebas descubiertas**, no ejecutadas por ese comando. YAML y condiciones de ejecución revisados.
+- Límite local: Node 24 y Java 17 en el entorno disponible; la descarga de Chromium falló con archivo ZIP inválido/truncado. No se declara una ejecución local de las 22 pruebas. El resultado del runner Node 22/Java 21 y sus enlaces se registran en el PR independiente.
+
+### Riesgo residual y siguiente paso
+
+Agregar un workflow **no lo convierte por sí solo en requisito de merge**. Tras verificar su ejecución, seleccionar `order-idempotency-browser` como status check requerido en una regla que incluya `refs/heads/main` (o protección equivalente). Este PR no cambia reglas administrativas. Hasta configurar esa exigencia, el check es automático pero no impide por sí solo una fusión.
+
+El harness usa componentes reales y backend emulado; no ejecuta un servidor Next completo ni valida Firebase desplegado. Queda el QA humano del flujo completo y del piloto cuando se autorice. Sin merge ni despliegue Firebase en esta tarea.
