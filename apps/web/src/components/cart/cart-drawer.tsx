@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useCartStore } from "@/lib/store/cart-store";
 import { CartItem } from "./cart-item";
 import { CartSummary } from "./cart-summary";
+import { PendingOrderNotice } from "@/components/store/pending-order-notice";
 import { X, ShoppingBag, ChevronRight, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,6 +96,9 @@ export function CartDrawer({ tenantId }: CartDrawerProps) {
 
         {/* Body */}
         <div className="flex min-h-0 flex-1 flex-col">
+          {/* ORDER-IDEMPOTENCY (CR-05): verificar o decidir sin salir del checkout */}
+          <PendingOrderNotice tenantId={tenantId} placement="checkout" />
+
           {effectiveStep === "cart" ? (
             <>
               {/* Scrollable items area */}

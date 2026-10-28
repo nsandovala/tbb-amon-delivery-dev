@@ -3,6 +3,7 @@ import {
   bearer,
   createOpenFixtureTenant,
   FIXTURE_PRODUCT,
+  newIdempotencyKey,
 } from "../support/emulator-fixtures";
 
 /**
@@ -25,6 +26,7 @@ const validOrder = () => ({
   customer: { name: "E2E Bot", phone: "+56912345678" },
   fulfillmentType: "pickup" as const,
   paymentMethod: "cash" as const,
+  idempotencyKey: newIdempotencyKey(),
 });
 
 const validDeliveryOrder = () => ({
@@ -42,6 +44,7 @@ const validPosSale = () => ({
   customer: { name: "E2E POS", phone: "+56912345678" },
   fulfillmentType: "pickup" as const,
   paymentMethod: "cash" as const,
+  idempotencyKey: newIdempotencyKey(),
 });
 
 test.beforeAll(async ({ playwright, baseURL }) => {
@@ -230,6 +233,7 @@ test.describe("Orders API contract emulator", () => {
         items: [{ productId: FIXTURE_PRODUCT.id, qty: 1 }],
         customer: { name: "Cliente mostrador" },
         paymentMethod: "cash",
+        idempotencyKey: newIdempotencyKey(),
       },
     });
     expect(res.status(), await res.text()).toBe(201);

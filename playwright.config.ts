@@ -6,6 +6,8 @@ const FUNCTIONS_BASE_URL =
 
 export default defineConfig({
   testDir: "./e2e",
+  // Las pruebas de navegador tienen su propia configuración (playwright.browser.config.ts).
+  testIgnore: ["**/browser/**"],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

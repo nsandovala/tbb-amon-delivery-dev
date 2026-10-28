@@ -8,6 +8,7 @@ import {
   FIXTURE_PRODUCT,
   revokeMembership,
   type TestUser,
+  newIdempotencyKey,
 } from "../support/emulator-fixtures";
 
 /**
@@ -89,6 +90,7 @@ test.describe("SEC-04 getOrder lectura privada", () => {
         customer: CUSTOMER,
         fulfillmentType: "delivery",
         paymentMethod: "cash",
+        idempotencyKey: newIdempotencyKey(),
       },
     });
     expect(created.status(), await created.text()).toBe(201);

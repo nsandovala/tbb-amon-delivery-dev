@@ -1,4 +1,11 @@
-import { generateOrderId, createOrder, getOrder, updateOrderStatus } from "../repositories/firestore-orders.repo";
+import {
+  createOrder,
+  findIdempotentOrder,
+  getOrder,
+  updateOrderStatus,
+  type CreatedOrderMeta,
+} from "../repositories/firestore-orders.repo";
+import { deriveIdempotentOrderId, fingerprintOrderIntent } from "../lib/idempotency";
 import type { CreateOrderInput, UpdateOrderStatusInput } from "../schemas/order.shared";
 import { logger } from "../lib/logger";
 import { upsertCustomerFromOrder, normalizeChileanPhone } from "./customers.service";
@@ -72,12 +79,7 @@ async function calculateTotals(
 export async function handleCreateOrder(
   tenantId: string,
   input: CreateOrderInput
-): Promise<{
-  orderId: string;
-  displayOrderNumber: number;
-  displayCode: string;
-  operationalDate: string;
-}> {
+): Promise<CreatedOrderMeta> {
   // COST-GUARD: validaciones sin costo primero (cero lecturas de Firestore).
   // Normalize phone for customer identity — reject if invalid
   const normalizedPhone = normalizeChileanPhone(input.customer.phone);
@@ -85,13 +87,28 @@ export async function handleCreateOrder(
     throw new ValidationError("El teléfono del cliente es obligatorio y debe ser un número chileno válido (+569XXXXXXXX)");
   }
 
+  // ORDER-IDEMPOTENCY: el ID del pedido se deriva de la clave del intento y
+  // la huella cubre el contenido validado. Un reintento equivalente se
+  // responde aquí (1 lectura), antes de revisar tienda, caja o productos.
+  const orderId = deriveIdempotentOrderId(tenantId, "web", input.idempotencyKey);
+  const fingerprint = fingerprintOrderIntent({
+    channel: "web",
+    items: input.items,
+    customer: input.customer,
+    fulfillmentType: input.fulfillmentType,
+    paymentMethod: input.paymentMethod ?? "pending",
+  });
+  const previous = await findIdempotentOrder(tenantId, orderId, fingerprint);
+  if (previous) {
+    logger.info("Order replayed via service", { tenantId, orderId });
+    return previous;
+  }
+
   // COST-GUARD: con la tienda cerrada (o un tenant inexistente, que queda
   // fail-closed) se rechaza antes de leer productos o abrir la transacción.
   // Es solo un atajo: el guard transaccional de abajo sigue siendo la fuente
   // de verdad ante un cierre que ocurra entre ambas lecturas.
   await assertStoreAcceptingOrdersNow(tenantId);
-
-  const orderId = generateOrderId(tenantId);
 
   // Derive delivery fee from fulfillmentType (single source of truth)
   const fee = resolveDeliveryFee(input.fulfillmentType);
@@ -114,7 +131,14 @@ export async function handleCreateOrder(
     customerPhoneNormalized: normalizedPhone,
   }, {
     guard: (tx, now) => assertStoreAcceptingOrders(tx, tenantId, now),
+    idempotencyFingerprint: fingerprint,
   });
+
+  // Carrera con la misma clave resuelta en la transacción: no se repiten
+  // efectos secundarios (estadísticas del cliente).
+  if (orderMeta.replayed) {
+    return orderMeta;
+  }
 
   // Upsert customer (non-blocking — order is already persisted)
   await upsertCustomerFromOrder({
@@ -127,7 +151,7 @@ export async function handleCreateOrder(
 
   logger.info("Order created via service", { tenantId, orderId, subtotal, delivery, total, customerId: normalizedPhone });
 
-  return { orderId, ...orderMeta };
+  return orderMeta;
 }
 
 export async function handleUpdateOrderStatus(

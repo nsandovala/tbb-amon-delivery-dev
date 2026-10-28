@@ -3,6 +3,13 @@
 import { useMemo, useState } from "react";
 import { useCartStore } from "@/lib/store/cart-store";
 import { createOrderApi } from "@/lib/api/orders";
+import {
+  apiErrorCode,
+  beginOrderAttempt,
+  cartSignature,
+  recordOrderAttemptFailure,
+  settleOrderAttemptSuccess,
+} from "@/lib/order-attempt";
 import { getHumanOrderCode } from "@/lib/orders";
 import { toast } from "sonner";
 import {
@@ -22,6 +29,13 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Huella del carrito en este momento (no la del render): el carrito puede cambiar mientras se espera. */
+function liveCartSignature(): string {
+  return cartSignature(
+    useCartStore.getState().items.map((i) => ({ productId: i.product.id, qty: i.quantity }))
+  );
+}
 
 /* ─── Validation helpers ──────────────────────────────────────── */
 
@@ -165,15 +179,30 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
       return;
     }
 
+    // ORDER-IDEMPOTENCY: la clave sobrevive a errores y recargas hasta que el
+    // intento termine, para que reintentar no duplique el pedido. Si el
+    // intento anterior quedó en conflicto (409), no se envía nada hasta que la
+    // persona decida en el aviso de pedido anterior.
+    const attemptScope = `web:${tenantId}`;
+    const orderItems = items.map((i) => ({
+      productId: i.product.id,
+      qty: i.quantity,
+    }));
+    const sentCart = cartSignature(orderItems);
+    let idempotencyKey: string;
+    try {
+      idempotencyKey = beginOrderAttempt(attemptScope, { units: count, total }, sentCart);
+    } catch {
+      toast.error("Tienes un pedido anterior pendiente de revisar.", {
+        description: "Revisa el aviso de pedido anterior antes de enviar uno nuevo.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const orderItems = items.map((i) => ({
-        productId: i.product.id,
-        qty: i.quantity,
-      }));
-
-      const { orderId, displayCode } = await createOrderApi({
+      const { orderId, displayCode, replayed } = await createOrderApi({
         tenantId,
         items: orderItems,
         fulfillmentType,
@@ -185,17 +214,35 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
           notes: notes.trim(),
         },
         paymentMethod,
+        idempotencyKey,
       });
 
+      // O-05: los efectos dependen de si esta respuesta sigue siendo vigente.
+      const settlement = settleOrderAttemptSuccess(attemptScope, idempotencyKey, sentCart, liveCartSignature());
+      if (settlement === "stale") {
+        // Respuesta de un intento que ya se resolvió o reemplazó: no toca el
+        // carrito, el formulario ni el intento actual, y no muestra avisos.
+        return;
+      }
+      const humanCode = getHumanOrderCode({ orderId, displayCode });
+      if (settlement === "cart-changed") {
+        toast.success(`${replayed ? "Tu pedido ya estaba registrado" : "Pedido recibido"} #${humanCode}`, {
+          description: "Tu carrito cambió mientras confirmábamos, así que lo conservamos. Si lo confirmas, será un pedido nuevo.",
+        });
+        return;
+      }
       clearCart();
       closeCart();
 
-      toast.success(`Pedido recibido #${getHumanOrderCode({ orderId, displayCode })}`, {
-        description:
-          fulfillmentType === "delivery"
-            ? "Tu pedido quedó en cola. Te contactaremos por WhatsApp."
-            : "Tu pedido quedó registrado para retiro.",
-      });
+      toast.success(
+        `${replayed ? "Tu pedido ya estaba registrado" : "Pedido recibido"} #${humanCode}`,
+        {
+          description:
+            fulfillmentType === "delivery"
+              ? "Tu pedido quedó en cola. Te contactaremos por WhatsApp."
+              : "Tu pedido quedó registrado para retiro.",
+        }
+      );
 
       setCustomerName("");
       setCustomerPhone("");
@@ -208,11 +255,31 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error desconocido";
-      const storeClosed = (err as { code?: string } | null)?.code === "STORE_CLOSED";
+      const code = apiErrorCode(err);
+      const outcome = recordOrderAttemptFailure(attemptScope, err, idempotencyKey);
+      if (outcome === "stale" || outcome === "pending-other") {
+        // Error tardío de un intento ya reemplazado, u otro envío con la misma
+        // clave sigue activo y decidirá el resultado (CR-02): sin avisos.
+        return;
+      }
+      if (outcome === "conflict") {
+        // Un intento anterior sin confirmar sí se registró, con otro contenido.
+        // Se conserva la clave y no se envía nada: decide la persona en el aviso.
+        toast.error("Tu intento anterior ya quedó registrado como pedido.", {
+          description: "No enviamos este carrito. Revisa el aviso de pedido anterior para decidir.",
+        });
+        return;
+      }
+      if (outcome === "uncertain") {
+        toast.error("No pudimos confirmar tu pedido.", {
+          description: "Verifica si quedó registrado en el aviso de arriba, o vuelve a enviarlo: no se duplicará.",
+        });
+        return;
+      }
       toast.error(
-        storeClosed
+        code === "STORE_CLOSED"
           ? "La tienda está cerrada en este momento."
-          : "No pudimos crear tu pedido. Intenta nuevamente.",
+          : "No pudimos crear tu pedido.",
         { description: message }
       );
     } finally {

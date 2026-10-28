@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DOCUMENT_ID_PATTERN, ORDER_LIMITS } from "./order-limits";
+import { idempotencyKeySchema } from "../lib/idempotency";
 
 export const ORDER_STATUSES = [
   "queued",
@@ -166,6 +167,8 @@ export const createOrderSchema = z.object({
   customer: createOrderCustomerSchema,
   fulfillmentType: fulfillmentTypeSchema,
   paymentMethod: paymentMethodSchema.optional().default("pending"),
+  /** ORDER-IDEMPOTENCY: obligatorio; una clave aleatoria por intento de compra. */
+  idempotencyKey: idempotencyKeySchema,
 }).superRefine((value, ctx) => {
   if (value.fulfillmentType === "delivery" && !value.customer.address?.trim()) {
     ctx.addIssue({
@@ -188,6 +191,8 @@ export const createPosSaleSchema = z.object({
   paymentMethod: paymentMethodSchema.optional().default("pending"),
   acquisitionSource: z.enum(["instagram", "facebook", "whatsapp", "in_person", "other"]).optional(),
   acquisitionCampaign: z.string().trim().max(100).optional(),
+  /** ORDER-IDEMPOTENCY: obligatorio; una clave aleatoria por venta. */
+  idempotencyKey: idempotencyKeySchema,
 }).superRefine((value, ctx) => {
   if (value.acquisitionCampaign && !value.acquisitionSource) {
     ctx.addIssue({

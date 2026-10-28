@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingOrderNotice } from "@/components/store/pending-order-notice";
 import { use, useEffect, useState } from "react";
 import { getTenantBySlug } from "@/lib/firebase/queries/tenants";
 import { getTenantCategories } from "@/lib/firebase/queries/categories";
@@ -124,6 +125,9 @@ export default function StorePage({ params }: StorePageProps) {
 
       {/* Cart Drawer */}
       <CartDrawer tenantId={tenant.id} />
+
+      {/* ORDER-IDEMPOTENCY: intento de compra sin confirmar o en conflicto */}
+      <PendingOrderNotice tenantId={tenant.id} />
     </div>
   );
 }

@@ -10,6 +10,10 @@ import {
   type OperationalOrderMeta,
 } from "../lib/operational-order";
 import { assertCashCloseOpen } from "../lib/cash-close-guard";
+import {
+  IDEMPOTENCY_VERSION,
+  IdempotencyKeyReusedError,
+} from "../lib/idempotency";
 
 const ORDERS_COLLECTION = "orders";
 const ORDER_COUNTERS_COLLECTION = "orderCounters";
@@ -37,6 +41,70 @@ function orderCounterDoc(
 }
 
 export type OrderDoc = admin.firestore.DocumentSnapshot;
+
+/** Resultado de crear (o reproducir) un pedido idempotente. */
+export type CreatedOrderMeta = OperationalOrderMeta & {
+  orderId: string;
+  /** true si la clave ya existía y se devolvió el pedido original sin escribir. */
+  replayed: boolean;
+};
+
+/**
+ * ORDER-IDEMPOTENCY: compara un pedido existente con la huella del intento.
+ * Huella igual → metadatos originales (replay). Distinta, o un pedido sin
+ * huella (creado sin clave) → 409 sin filtrar su contenido.
+ */
+function replayFromSnapshot(
+  snap: admin.firestore.DocumentSnapshot,
+  fingerprint: string
+): CreatedOrderMeta {
+  const data = snap.data() ?? {};
+  const stored = (data.idempotency as { fingerprint?: unknown } | undefined)?.fingerprint;
+  if (stored !== fingerprint) {
+    throw new IdempotencyKeyReusedError();
+  }
+  return {
+    orderId: snap.id,
+    displayOrderNumber: data.displayOrderNumber as number,
+    displayCode: data.displayCode as string,
+    operationalDate: data.operationalDate as string,
+    replayed: true,
+  };
+}
+
+/**
+ * ORDER-IDEMPOTENCY (O-01): verificación de solo lectura de un intento. Solo
+ * devuelve identificadores del pedido, nunca su contenido. 1 lectura.
+ */
+export async function lookupOrderAttempt(
+  tenantId: string,
+  orderId: string
+): Promise<Omit<CreatedOrderMeta, "replayed"> | null> {
+  const snap = await orderDoc(tenantId, orderId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() ?? {};
+  return {
+    orderId: snap.id,
+    displayOrderNumber: data.displayOrderNumber as number,
+    displayCode: data.displayCode as string,
+    operationalDate: data.operationalDate as string,
+  };
+}
+
+/**
+ * Lectura previa (fuera de transacción) para responder un reintento sin
+ * revalidar tienda, caja ni productos: un pedido ya creado se recupera aunque
+ * después cierre la tienda, se cierre la caja o cambie el día operacional.
+ * Devuelve null si el intento todavía no existe.
+ */
+export async function findIdempotentOrder(
+  tenantId: string,
+  orderId: string,
+  fingerprint: string
+): Promise<CreatedOrderMeta | null> {
+  const snap = await orderDoc(tenantId, orderId).get();
+  return snap.exists ? replayFromSnapshot(snap, fingerprint) : null;
+}
 
 /**
  * Create an order document. Caller provides the orderId.
@@ -76,13 +144,25 @@ export async function createOrder(
      * write. Used by M6J to reject orders while the store is closed.
      */
     guard?: (transaction: admin.firestore.Transaction, now: Date) => Promise<unknown>;
-  } = {}
-): Promise<OperationalOrderMeta> {
+    /**
+     * ORDER-IDEMPOTENCY: huella del intento. El `orderId` debe derivarse de la
+     * clave (`deriveIdempotentOrderId`). Dentro de la misma transacción se lee
+     * el pedido ANTES del contador y del guard: si existe se reproduce (o 409)
+     * sin escribir nada; si no, se crea con `tx.create`.
+     */
+    idempotencyFingerprint: string;
+  }
+): Promise<CreatedOrderMeta> {
   const capturedNow = new Date();
   const now = admin.firestore.FieldValue.serverTimestamp();
   const operationalDate = getOperationalDate(capturedNow);
 
-  const meta = await getDb().runTransaction(async (transaction) => {
+  const runCreate = () => getDb().runTransaction(async (transaction): Promise<CreatedOrderMeta> => {
+    const existing = await transaction.get(orderDoc(tenantId, orderId));
+    if (existing.exists) {
+      return replayFromSnapshot(existing, options.idempotencyFingerprint);
+    }
+
     const counterRef = orderCounterDoc(tenantId, operationalDate);
     const counterSnap = await transaction.get(counterRef);
     if (options.guard) {
@@ -100,7 +180,9 @@ export async function createOrder(
       createdAt: counterSnap.exists ? counterSnap.get("createdAt") ?? now : now,
     }, { merge: true });
 
-    transaction.set(orderDoc(tenantId, orderId), {
+    // `create` falla si una solicitud concurrente con la misma clave ya creó
+    // el pedido: nunca se sobrescribe un pedido existente.
+    transaction.create(orderDoc(tenantId, orderId), {
       id: orderId,
       tenantId,
       status: "queued",
@@ -120,14 +202,34 @@ export async function createOrder(
       ...(input.customerPhoneNormalized
         ? { customerPhoneNormalized: input.customerPhoneNormalized }
         : {}),
+      idempotency: {
+        version: IDEMPOTENCY_VERSION,
+        fingerprint: options.idempotencyFingerprint,
+      },
       createdAt: now,
       updatedAt: now,
     });
 
-    return { displayOrderNumber, displayCode, operationalDate };
+    return { orderId, displayOrderNumber, displayCode, operationalDate, replayed: false };
   });
 
-  logger.info("Order created", { tenantId, orderId, ...meta });
+  let meta: CreatedOrderMeta;
+  try {
+    meta = await runCreate();
+  } catch (err) {
+    // Carrera con la misma clave: otra solicitud creó el pedido entre la
+    // lectura y el commit. Se responde con el pedido ganador.
+    if ((err as { code?: unknown }).code === 6 /* ALREADY_EXISTS */) {
+      const winner = await findIdempotentOrder(tenantId, orderId, options.idempotencyFingerprint);
+      if (winner) {
+        logger.info("Order idempotent race resolved", { tenantId, orderId });
+        return winner;
+      }
+    }
+    throw err;
+  }
+
+  logger.info(meta.replayed ? "Order replayed" : "Order created", { tenantId, ...meta });
   return meta;
 }
 

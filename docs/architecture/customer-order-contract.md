@@ -159,3 +159,7 @@ npm --prefix apps/functions run build             # OK
 ## Límites de entrada (COST-GUARD v1)
 
 `createOrder` y `createPosSale` aceptan como máximo 25 líneas, 50 unidades por línea y 200 unidades totales, con cuerpo JSON de hasta 16 KB. `productId` y `tenantId` deben cumplir `^[A-Za-z0-9_-]+$` (≤ 128). Largos máximos del cliente: nombre 100, teléfono 32, email 254, dirección 300, notas 500. Producto inexistente, sin precio o con `isActive: false` → 400. Fuente: `apps/functions/src/schemas/order-limits.ts`; detalle en `roadmap/sprint-cost-guard.md`.
+
+## Idempotencia de creación (ORDER-IDEMPOTENCY v1)
+
+`createOrder` y `createPosSale` exigen `idempotencyKey` (16–128 caracteres `[A-Za-z0-9_-]`, aleatorio por intento, sin datos personales). El `orderId` se deriva de tenant, canal y clave. El pedido guarda `idempotency { version, fingerprint }`. Reintento equivalente → 200 con el pedido original (`replayed: true`) y sin escrituras nuevas. Misma clave con otro contenido → 409 `IDEMPOTENCY_KEY_REUSED`. La garantía dura mientras exista el pedido. `POST lookupOrderAttempt { tenantId, channel, idempotencyKey }` verifica sin crear nada si un intento quedó registrado: solo identificadores; web público por clave, POS con `pos.create_sale`. Detalle: `roadmap/sprint-order-idempotency.md`.

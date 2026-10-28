@@ -44,7 +44,8 @@ async function apiFetch<T>(
       (process.env.NODE_ENV === "development"
         ? `HTTP ${res.status} ${res.statusText} for ${url}${raw ? ` :: ${raw.slice(0, 300)}` : ""}`
         : `HTTP ${res.status}`);
-    throw new Error(msg);
+    // `code` permite a la UI distinguir errores de negocio (ej. IDEMPOTENCY_KEY_REUSED).
+    throw Object.assign(new Error(msg), { code: data?.error?.code, status: res.status });
   }
 
   return (data as { ok: true; data: T }).data;
@@ -109,6 +110,8 @@ interface CreatePosSalePayload {
   paymentMethod: "cash" | "card" | "transfer" | "pending";
   acquisitionSource?: string;
   acquisitionCampaign?: string;
+  /** ORDER-IDEMPOTENCY: misma clave en cada reintento de la misma venta. */
+  idempotencyKey: string;
 }
 
 interface CreatePosSaleResponse {
@@ -117,6 +120,8 @@ interface CreatePosSaleResponse {
   displayOrderNumber: number;
   displayCode: string;
   operationalDate: string;
+  /** true si la venta ya estaba registrada con esta clave (reintento). */
+  replayed?: boolean;
 }
 
 export interface PosOrderSnapshot {
@@ -139,6 +144,26 @@ export async function createPosSaleApi(
     method: "POST",
     headers: await authHeaders(),
     body: JSON.stringify(payload),
+  });
+}
+
+export interface OrderAttemptLookup {
+  found: boolean;
+  orderId?: string;
+  displayOrderNumber?: number;
+  displayCode?: string;
+  operationalDate?: string;
+}
+
+/**
+ * ORDER-IDEMPOTENCY (O-01): verifica, sin crear nada, si una venta POS quedó
+ * registrada. Exige membresía con `pos.create_sale`.
+ */
+export async function lookupPosAttemptApi(tenantId: string, idempotencyKey: string): Promise<OrderAttemptLookup> {
+  return apiFetch<OrderAttemptLookup>(`${FUNCTIONS_BASE}/lookupOrderAttempt`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ tenantId, channel: "admin_pos", idempotencyKey }),
   });
 }
 

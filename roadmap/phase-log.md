@@ -1081,3 +1081,44 @@ git diff --check
 
 ### Release gate
 - Sin commit, PR ni despliegue hasta auditoría GPT y QA humano. No autoriza Blaze.
+
+## 2026-10-27 — ORDER-IDEMPOTENCY v1: una compra, un pedido
+
+### Qué cambió
+- `createOrder`/`createPosSale` exigen `idempotencyKey`. El `orderId` se deriva de tenant, canal y clave; el pedido guarda una huella del contenido. La transacción de creación lee el pedido antes del contador y usa `tx.create`. Reintento equivalente → 200 con el original; otro contenido → 409.
+- Web y POS generan una clave aleatoria por intento, la conservan en `sessionStorage` mientras el resultado sea incierto y la renuevan al confirmar.
+
+### Por qué cambió
+- Reintentos por red, doble envío o concurrencia creaban pedidos duplicados. Era bloqueo del Release Gate desde COST-GUARD.
+
+### Archivos
+- Ver `roadmap/sprint-order-idempotency.md` (contrato, matriz de escenarios, costos, validación y riesgos).
+
+### Validación
+- Builds y typechecks completos; 105 unitarias aprobadas (9 nuevas); 112 contratos compilados (13 nuevos). En vivo sin Firestore: rechazos por clave inválida sin tocar la base. Contratos con Firestore: pendientes de QA local/CI.
+
+### Release gate
+- Sin commit, PR ni despliegue hasta auditoría GPT y QA humano.
+
+### Corrección post-auditoría (O-01, O-02)
+- Recuperación tras recarga sin reconstruir la compra: estado del intento en `sessionStorage` sin PII (clave, estado, unidades y total) y verificación de solo lectura `lookupOrderAttempt`. Avisos en la tienda y el POS.
+- 409 `IDEMPOTENCY_KEY_REUSED`: se conserva la clave, se bloquea el envío y solo una decisión explícita ("Descartar intento anterior") abre un intento nuevo.
+- Validación: 118 unitarias (13 del estado del cliente), 119 contratos compilados. Recarga real de navegador: pendiente de QA manual.
+
+### Corrección post-auditoría (O-03, O-04)
+- O-03: cada envío guarda la huella de su carrito (sin PII). Al encontrar el pedido, el checkout se resuelve solo si el carrito actual es el enviado; uno distinto se respeta. Las escrituras asíncronas se condicionan a la clave vigente: un resultado tardío nunca afecta a un intento posterior.
+- O-04: `found: false` ya no cierra la incertidumbre; el aviso invita a verificar de nuevo con la misma clave.
+- Validación: 128 unitarias (23 del estado), 122 contratos compilados. Navegador: pendiente (método de respuesta realmente perdida documentado).
+
+### Corrección post-auditoría (O-05)
+- Respuestas tardías sin efectos. Un éxito o error de un intento que ya no es el vigente no toca carrito, formulario, comprobante ni estado, y no muestra avisos. Un éxito vigente con el carrito cambiado lo conserva. En el POS, el carrito se vuelve a comparar tras leer el comprobante, y una respuesta con la página desmontada queda "sin confirmar" para verificar.
+- Carritos históricos ambiguos: no se vacía nada; el envío se bloquea hasta una decisión explícita.
+- Validación: 137 unitarias, 17 pruebas de componente en Chromium (nuevas, fuera de CI), 122 contratos compilados. Backend sin cambios.
+
+### Corrección revisión Codex del PR #85 (CR-01 a CR-05)
+- CR-01: el POS cierra el intento recién después de leer el comprobante; recargar o salir durante la lectura conserva la clave.
+- CR-02: envíos activos por clave en memoria; un 4xx de un envío no borra el intento compartido.
+- CR-03: pruebas de navegador integradas con Auth, Firestore y Functions en emuladores; la demora y la pérdida se controlan en la capa de transporte. Se quitaron las pruebas con API falsa.
+- CR-04: `truncated` persistente; con historial truncado, la verificación es ambigua.
+- CR-05: el aviso de recuperación vive dentro del checkout abierto.
+- Validación: 146 unitarias; 122 contratos y 22 pruebas de navegador compiladas. La ejecución con el emulador oficial de Firestore queda pendiente en el PC.

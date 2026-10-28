@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
@@ -18,6 +18,14 @@ import {
   tearDownAuthorizedSession,
 } from "../../lib/auth/handle-authz-loss";
 import { createPosSaleApi, getOrderApi, updateOrderStatusApi } from "../../lib/api/orders";
+import {
+  beginOrderAttempt,
+  cartSignature,
+  markOrderAttemptUnconfirmed,
+  recordOrderAttemptFailure,
+  settleOrderAttemptSuccess,
+} from "../../lib/order-attempt";
+import { PosPendingAttemptNotice } from "../../components/pos-pending-attempt-notice";
 import { useActiveTenant } from "@/components/tenant-provider";
 import { StoreStatusStrip } from "@/components/store-status-strip";
 import { getHumanOrderLabel } from "../../lib/orders";
@@ -127,6 +135,8 @@ export default function PosPage() {
     type: "success" | "error";
     message: string;
     detail?: string;
+    /** Aviso que no debe pisar la confirmación live (p. ej. carrito conservado). */
+    keep?: boolean;
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | "card" | "pending">("pending");
   const [acquisitionSource, setAcquisitionSource] = useState<AcquisitionSource | "">("");
@@ -278,14 +288,14 @@ export default function PosPage() {
       displayCode: persistedOrder.displayCode || pendingLiveOrder.displayCode,
     });
     setPendingLiveOrder(null);
-    setToast({
+    setToast((current) => (current?.keep ? current : {
       type: "success",
       message: `${getHumanOrderLabel({
         id: persistedOrder.id,
         displayCode: persistedOrder.displayCode || pendingLiveOrder.displayCode,
       })} visible en /pedidos`,
       detail: "La venta ya quedó persistida en Firestore y reflejada en el stream operativo.",
-    });
+    }));
   }, [pendingLiveOrder, todayOrders]);
 
   const categories = useMemo(() => {
@@ -321,6 +331,23 @@ export default function PosPage() {
   const total = subtotal + delivery;
 
   const itemCount = useMemo(() => cart.reduce((acc, item) => acc + item.quantity, 0), [cart]);
+
+  // ORDER-IDEMPOTENCY (O-05): huella del carrito actual. El ref permite leer el
+  // carrito vigente al llegar una respuesta, no el capturado al enviar.
+  const posCartSignature = useMemo(
+    () => cartSignature(cart.map((item) => ({ productId: item.product.id, qty: item.quantity }))),
+    [cart]
+  );
+  const posCartSignatureRef = useRef(posCartSignature);
+  posCartSignatureRef.current = posCartSignature;
+  // Una respuesta que llega con la página desmontada (navegación) no la ve nadie.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const isFormValid =
     cart.length > 0 &&
@@ -429,6 +456,23 @@ export default function PosPage() {
       return;
     }
 
+    // ORDER-IDEMPOTENCY: la clave de esta venta se conserva ante errores de red
+    // o recargas, así reintentar no registra dos ventas. Con un conflicto
+    // pendiente (409) no se envía nada hasta que el operador decida.
+    const attemptScope = `pos:${tenantId}`;
+    const sentCart = posCartSignature;
+    let idempotencyKey: string;
+    try {
+      idempotencyKey = beginOrderAttempt(attemptScope, { units: itemCount, total }, sentCart);
+    } catch {
+      setToast({
+        type: "error",
+        message: "Hay una venta anterior pendiente de revisar.",
+        detail: "Resuélvela en el aviso de venta sin confirmar antes de registrar otra.",
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setPendingLiveOrder(null);
@@ -463,7 +507,7 @@ export default function PosPage() {
         total,
       };
 
-      const { orderId, displayCode } = await createPosSaleApi({
+      const { orderId, displayCode, replayed } = await createPosSaleApi({
         tenantId,
         items: orderItems,
         customer: {
@@ -477,7 +521,11 @@ export default function PosPage() {
         paymentMethod,
         ...(acquisitionSource ? { acquisitionSource } : {}),
         ...(acquisitionCampaign.trim() ? { acquisitionCampaign: acquisitionCampaign.trim() } : {}),
+        idempotencyKey,
       });
+      // CR-01: el intento sigue guardado (recuperable) mientras se lee el
+      // comprobante. Si se recarga o se sale del POS durante la lectura, la
+      // venta vuelve como "sin confirmar" con su clave en vez de perderse.
 
       // Use the saved snapshot (backend price/totals) for the customer-facing receipt.
       // If the read fails, preserve the sale and fall back to the values already shown in POS.
@@ -523,21 +571,69 @@ export default function PosPage() {
         console.warn("Se usará el resumen POS para el comprobante:", receiptReadError);
       }
 
+      // O-05 / CR-01: si esta vista ya no está montada, nadie vio la
+      // confirmación: el intento queda incierto para que la vista actual pida
+      // verificarlo (sin efecto si ya no es el intento vigente).
+      if (!mountedRef.current) {
+        markOrderAttemptUnconfirmed(attemptScope, idempotencyKey);
+        return;
+      }
+      // Recién ahora, con el comprobante listo para mostrarse, se cierra el
+      // intento. Una respuesta de un intento ya reemplazado o resuelto no toca
+      // el formulario, el comprobante abierto ni el intento actual. El carrito
+      // se compara en este momento: pudo cambiar durante el envío o la lectura.
+      const settlement = settleOrderAttemptSuccess(
+        attemptScope,
+        idempotencyKey,
+        sentCart,
+        posCartSignatureRef.current
+      );
+      if (settlement === "stale") {
+        return;
+      }
+      const cartKept = settlement === "cart-changed";
       setPendingLiveOrder({ orderId, displayCode });
       setReceipt({ orderId, displayCode, createdAt: new Date(), ...receiptDetails });
       setIsReceiptOpen(true);
-      clearPos();
+      if (!cartKept) clearPos();
       setToast({
         type: "success",
-        message: `${getHumanOrderLabel({ id: orderId, displayCode })} creada`,
-        detail: "Esperando confirmación live en /pedidos...",
+        message: replayed
+          ? `${getHumanOrderLabel({ id: orderId, displayCode })} ya estaba registrada`
+          : `${getHumanOrderLabel({ id: orderId, displayCode })} creada`,
+        keep: cartKept,
+        detail: cartKept
+          ? "El carrito cambió mientras se confirmaba: se conservó. Si lo registras, será otra venta."
+          : replayed
+            ? "Reintento sin duplicar la venta."
+            : "Esperando confirmación live en /pedidos...",
       });
     } catch (error) {
       console.error("Error creando pedido POS:", error);
+      const outcome = recordOrderAttemptFailure(attemptScope, error, idempotencyKey);
+      if (outcome === "stale" || outcome === "pending-other") {
+        // Error tardío de un intento ya reemplazado, u otro envío con la misma
+        // clave sigue activo y decidirá el resultado (CR-02): sin avisos.
+        return;
+      }
+      if (outcome === "conflict") {
+        // La venta anterior sin confirmar sí quedó registrada con otro detalle.
+        // Se conserva la clave: decide el operador en el aviso.
+        setToast({
+          type: "error",
+          message: "La venta anterior ya quedó registrada con otro detalle.",
+          detail: "No se registró esta venta. Revisa el aviso de venta sin confirmar.",
+        });
+        return;
+      }
       setToast({
         type: "error",
-        message: "No pudimos crear el pedido desde POS.",
-        detail: error instanceof Error ? error.message : "Revisa Functions y Firestore.",
+        message: outcome === "uncertain"
+          ? "No pudimos confirmar la venta desde POS."
+          : "No pudimos registrar la venta desde POS.",
+        detail: outcome === "uncertain"
+          ? "Verifícala en el aviso de venta sin confirmar o reintenta: no se duplicará."
+          : error instanceof Error ? error.message : "Revisa los datos de la venta.",
       });
     } finally {
       setIsSubmitting(false);
@@ -1144,6 +1240,17 @@ export default function PosPage() {
                 </span>
               </div>
             </div>
+
+            {/* ORDER-IDEMPOTENCY: venta sin confirmar o en conflicto */}
+            <PosPendingAttemptNotice
+              tenantId={tenantId}
+              currentCartSignature={posCartSignature}
+              onResolveCheckout={clearPos}
+              onFoundOrder={(orderId) => {
+                const stored = recentPosHistory.find((order) => order.id === orderId);
+                if (stored) openStoredReceipt(stored);
+              }}
+            />
 
             {/* Acciones */}
             <div className="mt-3 grid gap-2">
