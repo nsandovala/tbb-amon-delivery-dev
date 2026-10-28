@@ -144,6 +144,9 @@ export interface CreateUserOptions {
   legacyAdminClaim?: boolean;
 }
 
+/** Contraseña de los usuarios fixture (solo emulador de Auth). */
+export const FIXTURE_PASSWORD = "e2e-password-123";
+
 export interface TestUser {
   uid: string;
   email: string;
@@ -156,7 +159,7 @@ export async function createUser(
   options: CreateUserOptions
 ): Promise<TestUser> {
   const email = `${options.label}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@e2e.amon.test`;
-  const password = "e2e-password-123";
+  const password = FIXTURE_PASSWORD;
   const { localId, idToken } = await signUp(request, email, password);
 
   if (options.legacyAdminClaim) {
@@ -257,4 +260,27 @@ export async function createOpenFixtureTenant(
   expect(open.status(), await open.text()).toBe(200);
 
   return { tenantId, owner };
+}
+
+/** Documentos de una colección fixture (token `owner` del emulador). */
+export async function listFixtureDocs(
+  request: APIRequestContext,
+  collectionPath: string
+): Promise<{ name: string; fields: Record<string, unknown> }[]> {
+  const res = await request.get(`${FIRESTORE_DOCS}/${collectionPath}?pageSize=300`, { headers: OWNER });
+  expect(res.status(), await res.text()).toBe(200);
+  return ((await res.json()).documents ?? []) as { name: string; fields: Record<string, unknown> }[];
+}
+
+/** Producto fixture adicional en un tenant existente. */
+export async function createFixtureProduct(
+  request: APIRequestContext,
+  tenantId: string,
+  product: { id: string; name: string; price: number }
+): Promise<void> {
+  await writeFixtureDoc(request, `tenants/${tenantId}/products/${product.id}`, {
+    ...product,
+    isActive: true,
+    tenantId,
+  });
 }

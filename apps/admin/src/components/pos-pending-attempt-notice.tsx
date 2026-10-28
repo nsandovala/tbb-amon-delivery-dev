@@ -143,7 +143,7 @@ export function PosPendingAttemptNotice({
             Encontramos la venta{attempt?.foundCode ? ` #${attempt.foundCode}` : ""}, pero no sabemos con qué carrito.
           </p>
           <p className="mt-1 text-neutral-400">
-            Con este intento se enviaron varios carritos y el actual es uno de ellos. Confirma si el carrito actual es esa venta antes de seguir.
+            Con este intento se enviaron varios carritos y no podemos saber cuál quedó registrado. Confirma si el carrito actual es esa venta antes de seguir.
           </p>
           <div className="mt-2 flex flex-wrap justify-end gap-2">
             <button className={`${button} border border-white/10`} onClick={discardPrevious}>

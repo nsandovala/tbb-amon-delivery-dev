@@ -313,6 +313,126 @@ test.describe("O-05: carritos históricos ambiguos", () => {
   });
 });
 
+test.describe("CR-02: varios envíos activos con la misma clave", () => {
+  test("un 400 de un envío no borra el intento mientras otro sigue activo; el 201 del otro lo cierra", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, CART_A); // envío A
+    expect(mod.beginOrderAttempt(WEB, summary, CART_A)).toBe(key); // envío B (checkout reabierto)
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400, "VALIDATION_ERROR"), key)).toBe("pending-other");
+    expect(mod.peekOrderAttempt(WEB)).toMatchObject({ key, status: "pending", uncertain: false });
+    expect(mod.settleOrderAttemptSuccess(WEB, key, CART_A, CART_A)).toBe("apply");
+    expect(mod.peekOrderAttempt(WEB)).toBeNull();
+  });
+
+  test("si el último envío activo también da 4xx, recién entonces se cierra (nada se creó)", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, CART_A);
+    mod.beginOrderAttempt(WEB, summary, CART_A);
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400), key)).toBe("pending-other");
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400), key)).toBe("definitive");
+    expect(mod.peekOrderAttempt(WEB)).toBeNull();
+  });
+
+  test("error de red con otro envío activo: queda incierto sin avisar; un 4xx posterior no lo borra", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, CART_A);
+    mod.beginOrderAttempt(WEB, summary, CART_A);
+    expect(mod.recordOrderAttemptFailure(WEB, networkError(), key)).toBe("pending-other");
+    expect(mod.peekOrderAttempt(WEB)).toMatchObject({ key, uncertain: true });
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400), key)).toBe("definitive");
+    expect(mod.peekOrderAttempt(WEB)).toMatchObject({ key, uncertain: true });
+  });
+
+  test("recarga con envíos activos: el contador se pierde, el intento vuelve incierto con su clave", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, CART_A);
+    mod.beginOrderAttempt(WEB, summary, CART_A);
+    mod.__simulatePageReloadForTests();
+    expect(mod.loadOrderAttempt(WEB)).toMatchObject({ key, status: "pending", uncertain: true });
+    // Una respuesta 4xx que llegara ahora no lo borra: venía incierto.
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400), key)).toBe("definitive");
+    expect(mod.peekOrderAttempt(WEB)?.key).toBe(key);
+  });
+
+  test("respuestas tardías de un intento anterior no tocan los envíos del intento nuevo", () => {
+    const oldKey = mod.beginOrderAttempt(WEB, summary, CART_A);
+    mod.settleOrderAttemptSuccess(WEB, oldKey, CART_A, CART_A);
+    const newKey = mod.beginOrderAttempt(WEB, summary, CART_B);
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400), oldKey)).toBe("stale");
+    expect(mod.settleOrderAttemptSuccess(WEB, oldKey, CART_A, CART_B)).toBe("stale");
+    expect(mod.peekOrderAttempt(WEB)).toMatchObject({ key: newKey, status: "pending" });
+    // El único envío del intento nuevo sigue contando: su 400 sí lo cierra.
+    expect(mod.recordOrderAttemptFailure(WEB, httpError(400), newKey)).toBe("definitive");
+  });
+});
+
+test.describe("CR-01: la página que se va no decide el intento", () => {
+  test("respuestas que llegan tras 'pagehide' (peticiones abortadas al recargar) no cierran ni modifican el intento", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, CART_A);
+    fakeWindow.dispatchEvent(new Event("pagehide"));
+    expect(mod.settleOrderAttemptSuccess(WEB, key, CART_A, CART_A)).toBe("stale");
+    expect(mod.recordOrderAttemptFailure(WEB, networkError(), key)).toBe("stale");
+    expect(mod.markOrderAttemptUnconfirmed(WEB, key)).toBe(false);
+    expect(mod.peekOrderAttempt(WEB)).toMatchObject({ key, status: "pending", uncertain: false });
+    // La página nueva lo encuentra y lo trata como incierto.
+    mod.__simulatePageReloadForTests();
+    expect(mod.loadOrderAttempt(WEB)).toMatchObject({ key, uncertain: true });
+  });
+
+  test("'pageshow' (vuelta desde la caché del navegador) reactiva el intento normal", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, CART_A);
+    fakeWindow.dispatchEvent(new Event("pagehide"));
+    fakeWindow.dispatchEvent(new Event("pageshow"));
+    expect(mod.settleOrderAttemptSuccess(WEB, key, CART_A, CART_A)).toBe("apply");
+  });
+});
+
+test.describe("CR-04: historial de carritos truncado", () => {
+  const carts = [1, 2, 3, 4, 5, 6].map((qty) => mod.cartSignature([{ productId: "burger", qty }]));
+
+  function sixCarts(): string {
+    const key = mod.beginOrderAttempt(WEB, summary, carts[0]);
+    mod.recordOrderAttemptFailure(WEB, networkError(), key);
+    for (const cart of carts.slice(1)) {
+      mod.beginOrderAttempt(WEB, summary, cart);
+      mod.recordOrderAttemptFailure(WEB, networkError(), key);
+    }
+    return key;
+  }
+
+  test("con 5 carritos no hay truncamiento; el sexto lo marca y se persiste", () => {
+    const key = mod.beginOrderAttempt(WEB, summary, carts[0]);
+    for (const cart of carts.slice(1, 5)) mod.beginOrderAttempt(WEB, summary, cart);
+    expect(mod.peekOrderAttempt(WEB)?.truncated).toBeUndefined();
+    mod.beginOrderAttempt(WEB, summary, carts[5]);
+    const stored = JSON.parse(Object.values(storage.dump())[0]);
+    expect(stored).toMatchObject({ key, truncated: true });
+    expect(stored.sentCarts).toEqual(carts.slice(1));
+  });
+
+  test("el primer carrito (olvidado) restaurado: ambiguo, sin vaciar ni perder la clave, también tras recargar", () => {
+    const key = sixCarts();
+    mod.__simulatePageReloadForTests();
+    expect(mod.loadOrderAttempt(WEB)).toMatchObject({ key, truncated: true, uncertain: true });
+    expect(mod.resolveFoundOrderAttempt(WEB, key, carts[0], "A01")).toBe("ambiguous");
+    expect(mod.peekOrderAttempt(WEB)).toMatchObject({ key, status: "ambiguous", truncated: true });
+    expect(() => mod.beginOrderAttempt(WEB, summary, carts[0])).toThrow("ORDER_ATTEMPT_AMBIGUOUS");
+  });
+
+  test("con historial truncado, cualquier carrito con productos es ambiguo; vacío no tiene nada que proteger", () => {
+    const key = sixCarts();
+    const other = mod.cartSignature([{ productId: "papas", qty: 1 }]);
+    expect(mod.resolveFoundOrderAttempt(WEB, key, other)).toBe("ambiguous");
+    mod.discardOrderAttempt(WEB);
+    const key2 = sixCarts();
+    expect(mod.resolveFoundOrderAttempt(WEB, key2, "")).toBe("keep-cart");
+  });
+
+  test("un registro con más de 5 huellas (otra versión) se lee como truncado", () => {
+    storage.setItem(
+      "amon-order-attempt:" + WEB,
+      JSON.stringify({ v: 2, key: "k".repeat(32), startedAt: 1, status: "pending", uncertain: true, summary, sentCarts: carts })
+    );
+    expect(mod.loadOrderAttempt(WEB)).toMatchObject({ truncated: true, sentCarts: carts.slice(1) });
+  });
+});
+
 test("web y POS usan exactamente la misma lógica de intento", async () => {
   const { readFileSync } = await import("node:fs");
   const web = readFileSync("apps/web/src/lib/order-attempt.ts", "utf8");

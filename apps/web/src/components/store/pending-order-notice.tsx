@@ -37,10 +37,23 @@ function currentCartSignature(): string {
  * - Sin resultado (O-04): no es definitivo; el pedido puede estar
  *   procesándose. Se conserva la clave y se puede verificar de nuevo.
  * - Un resultado que llega después de que el intento cambió se descarta.
+ *
+ * Ubicación (CR-05): `page` es el aviso flotante de la tienda y se oculta
+ * mientras el carrito está abierto, porque el overlay y el cajón lo taparían;
+ * `checkout` se dibuja dentro del cajón, sobre el carrito o el formulario, así
+ * se verifica o se decide sin cerrar el checkout ni perder los datos escritos.
+ * Ambas instancias leen el mismo intento y usan las mismas acciones.
  */
-export function PendingOrderNotice({ tenantId }: { tenantId: string }) {
+export function PendingOrderNotice({
+  tenantId,
+  placement = "page",
+}: {
+  tenantId: string;
+  placement?: "page" | "checkout";
+}) {
   const scope = `web:${tenantId}`;
   const clearCart = useCartStore((s) => s.clearCart);
+  const cartOpen = useCartStore((s) => s.isOpen);
   const [attempt, setAttempt] = useState<OrderAttempt | null>(null);
   const [verification, setVerification] = useState<Verification>({ kind: "idle" });
 
@@ -63,7 +76,8 @@ export function PendingOrderNotice({ tenantId }: { tenantId: string }) {
   const visible =
     verification.kind === "found" ||
     (attempt !== null && (isConflict || isAmbiguous || attempt.uncertain));
-  if (!visible) return null;
+  // Con el carrito abierto, el aviso vive dentro del cajón (CR-05).
+  if (!visible || (placement === "page" && cartOpen)) return null;
 
   const summary = attempt
     ? `${attempt.summary.units} ${attempt.summary.units === 1 ? "producto" : "productos"} · $${attempt.summary.total.toLocaleString("es-CL")}`
@@ -125,7 +139,12 @@ export function PendingOrderNotice({ tenantId }: { tenantId: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-md rounded-2xl border border-amber-400/30 bg-[#141210] p-4 text-sm text-neutral-200 shadow-2xl"
+      data-placement={placement}
+      className={
+        placement === "checkout"
+          ? "mx-5 mt-4 shrink-0 rounded-2xl border border-amber-400/30 bg-[#141210] p-4 text-sm text-neutral-200 md:mx-6"
+          : "fixed inset-x-4 bottom-4 z-40 mx-auto max-w-md rounded-2xl border border-amber-400/30 bg-[#141210] p-4 text-sm text-neutral-200 shadow-2xl"
+      }
     >
       {verification.kind === "found" && verification.cart !== "conflict" ? (
         <>
@@ -147,7 +166,7 @@ export function PendingOrderNotice({ tenantId }: { tenantId: string }) {
             Encontramos tu pedido{attempt?.foundCode ? ` #${attempt.foundCode}` : ""}, pero no sabemos con qué carrito.
           </p>
           <p className="mt-1 text-neutral-400">
-            Durante los reintentos enviaste más de un carrito y el actual es uno de ellos. Antes de seguir, dinos si el carrito actual es ese pedido.
+            Durante los reintentos enviaste más de un carrito y no podemos saber cuál quedó registrado. Antes de seguir, dinos si el carrito actual es ese pedido.
           </p>
           <div className="mt-3 flex flex-wrap justify-end gap-2">
             <button className={secondary} onClick={discardPrevious}>

@@ -17,7 +17,7 @@
     "dev:seed:wait": "wait-on tcp:127.0.0.1:8080 && npm run seed",    
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:e2e:api": "playwright test e2e/api --config=playwright.config.ts",
-    "test:e2e:component": "playwright test --config=playwright.component.config.ts"
+    "test:e2e:browser": "playwright test --config=playwright.browser.config.ts"
   },
   "devDependencies": {  
     "@playwright/test": "^1.60.0",

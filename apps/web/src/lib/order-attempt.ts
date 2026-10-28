@@ -18,6 +18,17 @@
  *   cuál se registró. No se vacía nada ni se envía nada hasta que la persona
  *   decida (`discardOrderAttempt`).
  *
+ * Envíos activos (CR-02): la misma clave puede tener más de un envío en vuelo
+ * (el checkout se cerró y se reabrió, o el POS se desmontó y volvió). Se cuentan
+ * en memoria de la pestaña; un 4xx de UNO de ellos no prueba nada sobre los
+ * demás, así que no borra el intento mientras otro siga activo. Tras una
+ * recarga el contador se pierde, pero el intento `pending` vuelve como incierto.
+ *
+ * Historial truncado (CR-04): se guardan como máximo 5 huellas. Si hubo que
+ * descartar alguna, `truncated` lo recuerda: un carrito que no está en la lista
+ * ya no prueba que sea distinto del registrado, y la verificación lo trata como
+ * ambiguo.
+ *
  * Toda escritura asíncrona (respuesta del envío, verificación) recibe la clave
  * con la que empezó y solo actúa si sigue siendo la del intento actual: una
  * respuesta tardía de un intento viejo nunca limpia ni sobrescribe otro.
@@ -39,9 +50,16 @@ export type OrderAttempt = {
   summary: OrderAttemptSummary;
   /** Huellas (sin PII) de los carritos enviados con esta clave, máx. 5. */
   sentCarts: string[];
+  /** Se descartaron huellas antiguas: `sentCarts` ya no es el historial completo (CR-04). */
+  truncated?: boolean;
 };
 
-export type AttemptFailure = "conflict" | "uncertain" | "definitive" | "stale";
+/**
+ * Resultado de un envío fallido. `pending-other`: hay otro envío con la misma
+ * clave todavía activo; ese decidirá el resultado, así que la UI no informa
+ * nada por este (CR-02).
+ */
+export type AttemptFailure = "conflict" | "uncertain" | "definitive" | "pending-other" | "stale";
 
 /** Resultado de aplicar una respuesta exitosa (201/200) del envío (O-05). */
 export type SuccessSettlement =
@@ -68,6 +86,35 @@ export type FoundResolution =
 const STORAGE_PREFIX = "amon-order-attempt:";
 const MAX_SENT_CARTS = 5;
 const memory = new Map<string, OrderAttempt>();
+/** Envíos en vuelo por clave, solo en memoria de esta pestaña (CR-02). */
+const inFlight = new Map<string, number>();
+
+/**
+ * CR-01: al recargar o salir de la página, el navegador aborta las peticiones
+ * en vuelo y sus promesas fallan DESPUÉS de `pagehide`, todavía dentro de la
+ * página que se va. Esa página ya no decide nada: no cierra ni modifica el
+ * intento (la página nueva lo encuentra intacto y lo trata como incierto).
+ */
+let pageHiding = false;
+let lifecycleWatched = false;
+function watchPageLifecycle(): void {
+  if (lifecycleWatched || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+  lifecycleWatched = true;
+  window.addEventListener("pagehide", () => {
+    pageHiding = true;
+  });
+  window.addEventListener("pageshow", () => {
+    pageHiding = false;
+  });
+}
+
+/** Termina un envío de `key`; devuelve cuántos siguen activos con esa clave. */
+function endSubmission(key: string): number {
+  const remaining = Math.max(0, (inFlight.get(key) ?? 0) - 1);
+  if (remaining === 0) inFlight.delete(key);
+  else inFlight.set(key, remaining);
+  return remaining;
+}
 
 function randomKey(): string {
   const cryptoApi = globalThis.crypto;
@@ -127,6 +174,10 @@ function parse(raw: string | null): OrderAttempt | null {
           total: Number(value.summary?.total) || 0,
         },
         ...(typeof value.foundCode === "string" ? { foundCode: value.foundCode } : {}),
+        ...(value.truncated === true ||
+        (Array.isArray(value.sentCarts) && value.sentCarts.length > MAX_SENT_CARTS)
+          ? { truncated: true }
+          : {}),
         sentCarts: Array.isArray(value.sentCarts)
           ? value.sentCarts.filter((entry): entry is string => typeof entry === "string").slice(-MAX_SENT_CARTS)
           : [],
@@ -209,6 +260,7 @@ export function beginOrderAttempt(
   summary: OrderAttemptSummary,
   cart: string = ""
 ): string {
+  watchPageLifecycle();
   const current = read(scope);
   if (current?.status === "conflict") {
     throw new Error("ORDER_ATTEMPT_CONFLICT");
@@ -216,10 +268,18 @@ export function beginOrderAttempt(
   if (current?.status === "ambiguous") {
     throw new Error("ORDER_ATTEMPT_AMBIGUOUS");
   }
+  const isNewCart = (carts: string[]) => Boolean(cart) && !carts.includes(cart);
   const withCart = (carts: string[]) =>
-    cart && !carts.includes(cart) ? [...carts, cart].slice(-MAX_SENT_CARTS) : carts;
+    isNewCart(carts) ? [...carts, cart].slice(-MAX_SENT_CARTS) : carts;
+  const overflows = (carts: string[]) => isNewCart(carts) && carts.length >= MAX_SENT_CARTS;
   if (current) {
-    save(scope, { ...current, summary, sentCarts: withCart(current.sentCarts) });
+    save(scope, {
+      ...current,
+      summary,
+      sentCarts: withCart(current.sentCarts),
+      ...(current.truncated || overflows(current.sentCarts) ? { truncated: true } : {}),
+    });
+    inFlight.set(current.key, (inFlight.get(current.key) ?? 0) + 1);
     return current.key;
   }
   const created: OrderAttempt = {
@@ -232,6 +292,7 @@ export function beginOrderAttempt(
     sentCarts: withCart([]),
   };
   save(scope, created);
+  inFlight.set(created.key, 1);
   return created.key;
 }
 
@@ -246,6 +307,7 @@ export function startNewOrderAttempt(scope: string, summary: OrderAttemptSummary
  * siendo el intento vigente. Devuelve false si era una respuesta tardía.
  */
 export function finishOrderAttempt(scope: string, expectedKey: string): boolean {
+  endSubmission(expectedKey);
   if (!readCurrent(scope, expectedKey)) return false;
   save(scope, null);
   return true;
@@ -268,7 +330,8 @@ export function settleOrderAttemptSuccess(
   sentCart: string,
   currentCart: string
 ): SuccessSettlement {
-  if (!readCurrent(scope, expectedKey)) return "stale";
+  endSubmission(expectedKey);
+  if (pageHiding || !readCurrent(scope, expectedKey)) return "stale";
   save(scope, null);
   return currentCart === sentCart ? "apply" : "cart-changed";
 }
@@ -280,6 +343,8 @@ export function settleOrderAttemptSuccess(
  * intento ya no es el vigente, no hace nada y devuelve false.
  */
 export function markOrderAttemptUnconfirmed(scope: string, expectedKey: string): boolean {
+  endSubmission(expectedKey);
+  if (pageHiding) return false;
   const current = readCurrent(scope, expectedKey);
   if (!current || current.status !== "pending") return false;
   save(scope, { ...current, uncertain: true });
@@ -299,8 +364,9 @@ export function discardOrderAttempt(scope: string): void {
  * - Si el carrito actual es EL ÚNICO enviado con esta clave → el intento se
  *   cierra y la UI debe resolver el checkout (vaciar ese carrito), igual que
  *   tras un 201: así un clic accidental no puede volver a enviarlo.
- * - Si con esta clave se enviaron varios carritos y el actual es uno de ellos
- *   → "ambiguous": no se sabe cuál se registró. Se conserva el carrito, el
+ * - Si con esta clave se enviaron varios carritos y el actual es uno de ellos,
+ *   o si el historial se truncó y hay carrito (CR-04) → "ambiguous": no se
+ *   sabe cuál se registró. Se conserva el carrito, el
  *   intento queda bloqueado y la persona decide (O-05).
  * - Si el carrito es distinto o está vacío → el intento se cierra y el carrito
  *   se respeta; enviarlo será una compra nueva con confirmación explícita.
@@ -315,7 +381,9 @@ export function resolveFoundOrderAttempt(
   if (!current) return "stale";
   if (current.status === "conflict") return "conflict";
   const matches = Boolean(currentCart) && current.sentCarts.includes(currentCart);
-  if (matches && current.sentCarts.length > 1) {
+  // CR-04: con historial truncado, que el carrito no aparezca no prueba nada.
+  const unknown = Boolean(currentCart) && current.truncated === true;
+  if (unknown || (matches && current.sentCarts.length > 1)) {
     save(scope, { ...current, status: "ambiguous", uncertain: false, foundCode });
     return "ambiguous";
   }
@@ -331,12 +399,17 @@ export function resolveFoundOrderAttempt(
  *   el intento no venía incierto, se limpia; si venía incierto, se conserva,
  *   porque un envío anterior con la misma clave pudo haberse registrado.
  * - Red, timeout, 5xx o sin código → `uncertain`.
+ * - Si otro envío con la misma clave sigue activo (CR-02), un 4xx no borra el
+ *   intento y la UI no informa nada (`pending-other`): decide ese otro envío.
+ *   Un error de red marca el intento incierto, pero también espera al otro.
  */
 export function recordOrderAttemptFailure(
   scope: string,
   error: unknown,
   expectedKey: string
 ): AttemptFailure {
+  const othersActive = endSubmission(expectedKey) > 0;
+  if (pageHiding) return "stale";
   const current = readCurrent(scope, expectedKey);
   if (!current) return "stale";
   const code = apiErrorCode(error);
@@ -347,11 +420,12 @@ export function recordOrderAttemptFailure(
     return "conflict";
   }
   if (status !== undefined && status >= 400 && status < 500) {
+    if (othersActive) return "pending-other";
     if (!current.uncertain) save(scope, null);
     return "definitive";
   }
   save(scope, { ...current, uncertain: true });
-  return "uncertain";
+  return othersActive ? "pending-other" : "uncertain";
 }
 
 /** Código de error de la API (ej. IDEMPOTENCY_KEY_REUSED, STORE_CLOSED). */
@@ -372,4 +446,6 @@ export function apiErrorStatus(error: unknown): number | undefined {
  */
 export function __simulatePageReloadForTests(): void {
   memory.clear();
+  inFlight.clear();
+  pageHiding = false;
 }

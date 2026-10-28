@@ -90,7 +90,7 @@ Sin colecciones nuevas, sin TTL, sin servicios externos.
 - Web: `lib/order-attempt.ts` (nuevo), `lib/api/orders.ts`, `components/cart/cart-summary.tsx`, `components/store/pending-order-notice.tsx` (nuevo), `app/tienda/[slug]/page.tsx`.
 - Admin: `lib/order-attempt.ts` (nuevo, idéntico al web), `lib/api/orders.ts`, `app/pos/page.tsx`, `components/pos-pending-attempt-notice.tsx` (nuevo).
 - Pruebas: `e2e/api/order-idempotency.contract.spec.ts` (20, nuevo), `e2e/unit/order-idempotency.spec.ts` (9, nuevo), `e2e/unit/order-attempt-state.spec.ts` (13, nuevo), `e2e/support/emulator-fixtures.ts` (`newIdempotencyKey`) y las specs existentes de pedidos, que ahora envían una clave nueva por intento.
-- Pruebas de componente (O-05): `e2e/component/order-late-responses.web.spec.ts` (10), `e2e/component/order-late-responses.pos.spec.ts` (7), harness `e2e/component/harness/` (bundle esbuild de los componentes reales + API falsa y stubs de Firebase), `playwright.component.config.ts` y el script `test:e2e:component`.
+- Pruebas de navegador integradas (PR #85, reemplazan a las de componente de O-05): `e2e/browser/order-idempotency.web.spec.ts` (13), `e2e/browser/order-idempotency.pos.spec.ts` (9), harness `e2e/browser/harness/` (componentes reales, Firebase contra emuladores, CSS real, control de transporte), `playwright.browser.config.ts`, script `test:e2e:browser`, helpers `listFixtureDocs`/`createFixtureProduct`/`FIXTURE_PASSWORD` en `e2e/support/emulator-fixtures.ts` y `testIgnore` de `e2e/browser` en `playwright.config.ts`.
 - Documentación: este archivo, `docs/architecture/customer-order-contract.md`, `roadmap/phase-log.md`.
 
 ## Contratos afectados
@@ -213,46 +213,58 @@ Solo cliente. Sin cambios de backend, contratos, Firestore, FIN-01, delivery, au
   Se guarda solo el código visible del pedido (`foundCode`), sin PII.
 - O-01, O-02 y O-04 sin cambios de comportamiento: misma clave en reenvíos, 409 bloqueante y `found: false` no definitivo.
 
-### Pruebas de componente (nuevas)
-
-Son pruebas de **componente en Chromium real**: `playwright.component.config.ts`, `npm run test:e2e:component`. No van en CI (necesitan el navegador de Playwright).
-
-- **Qué es real:** los componentes de producción (`CartDrawer` → `CartSummary` y `PendingOrderNotice`; página POS con su aviso y comprobante), React, el store real del carrito persistido en `localStorage`, `sessionStorage` y los toasts.
-- **Qué es falso:** solo los bordes. La API HTTP es falsa: cada llamada queda pendiente y la prueba decide cuándo y cómo responde. Firestore usa un catálogo fijo. Auth, tenant y `next/image` se sustituyen.
-- **Qué no ejercitan:** servidor, red real, Next.js (routing y SSR) ni estilos. La "recarga" es un `page.reload()` real del harness, no de la app desplegada.
-
-| Regresión pedida | Prueba (Chromium) |
-|---|---|
-| 201 antigua tras iniciar una compra nueva | web y POS: no toca carrito, formulario, comprobante ni intento K2; la respuesta vigente sí aplica |
-| 200 antigua tras iniciar una compra nueva | ídem con `replayed: true` |
-| Error HTTP antiguo durante otro intento | web: 500, 409 y red; POS: 500. Sin toasts ni aviso; K2 sigue `pending` |
-| Carrito modificado con la petición pendiente | web: toast "Tu carrito cambió…", carrito ×2 intacto, clave nueva al confirmar. POS: también si cambia durante la lectura del comprobante |
-| Recuperación con carrito coincidente | web: error de red → recarga real del harness → Verificar → carrito vaciado sin reenviar |
-| Recuperación con carritos ambiguos | web y POS: no vacía, bloquea Confirmar sin llamar a la API, sobrevive a la recarga (web), y las dos decisiones explícitas |
-| POS: nada nuevo se sobrescribe por una respuesta antigua | comprobante P02 y venta nueva intactos; la respuesta con el POS desmontado queda "sin confirmar" para verificar |
-| O-04 | `found: false` → "Verificar de nuevo" → encontrado |
-
-**Cómo se llega a "respuesta antigua con otra compra en curso" por la UI real:**
-- Web: "Volver al carrito" desmonta el checkout y su `isSubmitting`. El reenvío usa la misma clave K1 y falla por red. "Verificar" encuentra el pedido y vacía el carrito. Se arma una compra nueva K2, y recién entonces llega la respuesta de K1.
-- POS: igual, desmontando la página. Dentro de una misma vista, `isSubmitting` impide un segundo envío.
-
-**Prueba de sensibilidad (mutaciones, revertidas):**
-
-| Mutación | Pruebas de componente que fallan |
-|---|---|
-| Quitar `stale`/`cart-changed` en el éxito | 3 |
-| Quitar `stale` en el error | 4 |
-| Quitar el estado ambiguo | 3 |
-| Quitar la segunda comparación del carrito en el POS | 1 |
-| Quitar la guarda de vista desmontada en el POS | 1 |
-
 ### Validación O-05
 
-- `npx playwright test e2e/unit` → **137 passed** (32 del estado del cliente: +5 de éxito/desmontado y +4 de ambigüedad).
-- `npm run test:e2e:component` → **17 passed** (10 web, 7 POS).
-- `npx playwright test e2e/api --list` → **122 contratos** (sin cambios; backend intacto).
+- Las pruebas de componente con API falsa de esta ronda se **reemplazaron** en la corrección del PR #85 (CR-03) por pruebas de navegador integradas con emuladores; ver abajo.
+- `npx playwright test e2e/unit` → 137 passed en esta ronda.
+
+## Corrección PR #85 (revisión Codex CR-01 a CR-05)
+
+Solo cliente y pruebas. Sin cambios de backend, contratos, Firestore, FIN-01, delivery, autenticación ni Blaze.
+
+| CR | Causa | Corrección | Prueba |
+|---|---|---|---|
+| CR-01 | El POS cerraba el intento antes de `getOrderApi()`: recargar o salir durante la lectura perdía la clave y el reintento creaba otra venta. | El intento se cierra **después** de leer el comprobante. Al recargar, el navegador aborta la lectura y su promesa falla después de `pagehide`, todavía en la página que se va. Por eso, una página en `pagehide` no cierra ni modifica el intento (lo detectó la primera ejecución con emuladores en el PC). Vista desmontada al terminar → `markOrderAttemptUnconfirmed` ("Venta sin confirmar"). Recarga durante la lectura → el intento `pending` vuelve incierto con su clave. Lectura fallida → comprobante con el resumen del POS y una sola venta. | Navegador POS: recarga durante la lectura, salir durante la lectura, lectura fallida. |
+| CR-02 | Dos envíos activos con la misma clave (checkout reabierto o POS remontado): el 4xx de uno borraba el intento compartido; el 201 del otro quedaba `stale` y el siguiente clic duplicaba. | Contador en memoria de envíos activos por clave. Un 4xx o error de red con otro envío activo devuelve `pending-other` (sin aviso; decide el otro), y el 4xx no borra. Recarga: el contador se pierde y el `pending` vuelve incierto. Misma lógica web y POS (archivo idéntico). | Unitarias (5) y navegador web y POS: A → 400 real, B con la misma clave → 201, una sola venta. |
+| CR-03 | El harness reemplazaba Firebase Auth, Firestore y la API con stubs, contra la regla de `AGENTS.md`. | Harness nuevo `e2e/browser/` sin mocks de datos ni API. Pasan por los emuladores, con tenant aislado por prueba: Auth, Firestore (`onSnapshot` del POS), Functions, `TenantProvider` y `AdminGuard`. Demora y pérdida se controlan en la capa de transporte (`page.route`), con respuestas siempre producidas por el backend real. | `playwright.browser.config.ts`, `npm run test:e2e:browser` dentro de `emulators:exec`. |
+| CR-04 | Al truncar `sentCarts` (máx. 5) se olvidaba el primer carrito; restaurarlo y verificar daba `keep-cart`, borraba la clave y permitía duplicar. | Indicador persistente `truncated`. Con historial truncado, cualquier carrito con productos se resuelve `ambiguous`: no se vacía ni se pierde la clave. Un registro con más de 5 huellas también se lee como truncado. | Unitarias (4) y navegador web: 6 carritos, recarga y recuperación ambigua. |
+| CR-05 | El aviso flotante (`z-40`) quedaba bajo el overlay (`z-[60]`) y el cajón (`z-[70]`); en móvil el cajón lo tapaba entero. Para usarlo había que cerrar el checkout y perder los datos. | `PendingOrderNotice` con `placement`. `checkout` se dibuja dentro del cajón, en el paso carrito y en el formulario. `page` se oculta con el cajón abierto. Mismo estado y mismas acciones, sin lógica duplicada. | Navegador web en 390×844 con CSS real: verificar, ver conflicto y descartar desde el cajón, conservando los datos escritos. |
+
+### Qué es integrado y qué no
+
+- **Unitarias** (`e2e/unit`, Node puro): toda la máquina de estados del intento. Usan un `sessionStorage` en memoria; no hay Firebase que reemplazar.
+- **Contratos API** (`e2e/api`, emuladores): backend. Sin cambios en esta ronda: siguen 122.
+- **Navegador integrado** (`e2e/browser`, Chromium + emuladores):
+  - Real: componentes de producción, React (StrictMode), stores, `sessionStorage`, `localStorage` e IndexedDB, cliente HTTP de la app, SDK de Firebase contra los emuladores, CSS de Tailwind de cada app y recargas reales (`page.reload()`).
+  - Shims solo de framework: `next/image`, `next/link` y `next/navigation`, porque no hay servidor Next.
+  - La tienda no renderiza la página de catálogo: los botones "Agregar" ponen en el carrito productos que existen en el tenant, y el backend valida y pone los precios.
+  - Las pruebas del POS cubren la lectura de comprobante.
+  - Se quitaron las pruebas de la ronda O-05 con API falsa (`e2e/component`, `playwright.component.config.ts`, script `test:e2e:component`). Su cobertura pasó a las pruebas integradas, salvo un caso que no se puede producir sin inventar respuestas: el 500 antiguo. Ese caso queda en las unitarias (clasificación de 5xx); el error antiguo se prueba con un 400 real y con una pérdida de red tardía.
+- `playwright.config.ts` ignora `e2e/browser` (tiene su propia configuración).
+
+### Cumplimiento de AGENTS.md
+
+- "No mocks when real emulator/seed/collection exists": no queda ninguno de Auth, Firestore, Functions ni API. Los datos salen de fixtures aislados (`createOpenFixtureTenant`, `createFixtureProduct`) en los emuladores. Los shims de Next son del framework, no de datos.
+- Escrituras críticas solo por Functions: los fixtures se escriben con el token `owner` del emulador, como en los contratos existentes.
+- Zustand solo para el carrito y estado transitorio; el intento vive en `sessionStorage` sin PII.
+
+### Validación de esta ronda
+
+- `npx playwright test e2e/unit` → **148 passed** (43 del estado del cliente: +5 de CR-02, +4 de CR-04 y +2 de `pagehide`).
+- **PC del usuario, emuladores oficiales (`firebase.json`):**
+  - Contratos API: **122 passed**.
+  - Primera ejecución de navegador: POS 6/9. Fallaron tres:
+    - la recarga durante la lectura, por el bug de `pagehide`, ya corregido;
+    - dos aserciones sobre toasts que la confirmación live de Firestore reemplaza enseguida. El aviso de carrito conservado ya no se pisa (`keep`), y la prueba del reintento verifica el comprobante y que haya una sola venta.
+  - Web 0/13: Tailwind no arrancaba en Windows porque se invocaba `.bin/tailwindcss` sin `.cmd`. Ahora se ejecuta `tailwindcss/lib/cli.js` con el mismo Node.
+- `npx playwright test e2e/api --list` → **122 contratos**. `--config playwright.browser.config.ts --list` → **22 pruebas de navegador** (13 web, 9 POS).
 - Typecheck y build de web, admin y Functions; `git diff --check`: OK.
+- **No ejecutado con el emulador oficial de Firestore** en esta sesión (su descarga está bloqueada en la sandbox). Pendiente en el PC, con `firebase.json` y `firebase.pilot.json`:
+  - los 122 contratos;
+  - las 22 pruebas de navegador;
+  - las pruebas negativas multi-tenant y de permisos POS, que ya están en los contratos.
+- **Ensayo de desarrollo**, que no cuenta como evidencia: las 13 pruebas web pasaron contra Auth y Functions oficiales con un emulador de Firestore no oficial (`@firestore-emulator/server`, solo gRPC), y las mutaciones de CR-02, CR-04, CR-05 y O-05 hicieron fallar sus pruebas. El POS no corre en ese ensayo: necesita WebChannel y `collectionGroup`.
 
 ## Próximo paso
 
-Auditoría cruzada GPT de O-05 y QA humano: `npm run test:e2e:component` en el PC, los 122 contratos con ambas configuraciones en el PC y el QA de navegador (métodos A y B). Con autorización: commit, push y PR.
+Auditoría cruzada GPT de la corrección del PR #85. En el PC, con ambas configuraciones de emulador: los 122 contratos y las 22 pruebas de navegador (`emulators:exec ... 'npm run test:e2e:browser'`). Después, el QA manual método A. Con autorización: commit y push a la misma rama; los hilos de Codex se cierran con evidencia.

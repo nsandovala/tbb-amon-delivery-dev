@@ -135,6 +135,8 @@ export default function PosPage() {
     type: "success" | "error";
     message: string;
     detail?: string;
+    /** Aviso que no debe pisar la confirmación live (p. ej. carrito conservado). */
+    keep?: boolean;
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | "card" | "pending">("pending");
   const [acquisitionSource, setAcquisitionSource] = useState<AcquisitionSource | "">("");
@@ -286,14 +288,14 @@ export default function PosPage() {
       displayCode: persistedOrder.displayCode || pendingLiveOrder.displayCode,
     });
     setPendingLiveOrder(null);
-    setToast({
+    setToast((current) => (current?.keep ? current : {
       type: "success",
       message: `${getHumanOrderLabel({
         id: persistedOrder.id,
         displayCode: persistedOrder.displayCode || pendingLiveOrder.displayCode,
       })} visible en /pedidos`,
       detail: "La venta ya quedó persistida en Firestore y reflejada en el stream operativo.",
-    });
+    }));
   }, [pendingLiveOrder, todayOrders]);
 
   const categories = useMemo(() => {
@@ -521,23 +523,9 @@ export default function PosPage() {
         ...(acquisitionCampaign.trim() ? { acquisitionCampaign: acquisitionCampaign.trim() } : {}),
         idempotencyKey,
       });
-      // O-05: si esta vista ya no está montada, la confirmación no la vio nadie:
-      // el intento queda incierto para que la vista actual pida verificarlo.
-      if (!mountedRef.current) {
-        markOrderAttemptUnconfirmed(attemptScope, idempotencyKey);
-        return;
-      }
-      // O-05: una respuesta de un intento ya reemplazado o resuelto no toca el
-      // formulario, el comprobante abierto ni el intento actual.
-      const settlement = settleOrderAttemptSuccess(
-        attemptScope,
-        idempotencyKey,
-        sentCart,
-        posCartSignatureRef.current
-      );
-      if (settlement === "stale") {
-        return;
-      }
+      // CR-01: el intento sigue guardado (recuperable) mientras se lee el
+      // comprobante. Si se recarga o se sale del POS durante la lectura, la
+      // venta vuelve como "sin confirmar" con su clave en vez de perderse.
 
       // Use the saved snapshot (backend price/totals) for the customer-facing receipt.
       // If the read fails, preserve the sale and fall back to the values already shown in POS.
@@ -583,8 +571,27 @@ export default function PosPage() {
         console.warn("Se usará el resumen POS para el comprobante:", receiptReadError);
       }
 
-      // O-05: el carrito también puede cambiar mientras se lee el comprobante.
-      const cartKept = settlement === "cart-changed" || posCartSignatureRef.current !== sentCart;
+      // O-05 / CR-01: si esta vista ya no está montada, nadie vio la
+      // confirmación: el intento queda incierto para que la vista actual pida
+      // verificarlo (sin efecto si ya no es el intento vigente).
+      if (!mountedRef.current) {
+        markOrderAttemptUnconfirmed(attemptScope, idempotencyKey);
+        return;
+      }
+      // Recién ahora, con el comprobante listo para mostrarse, se cierra el
+      // intento. Una respuesta de un intento ya reemplazado o resuelto no toca
+      // el formulario, el comprobante abierto ni el intento actual. El carrito
+      // se compara en este momento: pudo cambiar durante el envío o la lectura.
+      const settlement = settleOrderAttemptSuccess(
+        attemptScope,
+        idempotencyKey,
+        sentCart,
+        posCartSignatureRef.current
+      );
+      if (settlement === "stale") {
+        return;
+      }
+      const cartKept = settlement === "cart-changed";
       setPendingLiveOrder({ orderId, displayCode });
       setReceipt({ orderId, displayCode, createdAt: new Date(), ...receiptDetails });
       setIsReceiptOpen(true);
@@ -594,6 +601,7 @@ export default function PosPage() {
         message: replayed
           ? `${getHumanOrderLabel({ id: orderId, displayCode })} ya estaba registrada`
           : `${getHumanOrderLabel({ id: orderId, displayCode })} creada`,
+        keep: cartKept,
         detail: cartKept
           ? "El carrito cambió mientras se confirmaba: se conservó. Si lo registras, será otra venta."
           : replayed
@@ -603,8 +611,9 @@ export default function PosPage() {
     } catch (error) {
       console.error("Error creando pedido POS:", error);
       const outcome = recordOrderAttemptFailure(attemptScope, error, idempotencyKey);
-      if (outcome === "stale") {
-        // Error tardío de un intento ya reemplazado: no habla de la venta actual.
+      if (outcome === "stale" || outcome === "pending-other") {
+        // Error tardío de un intento ya reemplazado, u otro envío con la misma
+        // clave sigue activo y decidirá el resultado (CR-02): sin avisos.
         return;
       }
       if (outcome === "conflict") {

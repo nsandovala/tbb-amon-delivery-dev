@@ -257,8 +257,9 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
         err instanceof Error ? err.message : "Error desconocido";
       const code = apiErrorCode(err);
       const outcome = recordOrderAttemptFailure(attemptScope, err, idempotencyKey);
-      if (outcome === "stale") {
-        // Error tardío de un intento ya reemplazado: no habla del intento actual.
+      if (outcome === "stale" || outcome === "pending-other") {
+        // Error tardío de un intento ya reemplazado, u otro envío con la misma
+        // clave sigue activo y decidirá el resultado (CR-02): sin avisos.
         return;
       }
       if (outcome === "conflict") {
@@ -271,7 +272,7 @@ export function CartSummary({ tenantId, onBack }: CartSummaryProps) {
       }
       if (outcome === "uncertain") {
         toast.error("No pudimos confirmar tu pedido.", {
-          description: "Verifica si quedó registrado en el aviso de abajo, o vuelve a enviarlo: no se duplicará.",
+          description: "Verifica si quedó registrado en el aviso de arriba, o vuelve a enviarlo: no se duplicará.",
         });
         return;
       }

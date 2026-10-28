@@ -1114,3 +1114,11 @@ git diff --check
 - Respuestas tardías sin efectos. Un éxito o error de un intento que ya no es el vigente no toca carrito, formulario, comprobante ni estado, y no muestra avisos. Un éxito vigente con el carrito cambiado lo conserva. En el POS, el carrito se vuelve a comparar tras leer el comprobante, y una respuesta con la página desmontada queda "sin confirmar" para verificar.
 - Carritos históricos ambiguos: no se vacía nada; el envío se bloquea hasta una decisión explícita.
 - Validación: 137 unitarias, 17 pruebas de componente en Chromium (nuevas, fuera de CI), 122 contratos compilados. Backend sin cambios.
+
+### Corrección revisión Codex del PR #85 (CR-01 a CR-05)
+- CR-01: el POS cierra el intento recién después de leer el comprobante; recargar o salir durante la lectura conserva la clave.
+- CR-02: envíos activos por clave en memoria; un 4xx de un envío no borra el intento compartido.
+- CR-03: pruebas de navegador integradas con Auth, Firestore y Functions en emuladores; la demora y la pérdida se controlan en la capa de transporte. Se quitaron las pruebas con API falsa.
+- CR-04: `truncated` persistente; con historial truncado, la verificación es ambigua.
+- CR-05: el aviso de recuperación vive dentro del checkout abierto.
+- Validación: 146 unitarias; 122 contratos y 22 pruebas de navegador compiladas. La ejecución con el emulador oficial de Firestore queda pendiente en el PC.
