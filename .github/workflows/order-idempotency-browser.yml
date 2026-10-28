@@ -1,0 +1,76 @@
+name: ORDER-IDEMPOTENCY browser
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: order-idempotency-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  order-idempotency-browser:
+    # Stable check name for the main branch ruleset. No path filters or optional failures.
+    name: order-idempotency-browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FIREBASE_PROJECT_ID: demo-amon-ci
+      FUNCTIONS_BASE_URL: http://127.0.0.1:5001/demo-amon-ci/us-central1/
+      PLAYWRIGHT_HTML_OPEN: never
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared contracts and Functions
+        run: |
+          npm --workspace packages/shared run build
+          npm --workspace apps/functions run build
+
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser suite against local emulators
+        run: >-
+          npx --yes firebase-tools@15.34.1 emulators:exec
+          --project "$FIREBASE_PROJECT_ID"
+          --only auth,firestore,functions
+          'npm run test:e2e:browser -- --reporter=github,html'
+
+      - name: Upload browser report and emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order-idempotency-browser-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            firebase-debug.log
+            firestore-debug.log
+            ui-debug.log
+          if-no-files-found: warn
+          retention-days: 7
