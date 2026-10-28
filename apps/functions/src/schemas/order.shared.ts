@@ -157,6 +157,16 @@ export const orderSchema = z.object({
   displayOrderNumber: z.number().int().positive().optional(),
   displayCode: z.string().min(3).optional(),
   operationalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** FIN-01: proyección de la confirmación vigente; espejo de packages/shared. */
+  paymentConfirmation: z
+    .object({
+      eventId: z.string().min(1),
+      amount: z.number().int().positive(),
+      confirmedAt: z.unknown(),
+      effectiveOperationalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    })
+    .nullable()
+    .optional(),
   createdAt: z.unknown().optional(),
   updatedAt: z.unknown().optional(),
 });

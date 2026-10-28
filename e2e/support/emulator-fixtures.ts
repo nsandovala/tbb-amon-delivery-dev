@@ -33,7 +33,7 @@ function encodeValue(value: unknown): FirestoreValue {
   throw new Error(`Unsupported fixture value: ${String(value)}`);
 }
 
-function encodeFields(data: Record<string, unknown>): Record<string, FirestoreValue> {
+export function encodeFields(data: Record<string, unknown>): Record<string, FirestoreValue> {
   return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, encodeValue(value)]));
 }
 

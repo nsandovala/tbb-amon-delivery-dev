@@ -1,5 +1,6 @@
 import { getDb } from "../lib/firebase-admin";
 import { membershipDocSchema, type MembershipDoc } from "../schemas/membership.schema";
+import { logger } from "../lib/logger";
 
 /**
  * Repositorio de membresías. Cada llamada hace una lectura puntual a Firestore
@@ -22,9 +23,14 @@ export async function getMembership(
 
   const parsed = membershipDocSchema.safeParse({ ...snap.data(), uid, tenantId });
   if (!parsed.success) {
-    throw new Error(
-      `Membership document is malformed for tenants/${tenantId}/members/${uid}`
-    );
+    // FIN-H02: un rol o estado no reconocido es "sin membresía válida" (403
+    // uniforme), no un 500. Se registra para que el dato corrupto se corrija.
+    logger.error("Membership document is malformed; access denied", {
+      tenantId,
+      uid,
+      issues: parsed.error.issues.map((issue) => issue.path.join(".")),
+    });
+    return null;
   }
   return parsed.data;
 }

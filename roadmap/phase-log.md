@@ -3,6 +3,37 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-28 — FIN-01: confirmación individual y auditable de transferencias
+
+### Qué cambió
+- **Pago separado del estado operacional.** `paymentStatus` (`pending` / `paid`) solo cambia con `confirmTransferPayment` o `revertTransferConfirmation`. Una transferencia se puede confirmar antes de la entrega.
+- **Libro append-only `tenants/{t}/paymentEvents`.** Cada evento tiene actor, motivo o referencia, jornada efectiva y jornada de origen. El `eventId` se deriva de la clave de idempotencia, y la proyección mínima queda en el pedido.
+- **Contador `orderCounters/{D}.payments`.** Lo actualizan confirmar y revertir. `closeCashSession` lo lee en su transacción (FIN-H01) y verifica el libro contra el contador antes de cerrar (`CASH_CLOSE_INCONSISTENT` / `PAYMENT_EVENTS_LIMIT`).
+- **Confirmación tardía.** Se imputa a la jornada efectiva (zona horaria configurada y corte 05:00). Los snapshots de caja cerrada no se tocan, y los días cerrados se informan desde su snapshot.
+- **Cierre de caja v2 (aditivo).**
+  - Blocker `UNCONFIRMED_TRANSFERS` con override auditado.
+  - Buckets `transferConfirmedSales`, `transferUnconfirmedSales`, `cancelledPaidTransfers` y `transferCollections`.
+  - `collectionDifference`.
+- **Permisos y reglas.** `payments.view` y `payments.confirm_transfer` (owner y admin). Las reglas `canViewPayments` replican esa matriz, con prueba de paridad.
+- **Admin.** Confirmar o revertir desde `/pedidos` y `/pos`. El panel de caja muestra cobros confirmados y reembolsos por revisar. Métricas separa ventas registradas, ventas entregadas y cobros confirmados, con señal de datos incompletos (FIN-Q01).
+- **Corrección lateral.** Una membresía con rol o estado no reconocido responde 403 en vez de 500.
+
+### Por qué
+Elegir "transferencia" no confirmaba el abono. Caja y Métricas usaban fuentes distintas, y `paymentStatus` nunca cambiaba.
+
+### Archivos, contratos, validación, riesgos y siguiente paso
+Ver `roadmap/sprint-fin-01.md` y `docs/architecture/payment-confirmation-contract.md`.
+- **Validación:** unitarias 177/177; API 147/147 en emulador habitual y en paquete piloto (`demo-amon-ci`); navegador 22/22; builds y typechecks OK.
+- **Ronda de auditoría FIN-A01..A03:**
+  - Ningún neto truncado se muestra como monto ni se usa para conciliar.
+  - Métricas solo usa resultados de la consulta vigente de tenant y rango.
+  - El historial de pagos declara cuando es parcial.
+- **QA humano, FIN-QA-02:**
+  - La bitácora de Operación intercala confirmaciones y reversiones del libro de pagos, solo con `payments.view`, sin duplicar eventos ni tocar backend.
+  - Validación: unitarias 189/189; API 148/148 en emulador habitual y en paquete piloto; navegador 22/22.
+- **Resto de los hallazgos del QA:** backlog en `roadmap/backlog-fin-01-qa.md`.
+- **Estado:** READY FOR REVIEW, sin commit.
+
 ## 2026-10-23 — SEC-BASE: identidad, membresías y aislamiento multi-tenant
 
 ### Qué cambió

@@ -40,6 +40,13 @@ export interface AdminOrder {
   acquisitionCampaign?: string;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
   paymentStatus?: string;
+  /** FIN-01: confirmación vigente de la transferencia (proyección del libro paymentEvents). */
+  paymentConfirmation?: {
+    eventId: string;
+    amount: number;
+    confirmedAt?: unknown;
+    effectiveOperationalDate: string;
+  } | null;
   fulfillmentType?: string;
   displayOrderNumber?: number;
   displayCode?: string;

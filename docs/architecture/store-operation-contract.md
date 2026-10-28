@@ -103,9 +103,15 @@ Nunca se actualizan ni se borran. Los eventos `schedule` se registran **al obser
   activeExpenses: { count, total },
   observation, override: { reason, blockers, actor } | null,
   summary,                                  // snapshot completo del cálculo
-  closedBy, closedAt, closedAtLocal, idempotencyKey, storeStateBefore
+  closedBy, closedAt, closedAtLocal, idempotencyKey, storeStateBefore,
+  // FIN-01 (summaryVersion 2, aditivo):
+  summaryVersion, systemConfirmedTransfers,  // cobros de transferencia confirmados en sistema (libro paymentEvents)
+  ledgerCounter,                             // orderCounters/{D}.payments verificado en la transacción
+  collectionDifference = transfersConfirmed − systemConfirmedTransfers
 }
 ```
+
+FIN-01: `getCashCloseSummary` de una jornada cerrada devuelve `summary` desde este snapshot (`summarySource: "snapshot"`), nunca recalculado. Ver `docs/architecture/payment-confirmation-contract.md`.
 
 ## Estados operativos
 
@@ -168,7 +174,9 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 |---|---|---|
 | `STORE_CONFIG_INVALID` | 409 | Acción manual con horario ausente/inválido |
 | `CASH_ALREADY_CLOSED` | 409 | Reabrir tras cierre de caja del día, o segundo cierre con otra `idempotencyKey` |
-| `CASH_CLOSE_BLOCKED` | 409 | Hay pedidos activos o pagos `pending` sin el override permitido |
+| `CASH_CLOSE_BLOCKED` | 409 | Hay pedidos activos, pagos `pending` o transferencias sin confirmar (`UNCONFIRMED_TRANSFERS`) sin el override permitido |
+| `CASH_CLOSE_INCONSISTENT` | 409 | FIN-01: el libro `paymentEvents` de la jornada no coincide con `orderCounters/{D}.payments` |
+| `PAYMENT_EVENTS_LIMIT` | 409 | FIN-01: más de 500 eventos de pago en la jornada; el cierre no los verifica parcialmente |
 | `VALIDATION_ERROR` | 400 | Payload inválido, decimales, fecha futura |
 
 ### Idempotencia
@@ -185,6 +193,7 @@ Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` 
 - Todo pedido activo (`queued`, `preparing`, `ready` o `on_the_way`) bloquea el cierre, sin importar si proviene de POS, web o WhatsApp.
 - Los pedidos activos son bloqueos no anulables: deben llegar a un estado terminal (`delivered` o `cancelled`) antes de cerrar la caja.
 - Los pagos `pending` bloquean el cierre, pero pueden superarse con un override administrativo con motivo de al menos 5 caracteres; el override queda auditado.
+- FIN-01: las transferencias de la jornada ni canceladas ni confirmadas bloquean con `UNCONFIRMED_TRANSFERS`, anulable con el mismo override. `transferSales`/`expectedTransfers` mantienen su semántica (entregadas, confirmadas o no); los cobros confirmados salen del libro `paymentEvents` imputado a la jornada efectiva.
 - Un pedido web/WhatsApp activo se muestra como bloqueo explícito, no como una simple advertencia.
 - El día se toma de `order.operationalDate` (pedidos legacy sin ese campo no se incluyen) y los gastos por `occurredAt` dentro de `[día 05:00, día+1 05:00)` local.
 

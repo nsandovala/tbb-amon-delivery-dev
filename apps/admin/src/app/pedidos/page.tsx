@@ -12,6 +12,7 @@ const ORDERS_BOARD_MAX = 300;
 import { updateOrderStatusApi } from "../../lib/api/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
 import { PosReceiptDialog } from "../../components/pos/pos-receipt-dialog";
+import { TransferPaymentControl } from "../../components/payments/transfer-payment-control";
 import { db } from "../../lib/firebase/client";
 import { receiptFromOrder, type PosReceipt } from "../../lib/pos-receipt";
 import type { AdminOrder, OrderStatus } from "../../lib/firebase/queries/orders";
@@ -731,6 +732,11 @@ export default function OrdersPage() {
                         <span className="text-neutral-400">Monto</span>
                         <span className="font-semibold text-emerald-400">{formatMoney(selectedOrder.totals?.total)}</span>
                       </div>
+                      {selectedOrder.paymentMethod === "transfer" && (
+                        <div className="border-t border-white/6 pt-3">
+                          <TransferPaymentControl tenantId={tenantId} order={selectedOrder} />
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-400">Fecha</span>
                         <span className="text-white">{formatReadableDate(selectedOrderCreatedAt)}</span>

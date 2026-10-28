@@ -12,11 +12,13 @@ import {
 import { formatClp } from "@/lib/clp";
 import { formatLocalDateTime, formatOperationalDate, parseCountedClp } from "@/lib/store-status";
 import { useActiveTenant } from "@/components/tenant-provider";
+import { reconcilableNet, transferReconciliationDifference } from "@/lib/payment-presentation";
 
 const BLOCKER_COPY = {
   ACTIVE_POS_SALES: "Ventas POS sin cerrar",
   ACTIVE_OTHER_ORDERS: "Pedidos web/WhatsApp activos",
   PENDING_PAYMENTS: "Pagos pendientes (no es dinero recibido)",
+  UNCONFIRMED_TRANSFERS: "Transferencias sin confirmar (confírmalas en Pedidos o POS)",
 } as const;
 
 function newIdempotencyKey(): string {
@@ -62,6 +64,14 @@ function CloseReceipt({ close }: { close: CashCloseRecord }) {
         <dd className="text-right tabular-nums">{formatClp(close.transfersConfirmed)}</dd>
         <dt className="text-neutral-400">Diferencia transferencias</dt>
         <dd className="text-right font-bold"><Difference value={close.transferDifference} /></dd>
+        {close.collectionDifference !== undefined && (
+          <>
+            <dt className="text-neutral-400">Cobros confirmados en sistema</dt>
+            <dd className="text-right tabular-nums">{formatClp(close.systemConfirmedTransfers ?? 0)}</dd>
+            <dt className="text-neutral-400">Diferencia vs. cobros confirmados</dt>
+            <dd className="text-right font-bold"><Difference value={close.collectionDifference} /></dd>
+          </>
+        )}
       </dl>
       <p className="text-xs text-neutral-400">
         Por {close.closedBy.email ?? close.closedBy.uid} · {formatLocalDateTime(close.closedAtLocal)}
@@ -103,7 +113,8 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
 
   const countedParsed = counted.trim() ? parseCountedClp(counted) : null;
   const transfersParsed = transfers.trim() ? parseCountedClp(transfers) : null;
-  const summary = day?.summary;
+  const summary = day?.summary ?? undefined;
+  const collections = summary?.transferCollections;
   const blocked = Boolean(summary?.blockers.length);
   const overrideValid = !blocked || (useOverride && overrideReason.trim().length >= 5);
   const canSubmit =
@@ -178,7 +189,7 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
         <>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <Tile label="Efectivo esperado" value={formatClp(summary.expectedCash)} hint="Entregado en efectivo − gastos en efectivo" tone="text-sky-200" />
-            <Tile label="Transferencias" value={formatClp(summary.expectedTransfers)} hint={`${summary.transferSales.count} ventas entregadas`} />
+            <Tile label="Transferencias entregadas" value={formatClp(summary.expectedTransfers)} hint={`${summary.transferSales.count} ventas entregadas · confirmadas o no`} />
             <Tile label="Ventas efectivo" value={formatClp(summary.cashSales.total)} hint={`${summary.cashSales.count} entregadas`} />
             <Tile label="Gastos activos" value={formatClp(summary.activeExpenses.total)} hint={`${formatClp(summary.cashExpenses.total)} en efectivo`} />
             <Tile
@@ -188,7 +199,40 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
               tone={summary.pendingSales.count ? "text-amber-300" : "text-white"}
             />
             <Tile label="Pedidos del día" value={String(summary.ordersCount)} hint={`${summary.cancelledCount} cancelados excluidos`} />
+            {collections && (
+              <Tile
+                label="Cobros transferencia confirmados"
+                value={reconcilableNet(collections) === null ? "Incompleto" : formatClp(collections.net)}
+                hint={collections.complete
+                  ? `${collections.confirmed.count} de la jornada · ${collections.late.count} tardíos · ${collections.reverted.count} reversos`
+                  : "Más eventos que el tope verificable: no es un total conciliado"}
+                tone={collections.complete ? "text-emerald-200" : "text-red-300"}
+              />
+            )}
+            {summary.transferUnconfirmedSales && (
+              <Tile
+                label="Transferencias sin confirmar"
+                value={formatClp(summary.transferUnconfirmedSales.total)}
+                hint={`${summary.transferUnconfirmedSales.count} entregadas · no es dinero verificado`}
+                tone={summary.transferUnconfirmedSales.count ? "text-amber-300" : "text-white"}
+              />
+            )}
           </div>
+
+          {summary.cancelledPaidTransfers && summary.cancelledPaidTransfers.count > 0 && (
+            <p className="mt-2 text-xs text-red-300">
+              {summary.cancelledPaidTransfers.count} pedido(s) cancelado(s) con transferencia confirmada
+              ({formatClp(summary.cancelledPaidTransfers.total)}): reembolso por revisar. No suman como venta.
+            </p>
+          )}
+          {day?.ledger && !day.ledger.consistent && (
+            <p role="alert" className="mt-2 text-xs text-red-300">
+              El libro de pagos no coincide con su contador de jornada. El cierre quedará bloqueado hasta revisarlo.
+            </p>
+          )}
+          {day?.summarySource === "snapshot" && (
+            <p className="mt-2 text-[10px] text-neutral-500">Cifras del cierre registrado (inmutables).</p>
+          )}
 
           {summary.blockers.length > 0 && (
             <ul className="mt-4 space-y-2">
@@ -248,7 +292,18 @@ export function CashPanel({ onClosed }: { onClosed: () => Promise<void> | void }
               Diferencia efectivo: <Difference value={countedParsed.value - summary.expectedCash} />
               {transfersParsed?.ok && (
                 <span className="ml-4 text-sm font-semibold">
-                  Transferencias: <Difference value={transfersParsed.value - summary.expectedTransfers} />
+                  Transferencias vs. cobros confirmados:{" "}
+                  {(() => {
+                    // FIN-A01: sin libro completo no hay base para conciliar.
+                    const difference = transferReconciliationDifference(
+                      transfersParsed.value,
+                      collections,
+                      summary.expectedTransfers
+                    );
+                    return difference === null
+                      ? <span className="text-red-300">no conciliable (libro de pagos incompleto)</span>
+                      : <Difference value={difference} />;
+                  })()}
                 </span>
               )}
             </p>

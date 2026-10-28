@@ -10,6 +10,12 @@ import {
   type CashCloseOrder,
 } from "../lib/cash-close";
 import {
+  MAX_PAYMENT_EVENTS_PER_DAY,
+  ledgerMatchesCounter,
+  type LedgerCounter,
+  type LedgerEvent,
+} from "../lib/payment-ledger";
+import {
   formatLocalIso,
   getOperationalDateFor,
   getOperationalDayWindow,
@@ -50,6 +56,12 @@ export type CloseCashSessionInput = z.infer<typeof closeCashSessionInputSchema>;
 
 type Reader = {
   query: (query: admin.firestore.Query) => Promise<admin.firestore.QuerySnapshot>;
+  doc: (ref: admin.firestore.DocumentReference) => Promise<admin.firestore.DocumentSnapshot>;
+};
+
+const plainDayReader: Reader = {
+  query: (query) => query.get(),
+  doc: (ref) => ref.get(),
 };
 
 async function resolveOperationalDate(tenantId: string, requested: string | undefined, now: Date) {
@@ -75,23 +87,42 @@ async function loadDay(
 ) {
   const refs = storeRefs(tenantId);
   const window = getOperationalDayWindow(operationalDate, timezone);
-  const [ordersSnap, expensesSnap] = await Promise.all([
+  // FIN-01: el contador de la jornada se lee junto a los eventos. Dentro de la
+  // transacción de cierre, esta lectura es la que choca con confirmaciones y
+  // reversiones concurrentes (FIN-H01).
+  const [ordersSnap, expensesSnap, eventsSnap, counterSnap] = await Promise.all([
     reader.query(refs.orders.where("operationalDate", "==", operationalDate)),
     reader.query(
       refs.expenses
         .where("occurredAt", ">=", admin.firestore.Timestamp.fromDate(window.start))
         .where("occurredAt", "<", admin.firestore.Timestamp.fromDate(window.end))
     ),
+    reader.query(
+      refs.paymentEvents
+        .where("effectiveOperationalDate", "==", operationalDate)
+        .limit(MAX_PAYMENT_EVENTS_PER_DAY + 1)
+    ),
+    reader.doc(refs.orderCounter(operationalDate)),
   ]);
 
   const orders = ordersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as CashCloseOrder);
   const expenses = expensesSnap.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() }) as CashCloseExpense
   );
+  const paymentEvents = eventsSnap.docs.map((doc) => doc.data() as LedgerEvent);
+  const counter = (counterSnap.data()?.payments ?? null) as LedgerCounter;
+  const summary = summarizeCashDay({ operationalDate, orders, expenses, paymentEvents });
 
   return {
     window,
-    summary: summarizeCashDay({ operationalDate, orders, expenses }),
+    summary,
+    ledger: {
+      counter: {
+        transferEventCount: counter?.transferEventCount ?? 0,
+        transferNet: counter?.transferNet ?? 0,
+      },
+      consistent: ledgerMatchesCounter(summary.transferCollections, counter),
+    },
   };
 }
 
@@ -103,12 +134,9 @@ export async function getCashCloseSummary(tenantId: string, requestedDate?: stri
     now
   );
 
-  const [{ window, summary }, closeSnap] = await Promise.all([
-    loadDay(tenantId, operationalDate, timezone, { query: (query) => query.get() }),
-    storeRefs(tenantId).cashClose(operationalDate).get(),
-  ]);
-
-  return {
+  const closeSnap = await storeRefs(tenantId).cashClose(operationalDate).get();
+  const window = getOperationalDayWindow(operationalDate, timezone);
+  const base = {
     operationalDate,
     isCurrentOperationalDay: operationalDate === current,
     timezone,
@@ -116,10 +144,19 @@ export async function getCashCloseSummary(tenantId: string, requestedDate?: stri
       start: formatLocalIso(window.start, timezone),
       end: formatLocalIso(window.end, timezone),
     },
-    summary,
-    close: closeSnap.exists ? serializeFirestore(closeSnap.data()) : null,
     storeState: snapshot.status.state,
   };
+
+  // FIN-01: una jornada cerrada se informa SIEMPRE desde su snapshot inmutable.
+  // Recalcular con datos actuales cambiaría cifras históricas en silencio
+  // (p. ej. confirmaciones tardías imputadas a otra jornada).
+  if (closeSnap.exists) {
+    const close = serializeFirestore(closeSnap.data()) as { summary?: unknown };
+    return { ...base, summarySource: "snapshot" as const, summary: close.summary ?? null, ledger: null, close };
+  }
+
+  const { summary, ledger } = await loadDay(tenantId, operationalDate, timezone, plainDayReader);
+  return { ...base, summarySource: "live" as const, summary, ledger, close: null };
 }
 
 export async function closeCashSession(
@@ -152,10 +189,42 @@ export async function closeCashSession(
       );
     }
 
-    const { summary } = await loadDay(tenantId, operationalDate, timezone, {
+    const { summary, ledger } = await loadDay(tenantId, operationalDate, timezone, {
       query: (query) => tx.get(query),
+      doc: (ref) => tx.get(ref),
     });
     const store = await readStoreSnapshot(tenantId, transactionReader(tx), now);
+
+    // FIN-Q01: nunca cerrar con un libro truncado ni incoherente con el contador.
+    if (!summary.transferCollections.complete) {
+      throw new AppError(
+        `La jornada tiene más de ${MAX_PAYMENT_EVENTS_PER_DAY} eventos de pago; el cierre no puede verificarlos en una transacción.`,
+        409,
+        "PAYMENT_EVENTS_LIMIT",
+        { limit: MAX_PAYMENT_EVENTS_PER_DAY }
+      );
+    }
+    if (!ledger.consistent) {
+      logger.error("Cash close ledger mismatch", {
+        tenantId,
+        operationalDate,
+        counter: ledger.counter,
+        eventCount: summary.transferCollections.eventCount,
+        net: summary.transferCollections.net,
+      });
+      throw new AppError(
+        "El libro de pagos de la jornada no coincide con su contador. No se cerró la caja; reintenta o revisa la auditoría.",
+        409,
+        "CASH_CLOSE_INCONSISTENT",
+        {
+          counter: ledger.counter,
+          ledger: {
+            transferEventCount: summary.transferCollections.eventCount,
+            transferNet: summary.transferCollections.net,
+          },
+        }
+      );
+    }
 
     const activeOrderBlockers = summary.blockers.filter((blocker) =>
       blocker.code === "ACTIVE_POS_SALES" || blocker.code === "ACTIVE_OTHER_ORDERS"
@@ -191,6 +260,9 @@ export async function closeCashSession(
       transfersConfirmed: input.transfersConfirmed,
       expectedCash: summary.expectedCash,
       expectedTransfers: summary.expectedTransfers,
+      summaryVersion: summary.summaryVersion,
+      systemConfirmedTransfers: summary.transferCollections.net,
+      ledgerCounter: ledger.counter,
       ...differences,
       pendingSales: summary.pendingSales,
       activeExpenses: summary.activeExpenses,
@@ -224,6 +296,7 @@ export async function closeCashSession(
         metadata: {
           cashDifference: differences.cashDifference,
           transferDifference: differences.transferDifference,
+          collectionDifference: differences.collectionDifference,
           override: Boolean(input.override),
           blockers: summary.blockers.map((blocker) => blocker.code),
         },

@@ -110,12 +110,27 @@ export type PublicStoreStatus = Omit<StoreStatus, "override"> & {
 export type CashBucket = { count: number; total: number };
 
 export type CashCloseBlocker = CashBucket & {
-  code: "ACTIVE_POS_SALES" | "ACTIVE_OTHER_ORDERS" | "PENDING_PAYMENTS";
+  code: "ACTIVE_POS_SALES" | "ACTIVE_OTHER_ORDERS" | "PENDING_PAYMENTS" | "UNCONFIRMED_TRANSFERS";
   orderIds: string[];
   displayCodes: string[];
 };
 
+/** FIN-01: cobros de transferencia imputados a la jornada efectiva (libro paymentEvents). */
+export type TransferCollections = {
+  confirmed: CashBucket;
+  late: CashBucket;
+  reverted: CashBucket;
+  net: number;
+  eventCount: number;
+  complete: boolean;
+};
+
+/**
+ * Los campos FIN-01 son opcionales: una jornada cerrada antes de FIN-01 se
+ * informa desde su snapshot v1, que no los tiene.
+ */
 export type CashCloseSummary = {
+  summaryVersion?: number;
   operationalDate: string;
   ordersCount: number;
   cancelledCount: number;
@@ -129,6 +144,10 @@ export type CashCloseSummary = {
   cashExpenses: CashBucket;
   expectedCash: number;
   expectedTransfers: number;
+  transferConfirmedSales?: CashBucket;
+  transferUnconfirmedSales?: CashBucket;
+  cancelledPaidTransfers?: CashBucket;
+  transferCollections?: TransferCollections;
   blockers: CashCloseBlocker[];
 };
 
@@ -140,6 +159,10 @@ export type CashCloseRecord = {
   expectedTransfers: number;
   cashDifference: number;
   transferDifference: number;
+  /** FIN-01 (summaryVersion 2): transferencias verificadas − cobros confirmados en el sistema. */
+  collectionDifference?: number;
+  systemConfirmedTransfers?: number;
+  summaryVersion?: number;
   observation: string | null;
   override: { reason: string } | null;
   closedBy: StoreActor;
@@ -151,7 +174,11 @@ export type CashCloseDay = {
   isCurrentOperationalDay: boolean;
   timezone: string;
   window: { start: string; end: string };
-  summary: CashCloseSummary;
+  /** `snapshot`: jornada cerrada, cifras inmutables del cierre; `live`: recalculado ahora. */
+  summarySource?: "snapshot" | "live";
+  summary: CashCloseSummary | null;
+  /** Solo en vivo: contador `orderCounters/{D}.payments` y si coincide con el libro. */
+  ledger: { counter: { transferEventCount: number; transferNet: number }; consistent: boolean } | null;
   close: CashCloseRecord | null;
   storeState: StoreState;
 };

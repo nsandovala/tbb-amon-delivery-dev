@@ -7,11 +7,13 @@ import { AuditLog } from "@/components/operation/audit-log";
 import { CashPanel } from "@/components/operation/cash-panel";
 import { ScheduleEditor } from "@/components/operation/schedule-editor";
 import { StorePanel } from "@/components/operation/store-panel";
+import { useRecentPaymentEvents } from "@/hooks/use-live-payment-events";
 import { usePolledStoreStatus } from "@/hooks/use-store-status";
 import { fetchStoreControl } from "@/lib/api/store";
 import { auth, db } from "@/lib/firebase/client";
 import { useActiveTenant } from "@/components/tenant-provider";
 import { formatOperationalDate } from "@/lib/store-status";
+import { canReadPaymentLedger } from "@/lib/operation-timeline";
 
 type TenantIdentity = {
   name?: string;
@@ -19,7 +21,9 @@ type TenantIdentity = {
 };
 
 export default function OperacionPage() {
-  const { tenantId } = useActiveTenant();
+  const { tenantId, permissions } = useActiveTenant();
+  // FIN-QA-02: la parte financiera de la bitácora exige `payments.view`.
+  const recentPayments = useRecentPaymentEvents(tenantId, canReadPaymentLedger(permissions));
   const loadControl = useCallback(() => fetchStoreControl(tenantId), [tenantId]);
   const { data: control, error, nowMs, refresh } = usePolledStoreStatus(loadControl);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -134,7 +138,7 @@ export default function OperacionPage() {
 
               <aside className="min-w-0 space-y-4">
                 <CashPanel onClosed={refresh} />
-                <AuditLog events={control.events} />
+                <AuditLog tenantId={tenantId} events={control.events} payments={recentPayments} />
                 <section className="ops-surface rounded-md border border-white/10 bg-[#101010] p-4" aria-labelledby="actions-title">
                   <div className="flex items-start justify-between gap-3">
                     <div><h2 id="actions-title" className="ops-text text-sm font-semibold text-white">Acciones por hacer</h2><p className="ops-muted mt-1 text-xs text-neutral-400">Seguimiento de tareas de operación.</p></div>

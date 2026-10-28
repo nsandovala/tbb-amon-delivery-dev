@@ -376,7 +376,8 @@ test.describe("Cierre de caja", () => {
     expect(summary.cashSales.total).toBe(10000);
     expect(summary.expectedTransfers).toBe(4500);
     expect(summary.cardSales.total).toBe(3000);
-    expect(summary.blockers).toEqual([]);
+    // FIN-01 (D1): una transferencia entregada sin confirmar bloquea con override.
+    expect(summary.blockers.map((blocker) => blocker.code)).toEqual(["UNCONFIRMED_TRANSFERS"]);
   });
 
   test("gastos activos en efectivo descuentan del efectivo esperado", () => {
@@ -399,10 +400,13 @@ test.describe("Cierre de caja", () => {
     expect(computeCashDifferences(expected, { countedCash: 24000, transfersConfirmed: 4500 })).toEqual({
       cashDifference: -1000,
       transferDifference: 0,
+      // FIN-01: sin libro de cobros, todo lo verificado en banco es diferencia.
+      collectionDifference: 4500,
     });
     expect(computeCashDifferences(expected, { countedCash: 25500, transfersConfirmed: 0 })).toEqual({
       cashDifference: 500,
       transferDifference: -4500,
+      collectionDifference: 0,
     });
   });
 });
