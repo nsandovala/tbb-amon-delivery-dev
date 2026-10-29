@@ -58,7 +58,19 @@ function isDefinitive(err: unknown): boolean {
   return err instanceof PaymentApiError && (err.status === 409 || err.status === 403 || err.status === 400);
 }
 
-export function TransferPaymentControl({ tenantId, order, compact = false }: Props) {
+/**
+ * PR #88 (P2-01): una instancia por tenant + pedido. Si el operador cambia de
+ * pedido en Pedidos, React reutilizaba el control y conservaba modo, motivo,
+ * referencia, error, historial y claves de idempotencia del pedido anterior,
+ * mientras las acciones ya usaban el pedido nuevo. Con la `key`, cambiar de
+ * pedido monta un control limpio; las respuestas tardías del anterior caen en
+ * una instancia desmontada. Solo identidad: estado o pago no remontan.
+ */
+export function TransferPaymentControl(props: Props) {
+  return <TransferPaymentControlForOrder key={`${props.tenantId}:${props.order.id}`} {...props} />;
+}
+
+function TransferPaymentControlForOrder({ tenantId, order, compact = false }: Props) {
   const [mode, setMode] = useState<"idle" | "confirm" | "revert">("idle");
   const [reference, setReference] = useState("");
   const referenceId = useId();

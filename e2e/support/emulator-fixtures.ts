@@ -19,8 +19,18 @@ const OWNER = { Authorization: "Bearer owner" };
 
 type FirestoreValue = Record<string, unknown>;
 
+/**
+ * Timestamp de Firestore para un fixture, en RFC 3339 con hasta nanosegundos
+ * (p. ej. `2026-01-11T02:59:59.999500Z`). Un `Date` también se acepta (ms).
+ */
+export class FixtureTimestamp {
+  constructor(readonly iso: string) {}
+}
+
 function encodeValue(value: unknown): FirestoreValue {
   if (value === null || value === undefined) return { nullValue: null };
+  if (value instanceof FixtureTimestamp) return { timestampValue: value.iso };
+  if (value instanceof Date) return { timestampValue: value.toISOString() };
   if (typeof value === "boolean") return { booleanValue: value };
   if (typeof value === "number") {
     return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };

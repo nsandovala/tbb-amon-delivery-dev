@@ -33,9 +33,13 @@ export function transferReconciliationDifference(
   return net === null ? null : verifiedTransfers - net;
 }
 
-/** Clave de la consulta en vivo del libro; cambia con el tenant o el rango. */
-export function paymentEventsQueryKey(tenantId: string, sinceMs: number): string {
-  return `${tenantId}|${sinceMs}`;
+/**
+ * Clave de la consulta en vivo del libro: tenant, inicio y fin (`null` =
+ * período en curso, abierto; ver `payment-events-query.ts`). Cambiar
+ * cualquiera invalida el resultado anterior.
+ */
+export function paymentEventsQueryKey(tenantId: string, sinceMs: number, untilMs: number | null = null): string {
+  return `${tenantId}|${sinceMs}|${untilMs ?? "open"}`;
 }
 
 export type LiveQueryState<T> = {

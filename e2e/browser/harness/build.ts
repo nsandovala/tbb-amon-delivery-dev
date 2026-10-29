@@ -15,12 +15,16 @@ const ROOT = path.resolve(__dirname, "../../..");
 const HARNESS = __dirname;
 export const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "minerp-sentinel";
 
-/** `metric-help` (FIN-R05): solo la ayuda de Métricas, con el CSS real del admin; no usa emuladores. */
-export type HarnessKind = "web" | "pos" | "metric-help";
+/**
+ * `metric-help` (FIN-R05): solo la ayuda de Métricas, con el CSS real del admin; no usa emuladores.
+ * `transfer-control` (PR #88 P2-01): control de pago real con sesión y Functions en los emuladores.
+ */
+export type HarnessKind = "web" | "pos" | "metric-help" | "transfer-control";
 const ENTRIES: Record<HarnessKind, string> = {
   web: "web-entry.tsx",
   pos: "pos-entry.tsx",
   "metric-help": "metric-help-entry.tsx",
+  "transfer-control": "transfer-control-entry.tsx",
 };
 
 function aliases(app: "web" | "admin"): Plugin {

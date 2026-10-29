@@ -8,10 +8,10 @@ import {
   orderBy,
   query,
   Timestamp,
-  where,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/client";
 import { MAX_PAYMENT_EVENTS_PER_DAY, type LedgerEvent } from "../lib/payment-ledger";
+import { paymentEventsRangeConstraints } from "../lib/payment-events-query";
 import {
   paymentEventsQueryKey,
   selectCurrentResult,
@@ -29,9 +29,12 @@ import {
  *
  * - FIN-Q01/A01: se piden `tope + 1` documentos. Si llegan más que el tope,
  *   `complete: false` y la pantalla NO presenta ningún importe.
- * - FIN-A02: cada resultado queda etiquetado con la consulta (tenant + rango)
- *   que lo produjo. Tras un cambio, la vista es `loading` hasta que llega el
+ * - FIN-A02: cada resultado queda etiquetado con la consulta (tenant, inicio y
+ *   fin) que lo produjo. Tras un cambio, la vista es `loading` hasta que llega el
  *   snapshot de la consulta nueva: nunca cifras anteriores ni un $0 prematuro.
+ * - PR #88 (P2-02): `untilMs` acota arriba los períodos históricos; `null`
+ *   (período en curso) deja la consulta abierta para no resuscribirla cada
+ *   vez que avanza el reloj de la pantalla. Ver `lib/payment-events-query.ts`.
  * - Sin permiso (`permission-denied`) devuelve `error` sin derribar la sesión:
  *   el listener de pedidos ya gobierna la pérdida de membresía.
  */
@@ -42,18 +45,19 @@ export type LivePaymentEvent = LedgerEvent & { id: string; at?: Timestamp };
 const EMPTY: LiveQueryState<LivePaymentEvent[]> = { key: null, data: [], complete: true, error: null };
 const EMPTY_TIMELINE: LiveQueryState<TimelinePaymentEvent[]> = { key: null, data: [], complete: true, error: null };
 
-export function useLivePaymentEvents(tenantId: string, sinceMs: number): LiveQueryView<LivePaymentEvent[]> {
+export function useLivePaymentEvents(
+  tenantId: string,
+  sinceMs: number,
+  untilMs: number | null
+): LiveQueryView<LivePaymentEvent[]> {
   const [state, setState] = useState<LiveQueryState<LivePaymentEvent[]>>(EMPTY);
-  const currentKey = paymentEventsQueryKey(tenantId, sinceMs);
+  const currentKey = paymentEventsQueryKey(tenantId, sinceMs, untilMs);
 
   useEffect(() => {
-    const key = paymentEventsQueryKey(tenantId, sinceMs);
-    // Rango + orderBy sobre el mismo campo: índice automático.
+    const key = paymentEventsQueryKey(tenantId, sinceMs, untilMs);
     const q = query(
       collection(db, `tenants/${tenantId}/paymentEvents`),
-      where("at", ">=", Timestamp.fromMillis(sinceMs)),
-      orderBy("at", "asc"),
-      limit(LIVE_PAYMENT_EVENTS_LIMIT + 1)
+      ...paymentEventsRangeConstraints(sinceMs, untilMs, LIVE_PAYMENT_EVENTS_LIMIT)
     );
 
     let active = true;
@@ -79,7 +83,7 @@ export function useLivePaymentEvents(tenantId: string, sinceMs: number): LiveQue
       active = false;
       unsub();
     };
-  }, [tenantId, sinceMs]);
+  }, [tenantId, sinceMs, untilMs]);
 
   return selectCurrentResult(state, currentKey);
 }

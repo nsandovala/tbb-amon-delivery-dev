@@ -2,7 +2,7 @@
 
 ## Estado
 
-**FIN-01 FINAL CORRECTIONS VERIFIED (29-10-2026).** Pendiente de revisión humana. Ver [Correcciones del QA humano](#correcciones-del-qa-humano-29-10-2026).
+**PR #88 abierto; correcciones de la revisión Codex (P2-01, P2-02) verificadas (29-10-2026).** Pendiente de revisión humana. Ver [Correcciones del QA humano](#correcciones-del-qa-humano-29-10-2026).
 - Rama `feat/fin-01-transfer-confirmation` sobre `09958d1` (post-#86), trabajada en un worktree aislado (`C:\Dev\tbb-amon-fin-01`). Último commit `e921b76`; las correcciones siguen sin commit.
 - No hubo commit, push, PR, merge ni deploy. No se usaron Firebase real, Blaze ni bancos.
 - Contrato aprobado: v2.1 (FIN-H01, FIN-H02, FIN-Q01, FIN-Q02). Detalle en `docs/architecture/payment-confirmation-contract.md`.
@@ -323,6 +323,53 @@ GO de implementación correctiva con decisiones D1–D4. Detalle del diagnóstic
   - FIN-R05 en navegador: 3/3. El `--list` del navegador da 25 = 22 + 3.
   - Build de Functions, typecheck de Admin y `next build` de Admin: OK.
 - **No se repitieron** los contratos API, las carreras FIN-H01 ni las 22 pruebas de navegador anteriores. FIN-R04 no altera ningún neto ni conteo, y el cambio al harness no modifica los entries `web` ni `pos`. La evidencia del gate sigue vigente.
+
+### Revisión de PR #88: comentarios de Codex (P2-01, P2-02)
+
+| Ítem | Problema | Corrección |
+|---|---|---|
+| **P2-01** | Al pasar de un pedido a otro en Pedidos, React reutilizaba `TransferPaymentControl` con el estado del pedido anterior: modo, motivo, referencia, error, historial y claves de idempotencia. Las acciones ya apuntaban al pedido nuevo | El componente exportado monta la implementación con `key = tenantId:orderId`. Solo la identidad cuenta: un cambio de estado o de pago no remonta. Las respuestas tardías del pedido anterior caen en una instancia desmontada. La protección vale también para POS |
+| **P2-02** | En un período histórico de Métricas, la consulta de `paymentEvents` no tenía límite superior. Más de 500 eventos posteriores al período lo marcaban "Incompleto" aunque estuviera completo | `lib/payment-events-query.ts`: un período histórico (fin anterior a ahora) se acota con `at < fin + 1 ms`, que incluye todo 23:59:59.999. Un período en curso queda abierto, porque `nowMs` avanza cada 60 s y acotarlo lo volvería a suscribir cada minuto. `paymentEventsQueryKey` incluye tenant, inicio y fin |
+
+- **Archivos nuevos:**
+  - `apps/admin/src/lib/payment-events-query.ts`
+  - `e2e/unit/pr88-payment-events-range.spec.ts`
+  - `e2e/api/pr88-payment-events-range.contract.spec.ts`
+  - `e2e/browser/pr88-transfer-control-identity.spec.ts`
+  - `e2e/browser/harness/transfer-control-entry.tsx`
+- **Archivos modificados:**
+  - `transfer-payment-control.tsx`
+  - `use-live-payment-events.ts`
+  - `payment-presentation.ts`
+  - `metricas/page.tsx`
+  - `e2e/browser/harness/{build,page}.ts`
+  - `e2e/support/emulator-fixtures.ts`, que ahora acepta `Date` y `FixtureTimestamp` como timestamp
+- **Sin cambios en:** backend, reglas, índices, FIN-H01 ni contratos de confirmación y reversión.
+- **Pruebas:**
+  - **Unitarias (4):**
+    - Clave estable durante 120 ticks del reloj, tanto en un período en curso como en uno histórico.
+    - Cambiar el fin invalida el resultado anterior.
+    - Un período personalizado que termina hoy sigue abierto.
+  - **API en emulador, SDK cliente con reglas reales (4):**
+    - 3 eventos propios más 501 posteriores: completo, con neto 7000. La consulta abierta anterior daba 501 e Incompleto.
+    - 501 eventos dentro del período: Incompleto y sin neto.
+    - Borde inclusivo: entran .999 y .999500; no entra el 00:00:00.000 siguiente.
+    - Un cajero sin `payments.view` y un owner de otro tenant reciben `permission-denied`.
+  - **Navegador (3), componente real, sesión y Functions en emulador:**
+    - Al pasar de A a B, B no hereda modo ni motivo, y revierte con su propio `orderId`, motivo y `eventId`.
+    - Si la reversión de A sigue en vuelo al cambiar a B, cada pedido usa su propia clave de idempotencia y su propia reversión.
+    - El historial de A que llega tarde no aparece bajo B.
+- **Validación (`demo-amon-ci`):**
+  - Unitarias: 217/217.
+  - API, contratos: 158/158.
+  - FIN-H01 aislado: 2/2 (`confirmCounted` 116/4, `revertCounted` 29/1, `closeRedeclared` 31).
+  - Navegador: 28/28.
+  - Sin 500 ni `ECONNRESET`.
+  - Typecheck y `next build` de Admin, y build de Functions: OK.
+- **Emuladores:**
+  - **Preflight:** primero encontró ocupados los puertos por el stack de desarrollo `minerp-sentinel` (PID 37568 y 39884, con sus procesos padre vivos). Se autorizó detenerlos, pero cuando se volvió a inspeccionar ya habían terminado, así que no se detuvo nada. El segundo preflight salió limpio.
+  - **Postflight:** quedó huérfano el emulador de Firestore de la corrida (PID 39320), que no se tocó.
+- **Riesgo:** un período personalizado que termina hoy se acota recién cuando pasa su fin; mientras sigue en curso, la consulta es abierta, igual que antes.
 
 ## Riesgos residuales
 

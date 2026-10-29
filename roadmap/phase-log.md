@@ -43,7 +43,11 @@ Ver `roadmap/sprint-fin-01.md` (sección "Correcciones del QA humano"), `docs/ar
   - **FIN-R04:** `isOperationalDate` rechaza fechas imposibles (por ejemplo 2026-02-30) en Functions y en Admin. Esas fechas van a `unknownOrigin`, sin cambiar el neto ni FIN-H01.
   - **FIN-R05:** en la ayuda de Métricas, Escape gana sobre el foco y el hover. Hay una prueba de teclado, hover y toque en Chromium con el componente y el CSS reales.
   - Validación: unitarias 213/213, FIN-R05 en navegador 3/3, builds y typechecks afectados OK.
-- **Estado:** FIN-01 FINAL CORRECTIONS VERIFIED, sin commit.
+- **Revisión de PR #88 (Codex):**
+  - **P2-01:** `TransferPaymentControl` remonta por `tenantId:orderId` y no arrastra estado, historial ni claves de idempotencia entre pedidos.
+  - **P2-02:** la consulta de `paymentEvents` de Métricas se acota arriba en períodos históricos, y en períodos en curso queda abierta para que el reloj de 60 s no la vuelva a suscribir.
+  - Validación: unitarias 217/217, API 158 + 2, navegador 28/28.
+- **Estado:** PR #88 abierto, correcciones de la revisión verificadas.
 
 ## 2026-10-28 — FIN-01: confirmación individual y auditable de transferencias
 

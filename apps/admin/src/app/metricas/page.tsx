@@ -21,6 +21,7 @@ import { getOperationalDayStart, OPERATIONAL_DAY_CUTOFF_HOUR, toDate } from "../
 import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay, getTransferCollectionsInRange } from "../../lib/metrics";
 import { classifyOrderPayment } from "../../lib/payment-ledger";
 import { useLivePaymentEvents } from "../../hooks/use-live-payment-events";
+import { paymentEventsUntilMs } from "../../lib/payment-events-query";
 import { transferCollectionsCard } from "../../lib/payment-presentation";
 import { MetricHelp as Info } from "../../components/metrics/metric-help";
 import { useActiveTenant } from "@/components/tenant-provider";
@@ -332,7 +333,13 @@ export default function MetricasPage() {
   });
   // FIN-01: cobros confirmados salen del libro paymentEvents, no del pedido.
   // FIN-A02: solo se usan resultados de la consulta vigente (tenant + rango).
-  const paymentEventsView = useLivePaymentEvents(tenantId, range.start.getTime());
+  // PR #88 (P2-02): fin acotado solo en períodos históricos; en curso, abierto
+  // para que el reloj de 60 s no vuelva a suscribir la consulta.
+  const paymentEventsView = useLivePaymentEvents(
+    tenantId,
+    range.start.getTime(),
+    paymentEventsUntilMs(range.end.getTime(), nowMs)
+  );
   const transferCollections = useMemo(
     () => paymentEventsView.status !== "ready"
       ? null
