@@ -7,4 +7,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-& (Join-Path $PSScriptRoot "preflight-emulators.ps1") -ProjectRoot $ProjectRoot -ExpectedProjectId $ExpectedProjectId -Ports $Ports -OutputPath $OutputPath
+try {
+  & (Join-Path $PSScriptRoot "preflight-emulators.ps1") -ProjectRoot $ProjectRoot -ExpectedProjectId $ExpectedProjectId -Ports $Ports -OutputPath $OutputPath
+  if (-not $?) { throw "Preflight returned a failure status." }
+} catch {
+  Write-Error "Postflight inspection failed; no clean shutdown was certified: $($_.Exception.Message)"
+  exit 1
+}

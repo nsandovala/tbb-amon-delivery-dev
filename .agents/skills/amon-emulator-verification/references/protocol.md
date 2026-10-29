@@ -36,6 +36,19 @@ The 29 Oct 2026 report recorded CI `363/363`, FIN-H01 isolated through Playwrigh
 - Use real loopback hosting for browser harnesses so Chromium can reach emulators under Local Network Access restrictions.
 - In CI, publish preflight/postflight JSON and emulator logs as artifacts. Always fail the job on unexpected test errors; cleanup evidence must not be the reason a failed test turns green.
 
+### Pilot package gate
+
+Before executing contracts against `firebase.pilot.json`, run the same standalone-package gate used by `.github/workflows/qa.yml`:
+
+```bash
+node tools/test-prepare-firebase-pilot.mjs
+node tools/prepare-firebase-pilot.mjs
+npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
+node -e 'const p="./.firebase-pilot/functions/"; const z=require(p+"node_modules/zod/package.json").version; if (!z.startsWith("4.")) throw Error(`Expected Zod 4, got ${z}`); require(p+"lib/index.js")'
+```
+
+Run the Functions build immediately before this gate. `prepare-firebase-pilot.mjs` replaces `.firebase-pilot/functions` from the freshly compiled `apps/functions/lib`, so pilot contracts never use a residual package. A failed gate blocks the pilot run.
+
 ## Canonical AMON layers
 
 Adapt paths to the repository, but preserve the separation:
