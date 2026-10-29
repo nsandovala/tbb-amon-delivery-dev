@@ -1,7 +1,7 @@
 # Backlog — Hallazgos de QA humano de FIN-01 (28-10-2026)
 
 **Origen:** QA humano sobre la rama `feat/fin-01-transfer-confirmation` (worktree `C:\Dev\tbb-amon-fin-01`), después de la ronda FIN-A01..A03.
-**Estado:** registrado. FIN-QA-02 implementado (decisión D1); el resto sigue sin implementar. Sin commit, push, PR, merge ni deploy.
+**Estado:** registrado. FIN-QA-02 implementado (decisión D1). CASH-CLOSE-UX-01 implementado con el GO de correcciones del 29-10-2026 (ver `roadmap/sprint-fin-01.md`). El resto sigue sin implementar. Sin commit, push, PR, merge ni deploy.
 
 **Decisiones del 28-10-2026:**
 - **D1:** FIN-QA-02 entra en FIN-01.
@@ -20,7 +20,7 @@
 | ID | Prioridad | Destino | Bloquea |
 |---|---|---|---|
 | FIN-QA-02 | P1 | **Cierre de FIN-01** (aprobado D1, implementado) | Aceptación de FIN-01: la Operación debe ser coherente con el libro de pagos |
-| CASH-CLOSE-UX-01 (D3) | P1 | Diagnóstico entregado; corrección pendiente de aprobación | Comprensión del cierre por el operador |
+| CASH-CLOSE-UX-01 (D3) | P1 | **Implementado en FIN-01** (GO de correcciones, 29-10-2026) | Comprensión del cierre por el operador |
 | CHECKOUT-PAY-01 | P0 | Sprint independiente (etapa A antes del piloto Web público, D2) | Piloto Web público. No bloquea el merge de FIN-01 |
 | AUDIT-ORDER-01 | P1 | Sprint independiente (pequeño) | — |
 | HIST-01 | P1 | Sprint independiente | — |
@@ -207,6 +207,34 @@ El QA registró una venta POS con transferencia pendiente. Además, el POS inici
 - visibilidad en Pedidos y POS.
 
 **Entregable.** `docs/architecture/pickup-scheduling-contract.md`.
+
+---
+
+## CASH-COUNT-01 — Calculadora de arqueo por denominación (P2 · sprint independiente)
+
+**Origen:** auditoría complementaria del QA final (29-10-2026). Se registra sin implementar.
+
+**Necesidad.** Para llegar al "Efectivo contado" el operador suma billetes y monedas a mano.
+
+**Propuesta preliminar.**
+- Ayuda opcional del panel de Caja: cantidades por denominación CLP (billetes de $20.000 a $1.000, monedas de $500 a $10) y total calculado.
+- El total solo rellena "Efectivo contado"; el servidor sigue recibiendo un único entero.
+- Persistir el desglose en el cierre sería un campo aditivo nuevo y requiere aprobación de contrato.
+
+**Fuera de alcance:** fondo de caja inicial, turnos y múltiples cajas.
+
+---
+
+## PAGE-01 — Paginación del historial de pagos y de la bitácora (P2 · sprint independiente)
+
+**Origen:** auditoría complementaria del QA final (29-10-2026). Se registra sin implementar.
+
+**Situación actual.**
+- `listPaymentEvents` corta en 100 eventos y declara "Historial parcial" (FIN-A03).
+- La bitácora de Operación corta en 100 pagos y 25 eventos de tienda, y avisa "Pagos parciales…" (FIN-QA-02).
+- El cierre falla cerrado con más de 500 eventos por jornada (FIN-Q01).
+
+**Propuesta preliminar.** Paginación por cursor (`startAfter`) en el historial de un pedido y en la bitácora, con consulta por página y sin listener ilimitado. Coordinar con HIST-01. No cambia el tope verificable del cierre.
 
 ---
 

@@ -2,8 +2,8 @@
 
 ## Estado
 
-**IMPLEMENTED — READY FOR REVIEW.**
-- Rama `feat/fin-01-transfer-confirmation` sobre `09958d1` (post-#86), trabajada en un worktree aislado (`C:\Dev\tbb-amon-fin-01`).
+**FIN-01 FINAL CORRECTIONS VERIFIED (29-10-2026).** Pendiente de revisión humana. Ver [Correcciones del QA humano](#correcciones-del-qa-humano-29-10-2026).
+- Rama `feat/fin-01-transfer-confirmation` sobre `09958d1` (post-#86), trabajada en un worktree aislado (`C:\Dev\tbb-amon-fin-01`). Último commit `e921b76`; las correcciones siguen sin commit.
 - No hubo commit, push, PR, merge ni deploy. No se usaron Firebase real, Blaze ni bancos.
 - Contrato aprobado: v2.1 (FIN-H01, FIN-H02, FIN-Q01, FIN-Q02). Detalle en `docs/architecture/payment-confirmation-contract.md`.
 
@@ -205,6 +205,125 @@ Decisiones del 28-10-2026:
 
 **Límite de las pruebas:** la bitácora no tiene prueba de navegador. El componente React se valida por typecheck y build, y su lógica por las pruebas unitarias.
 
+## Correcciones del QA humano (29-10-2026)
+
+GO de implementación correctiva con decisiones D1–D4. Detalle del diagnóstico en [`backlog-fin-01-qa.md`](backlog-fin-01-qa.md).
+
+### Qué cambió
+
+| Ítem | Cambio |
+|---|---|
+| **FIN-CLOSE-01** (D1) | `closeCashSession` exige `discrepancy {reason (10–280), acknowledged: true, cashDifference, collectionDifference}` cuando `cashDifference ≠ 0` o `collectionDifference ≠ 0`. Sin declaración: 422 `CASH_DIFFERENCE_REASON_REQUIRED`. Si las cifras declaradas no coinciden con las recalculadas: 409 `CASH_CLOSE_DIFFERENCE_STALE` con las cifras reales en `details`. Ningún rechazo escribe. `transferDifference` (operacional) no exige motivo. Se persiste `discrepancy` con actor; el evento `cash_closed` lleva `hasDiscrepancy` y `discrepancyReason` |
+| **FIN-CLOSE-02** | El comprobante separa "Conciliación con libro de pagos" (financiera: Cuadra / Faltante / Sobrante) de "Diferencia operacional vs. entregadas" (referencial). Los cierres v1 muestran una sola fila, como se registraron |
+| **FIN-DATA-01** | `computeTransferCollections` agrega el bucket `unknownOrigin` para eventos sin `originOperationalDate` válida o con origen futuro (antes se contaban como "confirmados de la jornada"). `net` y la verificación contra el contador no cambian. El seed estampa la jornada operacional (corte 05:00, zona de la tienda) en los pedidos demo |
+| **CASH-CLOSE-UX-01** (D3) | El panel lista en `#cash-close-reasons` (con `aria-describedby` y `aria-live`) cada motivo por el que "Cerrar caja" está deshabilitado. Botón "Usar monto del libro" que solo copia la cifra: el operador debe marcar que la contrastó con el banco. Se persiste `transfersEntryMode: manual \| ledger_suggestion` y `ledgerSuggestion {suggestedAmount, bankVerified, actor}`. Sugerencia desactualizada: 409 `CASH_CLOSE_LEDGER_SUGGESTION_STALE` |
+| **UX menores** (D4) | Campos CLP con unidad y eco formateado; separadores con tokens `--ops-divider` / `--metric-divider`; ayuda de Métricas como botón accesible con `role="tooltip"`; "Referencia bancaria (opcional)" con aviso de no ingresar datos personales |
+| **Snapshots** (D2) | `summaryVersion` sigue en 2. Solo se agregan campos opcionales; los cierres v1/v2 históricos se leen sin cambios y no se reescriben |
+| **Aislamiento de pruebas** | Proyectos Playwright `contracts` y `fin-h01-isolated`. `test:e2e:api` corre en dos fases (`--project=contracts`, luego `--project=fin-h01-isolated --no-deps`), porque un filtro de ruta no se aplica a dependencias y la versión de una sola fase ejecutaba también las unitarias |
+
+**Backlog (sin implementar):** CASH-COUNT-01 (calculadora de arqueo) y PAGE-01 (paginación de eventos sobre 500).
+
+### Archivos
+
+- **Nuevos:**
+  - `apps/functions/src/schemas/cash-close.schema.ts`
+  - `apps/admin/src/lib/cash-close-presentation.ts`
+  - `packages/shared/src/seed-orders.ts`
+  - `e2e/unit/fin-01-corrections.spec.ts`
+  - `e2e/api/fin-01-corrections.contract.spec.ts`
+- **Modificados:**
+  - Backend: `apps/functions/src/lib/{payment-ledger,cash-close}.ts`, `apps/functions/src/services/cash-close.service.ts`, `apps/functions/src/routes/store.ts`
+  - Admin: `apps/admin/src/lib/{payment-ledger,api/store}.ts`, `apps/admin/src/components/operation/cash-panel.tsx`, `apps/admin/src/components/payments/transfer-payment-control.tsx`, `apps/admin/src/app/metricas/page.tsx`, `apps/admin/src/app/globals.css`
+  - Shared: `packages/shared/src/seed.ts`
+  - Pruebas: `e2e/api/{fin-01-concurrency,m6j-store-operation.contract}.spec.ts`, `e2e/support/fin-01-fixtures.ts`, `e2e/unit/fin-01-ledger.spec.ts`, `playwright.config.ts`, `package.json` (script `test:e2e:api`)
+  - Docs: `docs/architecture/{payment-confirmation,store-operation}-contract.md`, `roadmap/backlog-fin-01-qa.md`, este archivo y `roadmap/phase-log.md`
+
+### Contratos afectados
+
+- `closeCashSession` (body y códigos 409/422 nuevos, orden de validación). Ver `docs/architecture/store-operation-contract.md`.
+- `transferCollections.unknownOrigin` y la separación operacional/financiera. Ver `docs/architecture/payment-confirmation-contract.md`.
+- Sin cambios en Firestore rules, índices, FIN-H01 (lectura de `orderCounters/{D}` en la transacción), FIN-H02 ni COST-GUARD.
+
+### Pruebas nuevas
+
+- **Unitarias (18):**
+  - `unknownOrigin` y paridad entre functions y admin.
+  - Fecha operacional del seed.
+  - `evaluateDiscrepancy` y schema de entrada.
+  - Filas y etiquetas v1/v2.
+  - `cashCloseReadiness`.
+- **API (8):**
+  - Cierre sin diferencias.
+  - 422 sin motivo, más cierre justificado con evento auditado.
+  - Replay idempotente.
+  - Cierres concurrentes.
+  - Sugerencia del libro, y 409 cuando la sugerencia está desactualizada.
+  - Evento legado sin origen, que va a `unknownOrigin`.
+  - Lectura de snapshot v1.
+- **Contrato m6j:** el override ahora recorre 422, luego 409 stale, luego 201 con la discrepancia persistida.
+- **Carrera FIN-H01:** cada vez que el servidor rechaza la declaración (409/422), se vuelve a declarar con sus cifras, hasta 3 veces, y se verifica que no exista cierre parcial.
+
+### Finalization gate (29-10-2026, Windows, `demo-amon-ci`, firebase-tools 15.34.1)
+
+| Capa | Comando | Resultado |
+|---|---|---|
+| Builds y typechecks | `packages/shared` build y typecheck, `apps/functions` build, `tsc --noEmit` de admin y web, `next build` de web y admin | PASS (7/7) |
+| Unitarias | `playwright test e2e/unit` | 207/207 |
+| Paquete piloto | Gate de `qa.yml`: guard 5/5, `prepare-firebase-pilot`, `npm ci`, Zod 4.6.7, 19 exports | PASS |
+| API, emulador habitual | `emulators:exec --config firebase.json … 'npm run test:e2e:api && npm run test:e2e:browser'` | `contracts` 154/154 · `fin-h01-isolated` 2/2 |
+| Navegador | (misma corrida) | 22/22 |
+| API, paquete piloto | `emulators:exec --config firebase.pilot.json … 'npm run test:e2e:api'` | `contracts` 154/154 · `fin-h01-isolated` 2/2 |
+
+- **Sin señales de falla:** en ninguna corrida hubo 500, `ECONNRESET`, `Transaction is invalid`, `INVALID_ARGUMENT` ni `lock timeout`. Las únicas líneas `ERROR:` son pruebas negativas (membresía malformada y libro inconsistente). Localmente `retries: 0`.
+- **Resultados de la carrera FIN-H01:**
+
+  | Corrida | Confirmaciones contadas / rechazadas | Reversiones contadas / rechazadas | Cierres redeclarados | POS contadas / rechazadas |
+  |---|---|---|---|---|
+  | Habitual | 116 / 4 | 29 / 1 | 33 | 1 / 9 |
+  | Piloto | 120 / 0 | 30 / 0 | 33 | 2 / 8 |
+
+  En la habitual el cierre ganó parte de la carrera.
+- **Preflight y postflight** con los scripts de `amon-emulator-verification` (main `1eef1f7`):
+  - Preflight limpio antes de cada corrida.
+  - Tras cada corrida quedó huérfano el emulador de Firestore: PID 9736 en la habitual y PID 20612 en la piloto.
+  - El 9736 ya no existía al reinspeccionarlo con autorización, así que no hubo que detenerlo.
+  - El 20612 tampoco existía cuando se autorizó su limpieza. No se ejecutó `cleanup-authorized.ps1`, y el postflight final quedó limpio y sin procesos `java.exe`.
+
+### Correcciones finales de la auditoría cruzada (FIN-R04, FIN-R05)
+
+| Ítem | Cambio |
+|---|---|
+| **FIN-R04** | En las dos copias de `payment-ledger.ts`, `isOperationalDate()` exige el formato YYYY-MM-DD y además un día real del calendario: rechaza 2026-02-30, 2026-13-45 y 2026-02-29, y acepta 2024-02-29. El helper queda exportado para probarlo. Una fecha imposible va a `unknownOrigin`; el neto, el conteo y la verificación contra el contador (FIN-H01) no cambian |
+| **FIN-R05** | La ayuda (ⓘ) de Métricas pasa a `components/metrics/metric-help.tsx`, con su estado en `lib/metric-help.ts` (`open` y `dismissed`). El CSS reemplaza `:focus-within` por `.metric-help-button:focus-visible + .metric-help-tip`, y el hover y el foco no aplican con `data-dismissed`. Así, Escape oculta la ayuda aunque el foco o el puntero sigan encima. El segundo toque la cierra aunque el hover haya quedado pegado; salir con el puntero o con el foco la restablece |
+
+- **Archivos nuevos:**
+  - `apps/admin/src/lib/metric-help.ts`
+  - `apps/admin/src/components/metrics/metric-help.tsx`
+  - `e2e/browser/harness/metric-help-entry.tsx`
+  - `e2e/browser/fin-r05-metric-help.spec.ts`
+- **Archivos modificados:**
+  - Las dos copias de `payment-ledger.ts`
+  - `apps/admin/src/app/metricas/page.tsx` (usa `MetricHelp`)
+  - `apps/admin/src/app/globals.css`
+  - `e2e/unit/fin-01-corrections.spec.ts`
+  - `e2e/browser/harness/{build,page}.ts`, con el nuevo tipo `metric-help`: componente y CSS reales del admin, sin emuladores
+- **Pruebas:**
+  - **FIN-R04, unitarias (3):**
+    - Fechas válidas, incluidos los bisiestos 2024 y 2000.
+    - Fechas imposibles (02-30, 13-45, 04-31, 1900-02-29), mal formadas, null, undefined y número.
+    - Clasificación con una fecha imposible, null o futura: va a `unknownOrigin` con el neto intacto y paridad entre Functions y Admin.
+  - **FIN-R05, unitarias (3):** las secuencias del reducer.
+  - **FIN-R05, en Chromium (3):**
+    - Teclado: Tab muestra, Escape oculta con el foco puesto, Enter o Espacio reabren, Tab sale y Shift+Tab vuelve.
+    - Hover: entrar y salir; Escape oculta con el puntero encima.
+    - Toque: abrir, cerrar, reabrir y tocar fuera.
+  - **Control negativo:** con la regla CSS anterior, la prueba de teclado falla en "Escape oculta" (sigue visible). Se restauró el archivo y se verificó por hash.
+- **Validación:**
+  - Unitarias: 213/213.
+  - FIN-R05 en navegador: 3/3. El `--list` del navegador da 25 = 22 + 3.
+  - Build de Functions, typecheck de Admin y `next build` de Admin: OK.
+- **No se repitieron** los contratos API, las carreras FIN-H01 ni las 22 pruebas de navegador anteriores. FIN-R04 no altera ningún neto ni conteo, y el cambio al harness no modifica los entries `web` ni `pos`. La evidencia del gate sigue vigente.
+
 ## Riesgos residuales
 
 - **El emulador no es producción.** La serialización depende de un choque de lectura y escritura sobre `orderCounters/{D}`, una garantía documentada de Firestore que no depende de bloqueos de rango. Aun así, la prueba de concurrencia solo ejercita el emulador.
@@ -217,14 +336,18 @@ Decisiones del 28-10-2026:
 - **Pedidos de jornadas cerradas reciben escrituras en la proyección de pago** al confirmarse tarde. Es una excepción explícita: `status` y `totals` siguen bloqueados y el snapshot de caja no cambia.
 - **Firestore rules todavía nombran `cashCloseSessions` y `auditEvents`**, colecciones que no existen. Es un desfase documental previo, no corregido en este sprint.
 - **`roadmap/phase-log.md` versionado empieza con dos líneas de salida de herramienta pegadas** ("Warning: truncated output…"). Es previo a este sprint y no se modificó.
-- **En Windows, `emulators:exec` puede dejar huérfano el proceso Java del emulador de Firestore** (puerto 8080). Se detectó y detuvo tras cada corrida local; en CI (Linux) no aplica.
+- **En Windows, `emulators:exec` deja huérfano el proceso Java del emulador de Firestore** (puertos 8080/9150) al terminar. Se reprodujo en cada corrida local del 29-10-2026. Se registra con el pre y postflight de `amon-emulator-verification` y solo se detiene por PID con autorización. En CI (Linux) no se ha observado.
+- **500 `Transaction is invalid or closed` del emulador** cuando la carrera FIN-H01 compartía el emulador con otros archivos en paralelo. También lo reproduce el backend baseline. Mitigado aislando la carrera; la causa raíz sigue abierta (ticket aparte, toca FIN-H01).
+- **La rama "el cierre gana la carrera" depende del azar del scheduler.** No se fuerza; `CASH_DAY_CLOSED` está cubierto por contratos deterministas.
+- **El motivo de la discrepancia es texto libre** (10–280). Puede contener datos personales si el operador los escribe; el panel no lo filtra.
+- **Un ECONNRESET aislado** en la carrera POS (sesión del 29-10, emulador compartido), sin repetir ni investigar.
 
 ## Pendientes registrados (28-10-2026)
 
 - **QA visual de FIN-QA-02:** revisar en navegador la bitácora de Operación (intercalado, aviso de pagos parciales, rol sin `payments.view`).
-- **CASH-CLOSE-UX-01:** corregir el botón "Cerrar caja" según el diagnóstico de `backlog-fin-01-qa.md`. Pendiente de aprobación.
+- **CASH-CLOSE-UX-01:** implementado el 29-10-2026 (ver correcciones). Falta QA visual humano.
 - **CHECKOUT-PAY-01 etapa A:** requisito antes del piloto Web público (D2).
-- **Fallo intermitente `Transaction lock timeout`:** lo dio el emulador de Firestore en un fixture de `order-idempotency` cuando corría en paralelo con `fin-01-concurrency`. La repetición pasó; falta revisarlo y evaluar aislar la suite de concurrencia en CI.
+- **Fallo intermitente `Transaction lock timeout`:** lo dio el emulador de Firestore en un fixture de `order-idempotency` cuando corría en paralelo con `fin-01-concurrency`. La repetición pasó. Desde el 29-10-2026 la suite de concurrencia corre aislada en el proyecto `fin-h01-isolated`.
 
 ## Siguiente paso
 

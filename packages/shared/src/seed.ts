@@ -11,6 +11,7 @@ import { TBB_MODIFIER_GROUPS, TBB_MODIFIERS } from "./data/tbb/modifiers.js";
 import { TBB_SETTINGS } from "./data/tbb/settings.js";
 import { TBB_ORDERS } from "./data/tbb/orders.js";
 import { TBB_STORE_HOURS } from "./data/tbb/store-hours.js";
+import { withSeedOperationalDate } from "./seed-orders.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -194,8 +195,10 @@ async function seedStoreHours() {
 
 async function seedOrders() {
   const batch = db.batch();
+  // FIN-DATA-01: los pedidos demo nacen en la jornada actual, igual que createdAt.
+  const orders = withSeedOperationalDate(TBB_ORDERS, new Date(), TBB_STORE_HOURS.timezone);
 
-  for (const order of TBB_ORDERS) {
+  for (const order of orders) {
     const ref = db
       .collection("tenants")
       .doc(TBB_TENANT.id)

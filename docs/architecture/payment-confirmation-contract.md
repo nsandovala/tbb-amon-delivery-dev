@@ -85,6 +85,8 @@ payments: { transferEventCount: number; transferNet: number }
 
 Una confirmación o reversión exige que `cashCloses/{E}` **no exista**. Si existe → `409 CASH_DAY_CLOSED`, y la operación se registra en la jornada siguiente.
 
+**Origen desconocido (FIN-DATA-01):** si el pedido no tiene `operationalDate` (pedidos legacy o fixtures antiguos), el evento se graba con `originOperationalDate: null`: no se inventa ninguna fecha. Al agregar, `summarizeTransferCollections` clasifica en `unknownOrigin` todo origen nulo, ausente, con formato inválido, que no sea un día real del calendario (por ejemplo `2026-02-30`, FIN-R04) o posterior a D; `confirmed` exige `origin === D` y `late` exige `origin < D`. `net`, `eventCount` y el contador no cambian, así que FIN-H01 se mantiene igual.
+
 **Confirmación tardía:** un pedido de D−1 (con la caja cerrada) que se confirma en D se imputa a D, en el bucket `late`. El snapshot `cashCloses/{D−1}` no se modifica, y `getCashCloseSummary` devuelve ese snapshot para cualquier día cerrado (`summarySource: "snapshot"`). Una reversión en D de una confirmación imputada a D−1 genera un evento negativo en D.
 
 ## 4. API
@@ -140,9 +142,11 @@ Como el `eventId` deriva de la acción y la clave, reenviar la clave de una conf
 | `transferSales` / `expectedTransfers` | **Sin cambios**: transferencias entregadas, confirmadas o no |
 | `transferConfirmedSales` / `transferUnconfirmedSales` | Entregadas de la jornada, según `paymentStatus` |
 | `cancelledPaidTransfers` | Reembolso por revisar; no es ingreso |
-| `transferCollections` | `{ confirmed, late, reverted, net, eventCount, complete }` del libro, para la jornada efectiva D |
+| `transferCollections` | `{ confirmed, late, unknownOrigin?, reverted, net, eventCount, complete }` del libro, para la jornada efectiva D. `unknownOrigin` es opcional: los snapshots anteriores no lo traen y la UI lo trata como "no informado" |
 | Blocker `UNCONFIRMED_TRANSFERS` | Transferencias de D ni canceladas ni pagadas. Se puede saltar con override y motivo; el override guarda `orderIds` |
-| `collectionDifference` | `transfersConfirmed` (lo ingresado a mano, verificado en el banco) − `transferCollections.net` |
+| `collectionDifference` | `transfersConfirmed` (lo declarado por el operador desde el banco) − `transferCollections.net`. Es la **conciliación financiera**: si es ≠ 0 exige motivo (FIN-CLOSE-01) |
+| `transferDifference` | `transfersConfirmed` − `expectedTransfers` (ventas entregadas). Es una **diferencia operacional**: incluye pagos de pedidos no entregados, tardíos o de origen desconocido. No exige motivo y la UI no la rotula Faltante/Sobrante (FIN-CLOSE-02) |
+| `transfersEntryMode`, `ledgerSuggestion` | D3: `manual` o `ledger_suggestion`. La sugerencia copia el neto del libro solo si el operador declara `bankVerified: true`. El servidor exige que siga siendo el neto vigente; si no, responde `409 CASH_CLOSE_LEDGER_SUGGESTION_STALE` con el neto real. El libro nunca reemplaza la verificación bancaria |
 | `systemConfirmedTransfers`, `ledgerCounter`, `summaryVersion` | Se guardan en `cashCloses/{D}` |
 
 ### Atomicidad (FIN-H01)
@@ -195,5 +199,6 @@ Todas las consultas usan un solo campo: no se agregan índices compuestos.
 
 - No hay migración ni backfill. Los pedidos de transferencia previos quedan `paymentStatus: "pending"`, que es el valor que siempre tuvieron.
 - Los días cerrados se informan desde su snapshot v1 (sin los campos nuevos, que la UI trata como opcionales).
+- Correcciones QA (29-10-2026): `summaryVersion` se mantiene en **2** porque FIN-01 no se había integrado ni desplegado (D2). `discrepancy`, `transfersEntryMode`, `ledgerSuggestion` y `transferCollections.unknownOrigin` son campos opcionales y aditivos. Los snapshots v1 y v2 anteriores se leen sin modificarse.
 - ORDER-IDEMPOTENCY no se ve afectado: la huella de creación no incluye campos de pago, y un replay de creación después de confirmar devuelve el mismo `orderId`.
 - COST-GUARD no se ve afectado: las rutas nuevas heredan las opciones globales, usan cuerpos de 2 KB y autorizan antes de leer.

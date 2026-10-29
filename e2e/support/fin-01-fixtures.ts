@@ -38,7 +38,8 @@ export type SeedOrder = {
   paymentMethod?: string;
   paymentStatus?: string;
   total?: number;
-  operationalDate?: string;
+  /** null: pedido legacy sin `operationalDate` (FIN-DATA-01). */
+  operationalDate?: string | null;
   channel?: string;
   paymentConfirmation?: Record<string, unknown> | null;
 };
@@ -63,7 +64,7 @@ export async function seedOrder(
     items: [{ productId: "e2e-burger", productName: "E2E Burger", qty: 1, unitPrice: total }],
     totals: { subtotal: total, delivery: 0, total },
     displayCode: orderId.slice(-3),
-    operationalDate: seed.operationalDate ?? todayOperationalDate(),
+    ...(seed.operationalDate === null ? {} : { operationalDate: seed.operationalDate ?? todayOperationalDate() }),
   });
   return { orderId, total };
 }

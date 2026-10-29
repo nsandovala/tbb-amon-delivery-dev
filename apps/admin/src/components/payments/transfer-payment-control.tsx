@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { BadgeCheck, CircleAlert, RotateCcw } from "lucide-react";
 import {
   confirmTransferPaymentApi,
@@ -61,6 +61,7 @@ function isDefinitive(err: unknown): boolean {
 export function TransferPaymentControl({ tenantId, order, compact = false }: Props) {
   const [mode, setMode] = useState<"idle" | "confirm" | "revert">("idle");
   const [reference, setReference] = useState("");
+  const referenceId = useId();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,13 +172,21 @@ export function TransferPaymentControl({ tenantId, order, compact = false }: Pro
           <p className="text-xs text-neutral-200">
             ¿Verificaste en el banco un abono de <strong className="tabular-nums">{formatClp(total)}</strong> para este pedido?
           </p>
+          <label htmlFor={referenceId} className="block text-xs text-neutral-300">
+            Referencia bancaria <span className="text-neutral-500">(opcional)</span>
+          </label>
           <input
+            id={referenceId}
             value={reference}
             onChange={(event) => setReference(event.target.value)}
             maxLength={40}
-            placeholder="Referencia opcional (ej. últimos dígitos de la operación)"
+            aria-describedby={`${referenceId}-hint`}
+            placeholder="Ej: N° de operación o últimos 4 dígitos"
             className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
           />
+          <p id={`${referenceId}-hint`} className="text-[10px] text-neutral-500">
+            Sirve para encontrar el abono en la cartola. No ingreses RUT, nombre, correo ni número de cuenta.
+          </p>
           <div className="flex gap-2">
             <button type="button" disabled={busy || total <= 0} onClick={() => void confirm()} className="flex-1 rounded-md border border-emerald-500/40 bg-emerald-500/20 px-3 py-2 text-sm font-bold text-emerald-50 disabled:opacity-50">
               {busy ? "Confirmando…" : "Sí, confirmar abono"}

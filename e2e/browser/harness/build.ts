@@ -15,6 +15,14 @@ const ROOT = path.resolve(__dirname, "../../..");
 const HARNESS = __dirname;
 export const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "minerp-sentinel";
 
+/** `metric-help` (FIN-R05): solo la ayuda de Métricas, con el CSS real del admin; no usa emuladores. */
+export type HarnessKind = "web" | "pos" | "metric-help";
+const ENTRIES: Record<HarnessKind, string> = {
+  web: "web-entry.tsx",
+  pos: "pos-entry.tsx",
+  "metric-help": "metric-help-entry.tsx",
+};
+
 function aliases(app: "web" | "admin"): Plugin {
   const src = path.join(ROOT, "apps", app, "src");
   const shims: Record<string, string> = {
@@ -39,7 +47,7 @@ function aliases(app: "web" | "admin"): Plugin {
   };
 }
 
-async function bundleJs(kind: "web" | "pos"): Promise<string> {
+async function bundleJs(kind: HarnessKind): Promise<string> {
   const env = {
     NODE_ENV: "development",
     // Igual que `next dev` con emuladores: la API va por el proxy same-origin
@@ -54,7 +62,7 @@ async function bundleJs(kind: "web" | "pos"): Promise<string> {
     Object.entries(env).map(([key, value]) => [`process.env.${key}`, JSON.stringify(value)])
   );
   const result = await build({
-    entryPoints: [path.join(HARNESS, kind === "web" ? "web-entry.tsx" : "pos-entry.tsx")],
+    entryPoints: [path.join(HARNESS, ENTRIES[kind])],
     bundle: true,
     write: false,
     format: "iife",
@@ -70,7 +78,7 @@ async function bundleJs(kind: "web" | "pos"): Promise<string> {
   return result.outputFiles[0].text;
 }
 
-async function bundleCss(kind: "web" | "pos"): Promise<string> {
+async function bundleCss(kind: HarnessKind): Promise<string> {
   if (kind === "web") {
     // apps/web usa Tailwind 3 con su propia configuración.
     // Se invoca el CLI con el mismo Node (sin `.bin`, que en Windows es un `.cmd`).
@@ -93,7 +101,7 @@ async function bundleCss(kind: "web" | "pos"): Promise<string> {
   return result.css;
 }
 
-export async function bundle(kind: "web" | "pos"): Promise<{ js: string; css: string }> {
+export async function bundle(kind: HarnessKind): Promise<{ js: string; css: string }> {
   const [js, css] = await Promise.all([bundleJs(kind), bundleCss(kind)]);
   return { js, css };
 }

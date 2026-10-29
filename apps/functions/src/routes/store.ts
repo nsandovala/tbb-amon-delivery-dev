@@ -215,7 +215,11 @@ export const getCashCloseSummary = onRequest(
 
 /**
  * POST /closeCashSession  (admin)
- * Body: { countedCash, transfersConfirmed, idempotencyKey, operationalDate?, observation?, override?: { reason } }
+ * Body: { countedCash, transfersConfirmed, idempotencyKey, operationalDate?, observation?, override?: { reason },
+ *        discrepancy?: { reason, acknowledged: true, cashDifference, collectionDifference },
+ *        transfersEntryMode?: "manual" | "ledger_suggestion", ledgerSuggestion?: { suggestedAmount, bankVerified: true } }
+ * 422 CASH_DIFFERENCE_REASON_REQUIRED / 409 CASH_CLOSE_DIFFERENCE_STALE / 409 CASH_CLOSE_LEDGER_SUGGESTION_STALE
+ * devuelven las cifras recalculadas por el servidor (FIN-CLOSE-01).
  * 201 on first close, 200 when replaying the same idempotencyKey.
  */
 export const closeCashSession = onRequest(

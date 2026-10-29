@@ -22,6 +22,7 @@ import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay, getTransf
 import { classifyOrderPayment } from "../../lib/payment-ledger";
 import { useLivePaymentEvents } from "../../hooks/use-live-payment-events";
 import { transferCollectionsCard } from "../../lib/payment-presentation";
+import { MetricHelp as Info } from "../../components/metrics/metric-help";
 import { useActiveTenant } from "@/components/tenant-provider";
 type Period = "today" | "last7" | "last30" | "custom";
 type Channel = "all" | "web" | "admin_pos";
@@ -100,10 +101,6 @@ function isDemoOrder(order: AdminOrder) {
 }
 function isActiveExpense(expense: AdminExpense) {
   return (expense.status ?? "active") === "active";
-}
-
-function Info({ label }: { label: string }) {
-  return <span title={label} aria-label={label} className="ml-1 inline-flex align-middle text-current/65"><CircleHelp className="h-3.5 w-3.5" /></span>;
 }
 
 function KpiCard({

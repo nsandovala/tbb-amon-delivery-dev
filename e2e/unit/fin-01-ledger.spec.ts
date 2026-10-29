@@ -116,6 +116,7 @@ test.describe("FIN-01 · resumen de caja v2", () => {
     expect(s.transferCollections).toEqual({
       confirmed: { count: 2, total: 9000 },
       late: { count: 1, total: 1500 },
+      unknownOrigin: { count: 0, total: 0 },
       reverted: { count: 1, total: 800 },
       net: 9700,
       eventCount: 4,

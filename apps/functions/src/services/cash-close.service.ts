@@ -1,10 +1,10 @@
 import admin from "firebase-admin";
-import { z } from "zod";
 import { getDb } from "../lib/firebase-admin";
 import { AppError, ValidationError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import {
   computeCashDifferences,
+  evaluateDiscrepancy,
   summarizeCashDay,
   type CashCloseExpense,
   type CashCloseOrder,
@@ -29,6 +29,7 @@ import {
   storeRefs,
   transactionReader,
 } from "../repositories/firestore-store.repo";
+import { type CloseCashSessionInput } from "../schemas/cash-close.schema";
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -41,18 +42,8 @@ function isRealOperationalDate(value: string): boolean {
     && date.getUTCDate() === day;
 }
 
-export const closeCashSessionInputSchema = z.object({
-  tenantId: z.string().min(1).optional(),
-  operationalDate: z.string().regex(DATE_REGEX).optional(),
-  countedCash: z.number().int("countedCash must be whole CLP").min(0),
-  transfersConfirmed: z.number().int("transfersConfirmed must be whole CLP").min(0),
-  observation: z.string().trim().max(500).optional(),
-  override: z
-    .object({ reason: z.string().trim().min(5, "Override reason must be at least 5 characters").max(280) })
-    .optional(),
-  idempotencyKey: z.string().trim().min(8).max(100),
-});
-export type CloseCashSessionInput = z.infer<typeof closeCashSessionInputSchema>;
+// Schema en módulo puro (sin firebase-admin) para poder probarlo sin emulador.
+export { closeCashSessionInputSchema, type CloseCashSessionInput } from "../schemas/cash-close.schema";
 
 type Reader = {
   query: (query: admin.firestore.Query) => Promise<admin.firestore.QuerySnapshot>;
@@ -247,6 +238,62 @@ export async function closeCashSession(
     }
 
     const differences = computeCashDifferences(summary, input);
+    // FIN-CLOSE-01: las cifras recalculadas en la transacción mandan. Si el
+    // operador declaró otras (o ninguna), se devuelven las reales para que
+    // revise y vuelva a confirmar; nunca se cierra con una declaración vieja.
+    const declarationDetails = {
+      countedCash: input.countedCash,
+      transfersConfirmed: input.transfersConfirmed,
+      expectedCash: summary.expectedCash,
+      expectedTransfers: summary.expectedTransfers,
+      systemConfirmedTransfers: summary.transferCollections.net,
+      ...differences,
+    };
+    if (
+      input.transfersEntryMode === "ledger_suggestion"
+      && input.ledgerSuggestion?.suggestedAmount !== summary.transferCollections.net
+    ) {
+      throw new AppError(
+        "El libro de pagos cambió desde que copiaste la sugerencia. Revisa el importe contra el banco y vuelve a confirmar.",
+        409,
+        "CASH_CLOSE_LEDGER_SUGGESTION_STALE",
+        { ...declarationDetails, suggestedAmount: input.ledgerSuggestion?.suggestedAmount ?? null }
+      );
+    }
+    const discrepancyVerdict = evaluateDiscrepancy(differences, input.discrepancy);
+    if (discrepancyVerdict === "reason_required") {
+      throw new AppError(
+        "El arqueo tiene diferencias. Indica el motivo y confirma las cifras para cerrar con diferencia.",
+        422,
+        "CASH_DIFFERENCE_REASON_REQUIRED",
+        declarationDetails
+      );
+    }
+    if (discrepancyVerdict === "stale") {
+      throw new AppError(
+        "Las diferencias cambiaron desde que las revisaste. Revisa las cifras actualizadas y vuelve a confirmar.",
+        409,
+        "CASH_CLOSE_DIFFERENCE_STALE",
+        {
+          ...declarationDetails,
+          declared: input.discrepancy
+            ? {
+              cashDifference: input.discrepancy.cashDifference,
+              collectionDifference: input.discrepancy.collectionDifference,
+            }
+            : null,
+        }
+      );
+    }
+    const discrepancy = discrepancyVerdict === "accepted" && input.discrepancy
+      ? {
+        reason: input.discrepancy.reason,
+        acknowledged: true,
+        cashDifference: differences.cashDifference,
+        collectionDifference: differences.collectionDifference,
+        actor,
+      }
+      : null;
     const closedAtLocal = formatLocalIso(now, timezone);
     const affectsCurrentDay = operationalDate === current;
 
@@ -267,6 +314,11 @@ export async function closeCashSession(
       pendingSales: summary.pendingSales,
       activeExpenses: summary.activeExpenses,
       observation: input.observation?.trim() || null,
+      discrepancy,
+      transfersEntryMode: input.transfersEntryMode,
+      ledgerSuggestion: input.transfersEntryMode === "ledger_suggestion" && input.ledgerSuggestion
+        ? { suggestedAmount: input.ledgerSuggestion.suggestedAmount, bankVerified: true, actor }
+        : null,
       override: input.override
         ? { reason: input.override.reason, blockers: summary.blockers, actor }
         : null,
@@ -288,7 +340,7 @@ export async function closeCashSession(
         type: "cash_closed",
         source: "manual",
         actor,
-        reason: input.override?.reason ?? input.observation?.trim() ?? null,
+        reason: input.override?.reason ?? discrepancy?.reason ?? input.observation?.trim() ?? null,
         previousState: store.status.state,
         newState: affectsCurrentDay ? "closed" : store.status.state,
         reasonCode: affectsCurrentDay ? "CASH_CLOSED" : store.status.reasonCode,
@@ -299,6 +351,9 @@ export async function closeCashSession(
           collectionDifference: differences.collectionDifference,
           override: Boolean(input.override),
           blockers: summary.blockers.map((blocker) => blocker.code),
+          hasDiscrepancy: discrepancy !== null,
+          discrepancyReason: discrepancy?.reason ?? null,
+          transfersEntryMode: input.transfersEntryMode,
         },
       },
       now,
@@ -322,6 +377,9 @@ export async function closeCashSession(
       operationalDate,
       actor: actor.uid,
       cashDifference: differences.cashDifference,
+      collectionDifference: differences.collectionDifference,
+      hasDiscrepancy: discrepancy !== null,
+      transfersEntryMode: input.transfersEntryMode,
       override: Boolean(input.override),
     });
 

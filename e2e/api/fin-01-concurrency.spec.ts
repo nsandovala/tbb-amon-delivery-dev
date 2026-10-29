@@ -27,6 +27,8 @@ import {
  *   - Toda confirmación no contada recibió 409 CASH_DAY_CLOSED y no dejó evento.
  *   - Σ eventos de D = orderCounters/{D}.payments = snapshot (count y neto).
  * Variante: createPosSale concurrente con el cierre (venta en snapshot o 409).
+ * FIN-CLOSE-01: si el cierre pierde la carrera recibe 422 con las cifras reales
+ * (sin escribir) y se reconfirma con motivo; los invariantes se verifican igual.
  *
  * FIN01_CONCURRENCY_ITERATIONS ajusta las repeticiones (por defecto 30).
  */
@@ -48,7 +50,7 @@ test.afterAll(async () => {
 });
 
 test(`confirmaciones + reversión + cierre simultáneos (×${ITERATIONS})`, async () => {
-  const outcomes = { confirmCounted: 0, confirmRejected: 0, revertCounted: 0, revertRejected: 0 };
+  const outcomes = { confirmCounted: 0, confirmRejected: 0, revertCounted: 0, revertRejected: 0, closeRedeclared: 0 };
 
   for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
     const { tenantId, owner } = await createOpenFixtureTenant(api, `fin01-race-${iteration}`);
@@ -65,8 +67,13 @@ test(`confirmaciones + reversión + cierre simultáneos (×${ITERATIONS})`, asyn
 
     const confirmKeys = seeded.map(() => payKey());
     const revertKey = payKey();
-    const [closeRes, revertRes, ...confirmRes] = await Promise.all([
-      closeCash(api, owner.token, tenantId, { transfersConfirmed: 0 }),
+    // El cierre declara el neto vigente al iniciar la carrera (9000). Si otra
+    // operación entra antes, el servidor recalcula y exige revisar (FIN-CLOSE-01).
+    // Disparo simultáneo, como el baseline: un desfase artificial expone una
+    // limitación del emulador ("Transaction is invalid or closed") que también
+    // reproduce el backend baseline (ver roadmap/sprint-fin-01.md).
+    const [firstCloseRes, revertRes, ...confirmRes] = await Promise.all([
+      closeCash(api, owner.token, tenantId, { transfersConfirmed: 9000 }),
       revertTransfer(api, owner.token, {
         tenantId, orderId: toRevert.orderId, expectedConfirmationEventId: prior.data.eventId,
         reason: "carrera de QA", idempotencyKey: revertKey,
@@ -76,8 +83,29 @@ test(`confirmaciones + reversión + cierre simultáneos (×${ITERATIONS})`, asyn
       ),
     ]);
 
+    let closeRes = firstCloseRes;
+    // La declaración quedó vieja (422 sin motivo, o 409 stale si la revisión
+    // anterior también quedó atrás): nada se escribió. El operador revisa las
+    // cifras reales del servidor y vuelve a confirmar con motivo.
+    let attempts = 1;
+    for (; attempts <= 3 && [409, 422].includes(closeRes.status()); attempts += 1) {
+      const body = JSON.parse(await closeRes.text());
+      expect(["CASH_DIFFERENCE_REASON_REQUIRED", "CASH_CLOSE_DIFFERENCE_STALE"], `iter ${iteration}`).toContain(body.error?.code);
+      expect(await readDoc(api, `tenants/${tenantId}/cashCloses/${today}`), `iter ${iteration} no close on reject`).toBeNull();
+      const real = body.error.details;
+      closeRes = await closeCash(api, owner.token, tenantId, {
+        transfersConfirmed: 9000,
+        discrepancy: {
+          reason: "Carrera de QA: cobros posteriores a la revisión",
+          acknowledged: true,
+          cashDifference: real.cashDifference,
+          collectionDifference: real.collectionDifference,
+        },
+      });
+      outcomes.closeRedeclared += 1;
+    }
     const closeText = await closeRes.text();
-    expect(closeRes.status(), `iter ${iteration} close: ${closeText}`).toBe(201);
+    expect(closeRes.status(), `iter ${iteration} attempt ${attempts} close: ${closeText}`).toBe(201);
     const close = await readDoc(api, `tenants/${tenantId}/cashCloses/${today}`);
     expect(close, `iter ${iteration}`).not.toBeNull();
 

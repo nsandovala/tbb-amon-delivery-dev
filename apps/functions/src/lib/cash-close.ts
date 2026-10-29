@@ -185,3 +185,30 @@ export function computeCashDifferences(
     collectionDifference: counted.transfersConfirmed - (summary.transferCollections?.net ?? 0),
   };
 }
+
+/** Diferencias que el operador declaró haber revisado al confirmar el cierre. */
+export type DeclaredDiscrepancy = { cashDifference: number; collectionDifference: number };
+
+export type DiscrepancyVerdict = "none" | "accepted" | "reason_required" | "stale";
+
+/**
+ * FIN-CLOSE-01: una diferencia financiera (efectivo o conciliación con el libro)
+ * solo se acepta con motivo y con las MISMAS cifras que el servidor recalcula
+ * en la transacción. `transferDifference` es operacional y no exige motivo.
+ * - none: ambas diferencias en 0 y nada declarado.
+ * - accepted: declaración presente y coincidente.
+ * - reason_required: hay diferencia y no se declaró.
+ * - stale: lo declarado ya no coincide con lo recalculado (incluye declarar
+ *   una diferencia que dejó de existir). Nunca se acepta tácitamente.
+ */
+export function evaluateDiscrepancy(
+  differences: { cashDifference: number; collectionDifference: number },
+  declared: DeclaredDiscrepancy | undefined
+): DiscrepancyVerdict {
+  const hasDifference = differences.cashDifference !== 0 || differences.collectionDifference !== 0;
+  if (!declared) return hasDifference ? "reason_required" : "none";
+  return declared.cashDifference === differences.cashDifference
+    && declared.collectionDifference === differences.collectionDifference
+    ? "accepted"
+    : "stale";
+}

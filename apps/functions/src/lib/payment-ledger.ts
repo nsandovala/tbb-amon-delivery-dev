@@ -52,7 +52,7 @@ export type LedgerEvent = {
   type?: string;
   signedAmount?: number;
   effectiveOperationalDate?: string;
-  originOperationalDate?: string;
+  originOperationalDate?: string | null;
 };
 
 export type LedgerBucket = { count: number; total: number };
@@ -62,6 +62,12 @@ export type TransferCollections = {
   confirmed: LedgerBucket;
   /** Confirmaciones de pedidos de jornadas anteriores (confirmación tardía). */
   late: LedgerBucket;
+  /**
+   * FIN-DATA-01: confirmaciones cuyo pedido no tenía `operationalDate` válida
+   * (legacy/fixtures) o la tenía posterior a esta jornada. Nunca se asumen
+   * "de la misma jornada". Opcional: snapshots anteriores no lo traen.
+   */
+  unknownOrigin?: LedgerBucket;
   /** Reversiones imputadas a esta jornada (total en valor absoluto). */
   reverted: LedgerBucket;
   /** Σ signedAmount: el cobro neto de transferencias de la jornada. */
@@ -73,6 +79,19 @@ export type TransferCollections = {
    */
   complete: boolean;
 };
+
+const OPERATIONAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * FIN-R04: formato YYYY-MM-DD y además un día real del calendario. Una fecha
+ * imposible (2026-02-30, 2026-13-45) es origen desconocido, no una jornada.
+ */
+export function isOperationalDate(value: unknown): value is string {
+  if (typeof value !== "string" || !OPERATIONAL_DATE.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
 
 function amount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -90,9 +109,11 @@ export function summarizeTransferCollections(
 ): TransferCollections {
   const complete = events.length <= limit;
   const rows = events.slice(0, limit);
+  const unknownOrigin: LedgerBucket = { count: 0, total: 0 };
   const result: TransferCollections = {
     confirmed: { count: 0, total: 0 },
     late: { count: 0, total: 0 },
+    unknownOrigin,
     reverted: { count: 0, total: 0 },
     net: 0,
     eventCount: rows.length,
@@ -102,9 +123,12 @@ export function summarizeTransferCollections(
     const signed = amount(event.signedAmount);
     result.net += signed;
     if (event.type === "transfer_confirmed") {
-      const target = event.originOperationalDate && event.originOperationalDate < operationalDate
-        ? result.late
-        : result.confirmed;
+      const origin = event.originOperationalDate;
+      const target = !isOperationalDate(origin) || origin > operationalDate
+        ? unknownOrigin
+        : origin < operationalDate
+          ? result.late
+          : result.confirmed;
       target.count += 1;
       target.total += signed;
     } else if (event.type === "transfer_confirmation_reverted") {

@@ -107,9 +107,23 @@ Nunca se actualizan ni se borran. Los eventos `schedule` se registran **al obser
   // FIN-01 (summaryVersion 2, aditivo):
   summaryVersion, systemConfirmedTransfers,  // cobros de transferencia confirmados en sistema (libro paymentEvents)
   ledgerCounter,                             // orderCounters/{D}.payments verificado en la transacción
-  collectionDifference = transfersConfirmed − systemConfirmedTransfers
+  collectionDifference = transfersConfirmed − systemConfirmedTransfers,
+  // FIN-01 correcciones QA (aditivo, summaryVersion sigue en 2):
+  discrepancy: { reason, acknowledged: true, cashDifference, collectionDifference, actor } | null,
+  transfersEntryMode: "manual" | "ledger_suggestion",
+  ledgerSuggestion: { suggestedAmount, bankVerified: true, actor } | null
 }
 ```
+
+**Diferencias financieras (FIN-CLOSE-01).** Si `cashDifference ≠ 0` o `collectionDifference ≠ 0`, el cierre exige `discrepancy` con un motivo de 10 a 280 caracteres, `acknowledged: true` y **las mismas cifras** que el servidor recalcula en la transacción:
+- Sin `discrepancy` → `422 CASH_DIFFERENCE_REASON_REQUIRED`.
+- Con cifras distintas (también si se declara una diferencia que ya no existe) → `409 CASH_CLOSE_DIFFERENCE_STALE`.
+
+Ambos rechazos devuelven en `details` `{ countedCash, transfersConfirmed, expectedCash, expectedTransfers, systemConfirmedTransfers, cashDifference, transferDifference, collectionDifference }`, más `declared` en el caso stale. No escriben nada. El operador revisa las cifras reales y vuelve a confirmar: el servidor nunca acepta tácitamente una declaración desactualizada. `transferDifference` (operacional) no exige motivo. Se puede cerrar con diferencias justificadas, y el evento `cash_closed` registra `hasDiscrepancy`, `discrepancyReason`, `collectionDifference` y `transfersEntryMode`.
+
+**Sugerencia del libro (D3).** Con `transfersEntryMode: "ledger_suggestion"`, el body debe traer `ledgerSuggestion { suggestedAmount, bankVerified: true }`, y `suggestedAmount` debe ser igual a `transfersConfirmed`. Si el neto del libro cambió desde que se copió la cifra, el servidor responde `409 CASH_CLOSE_LEDGER_SUGGESTION_STALE` sin escribir; `details` trae las cifras reales y el `suggestedAmount` declarado. Con `manual`, `ledgerSuggestion` no se acepta. La sugerencia no equivale a verificación bancaria: solo deja constancia de que el operador declaró haberla contrastado.
+
+Orden de validación del cierre: caja ya cerrada (o replay) → libro truncado → libro inconsistente → pedidos activos → bloqueos sin override → sugerencia del libro desactualizada → diferencias declaradas.
 
 FIN-01: `getCashCloseSummary` de una jornada cerrada devuelve `summary` desde este snapshot (`summarySource: "snapshot"`), nunca recalculado. Ver `docs/architecture/payment-confirmation-contract.md`.
 
@@ -143,7 +157,7 @@ Las excepciones se guardan como `tenants/{tenantId}/storeExceptions/{YYYY-MM-DD}
 | `updateStoreDateException` | POST/PUT | admin | `{ exception: { date, mode, open?, close?, customerMessage? }, reason? }` |
 | `deleteStoreDateException` | POST | admin | `{ date, reason? }` elimina una excepción hoy o futura |
 | `getCashCloseSummary?tenantId=&operationalDate=` | GET | admin | Resumen del día (default: día en curso) |
-| `closeCashSession` | POST | admin | `{ countedCash, transfersConfirmed, idempotencyKey, operationalDate?, observation?, override?: { reason } }` |
+| `closeCashSession` | POST | admin | `{ countedCash, transfersConfirmed, idempotencyKey, operationalDate?, observation?, override?: { reason }, discrepancy?: { reason, acknowledged: true, cashDifference, collectionDifference }, transfersEntryMode?: "manual" \| "ledger_suggestion", ledgerSuggestion?: { suggestedAmount, bankVerified: true } }` |
 
 Auth admin: `Authorization: Bearer <Firebase ID token>` con claim `admin: true` (el mismo que `isAdmin()` en rules y `AdminGuard`). Sin token → `401`; sin claim → `403`.
 

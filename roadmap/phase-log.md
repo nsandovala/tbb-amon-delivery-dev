@@ -3,6 +3,48 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-29 — FIN-01: correcciones del QA humano (FIN-CLOSE-01/02, FIN-DATA-01, CASH-CLOSE-UX-01)
+
+### Qué cambió
+- **Diferencias financieras justificadas.**
+  - Con `cashDifference` o `collectionDifference` distinto de 0, `closeCashSession` exige un motivo y una aceptación explícita. Si faltan, responde 422 `CASH_DIFFERENCE_REASON_REQUIRED`.
+  - Si las cifras declaradas no son las que recalcula el servidor, responde 409 `CASH_CLOSE_DIFFERENCE_STALE` con las cifras reales.
+  - Ningún rechazo escribe. El motivo, el actor y los importes quedan en el snapshot y en el evento `cash_closed`.
+- **Conciliación separada de la diferencia operacional.** El comprobante distingue la conciliación con el libro de pagos (financiera) de la diferencia contra ventas entregadas (referencial). Los cierres v1 se muestran como se registraron.
+- **`unknownOrigin`.** Los eventos de pago sin jornada de origen válida, o con origen futuro, ya no se cuentan como confirmados de la jornada. `net` y la verificación contra el contador no cambian.
+- **Seed.** Los pedidos demo se crean con la jornada operacional (corte 05:00).
+- **Panel de caja.**
+  - Lista accesible de los motivos por los que no se puede cerrar.
+  - Sugerencia del importe desde el libro, que el operador debe contrastar con el banco. Queda registrada como `transfersEntryMode: ledger_suggestion`.
+  - Campos CLP con su unidad.
+- **Ayudas de UX.** Ayuda de Métricas accesible, separadores con tokens propios y aviso de no ingresar datos personales en la referencia bancaria.
+- **Pruebas.**
+  - La carrera FIN-H01 corre aislada en el proyecto Playwright `fin-h01-isolated`.
+  - `test:e2e:api` corre en dos fases y ya no arrastra las unitarias.
+
+### Por qué
+El QA humano encontró varios problemas:
+- Cierres con faltante sin explicación.
+- Una diferencia operacional presentada como si fuera faltante bancario.
+- Confirmaciones de origen desconocido contadas como de la jornada.
+- Un botón "Cerrar caja" deshabilitado sin decir por qué.
+
+### Archivos, contratos, validación, riesgos y siguiente paso
+Ver `roadmap/sprint-fin-01.md` (sección "Correcciones del QA humano"), `docs/architecture/store-operation-contract.md` y `docs/architecture/payment-confirmation-contract.md`.
+- **Contratos:** `summaryVersion` sigue en 2, solo con campos opcionales. Sin cambios en reglas, índices, FIN-H01, FIN-H02 ni COST-GUARD.
+- **Validación (gate del 29-10-2026, `demo-amon-ci`):**
+  - Builds y typechecks: OK.
+  - Unitarias: 207/207.
+  - API en emulador habitual: 154 + 2 aisladas.
+  - API en paquete piloto: 154 + 2 aisladas.
+  - Navegador: 22/22.
+  - Sin 500 ni ECONNRESET.
+- **Correcciones finales de la auditoría cruzada:**
+  - **FIN-R04:** `isOperationalDate` rechaza fechas imposibles (por ejemplo 2026-02-30) en Functions y en Admin. Esas fechas van a `unknownOrigin`, sin cambiar el neto ni FIN-H01.
+  - **FIN-R05:** en la ayuda de Métricas, Escape gana sobre el foco y el hover. Hay una prueba de teclado, hover y toque en Chromium con el componente y el CSS reales.
+  - Validación: unitarias 213/213, FIN-R05 en navegador 3/3, builds y typechecks afectados OK.
+- **Estado:** FIN-01 FINAL CORRECTIONS VERIFIED, sin commit.
+
 ## 2026-10-28 — FIN-01: confirmación individual y auditable de transferencias
 
 ### Qué cambió

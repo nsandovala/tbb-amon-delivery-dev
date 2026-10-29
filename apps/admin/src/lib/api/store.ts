@@ -119,6 +119,8 @@ export type CashCloseBlocker = CashBucket & {
 export type TransferCollections = {
   confirmed: CashBucket;
   late: CashBucket;
+  /** FIN-DATA-01: confirmaciones de pedidos sin jornada de origen conocida. Ausente en snapshots previos. */
+  unknownOrigin?: CashBucket;
   reverted: CashBucket;
   net: number;
   eventCount: number;
@@ -164,9 +166,34 @@ export type CashCloseRecord = {
   systemConfirmedTransfers?: number;
   summaryVersion?: number;
   observation: string | null;
+  /** FIN-CLOSE-01: diferencia financiera aceptada con motivo. Ausente en cierres previos. */
+  discrepancy?: {
+    reason: string;
+    acknowledged: true;
+    cashDifference: number;
+    collectionDifference: number;
+    actor: StoreActor;
+  } | null;
+  /** D3: procedencia del importe de transferencias. Ausente en cierres previos (= manual). */
+  transfersEntryMode?: TransfersEntryMode;
+  ledgerSuggestion?: { suggestedAmount: number; bankVerified: true; actor: StoreActor } | null;
   override: { reason: string } | null;
   closedBy: StoreActor;
   closedAtLocal: string;
+};
+
+export type TransfersEntryMode = "manual" | "ledger_suggestion";
+
+/** Cifras recalculadas por el servidor en los rechazos de declaración (FIN-CLOSE-01). */
+export type CashCloseDeclarationDetails = {
+  countedCash: number;
+  transfersConfirmed: number;
+  expectedCash: number;
+  expectedTransfers: number;
+  systemConfirmedTransfers: number;
+  cashDifference: number;
+  transferDifference: number;
+  collectionDifference: number;
 };
 
 export type CashCloseDay = {
@@ -313,6 +340,9 @@ export function closeCashSessionApi(
     transfersConfirmed: number;
     observation?: string;
     overrideReason?: string;
+    discrepancy?: { reason: string; cashDifference: number; collectionDifference: number };
+    /** Solo si el operador marcó que contrastó el importe con el banco. */
+    ledgerSuggestion?: { suggestedAmount: number; bankVerified: true };
     idempotencyKey: string;
   }
 ): Promise<{ replayed: boolean; close: CashCloseRecord }> {
@@ -325,6 +355,11 @@ export function closeCashSessionApi(
       transfersConfirmed: input.transfersConfirmed,
       observation: input.observation || undefined,
       override: input.overrideReason ? { reason: input.overrideReason } : undefined,
+      discrepancy: input.discrepancy ? { ...input.discrepancy, acknowledged: true } : undefined,
+      transfersEntryMode: input.ledgerSuggestion ? "ledger_suggestion" : "manual",
+      ledgerSuggestion: input.ledgerSuggestion
+        ? { suggestedAmount: input.ledgerSuggestion.suggestedAmount, bankVerified: input.ledgerSuggestion.bankVerified }
+        : undefined,
       idempotencyKey: input.idempotencyKey,
     }),
   });
