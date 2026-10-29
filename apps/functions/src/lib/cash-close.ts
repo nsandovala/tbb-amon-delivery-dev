@@ -7,7 +7,22 @@
  * - `cancelled` no suma en ninguna parte.
  * - Efectivo esperado = ventas entregadas en efectivo − gastos activos pagados en efectivo.
  * - Bloquean el cierre: cualquier pedido activo y pagos pendientes (salvo override auditado).
+ *
+ * FIN-01 (summaryVersion 2, aditivo):
+ * - `transferSales` / `expectedTransfers` conservan su semántica (transferencias entregadas).
+ * - Transferencias no confirmadas y no anuladas bloquean (`UNCONFIRMED_TRANSFERS`, con override).
+ * - Cobros confirmados = libro `paymentEvents` imputado a esta jornada efectiva.
+ * - Cancelado + pagado se informa como "reembolso por revisar": nunca es ingreso.
  */
+
+import {
+  classifyOrderPayment,
+  summarizeTransferCollections,
+  type LedgerEvent,
+  type TransferCollections,
+} from "./payment-ledger";
+
+export const CASH_SUMMARY_VERSION = 2;
 
 export const ACTIVE_ORDER_STATUSES = ["queued", "preparing", "ready", "on_the_way"] as const;
 
@@ -16,6 +31,7 @@ export type CashCloseOrder = {
   status?: string;
   channel?: string;
   paymentMethod?: string;
+  paymentStatus?: string;
   displayCode?: string;
   totals?: { total?: number };
 };
@@ -32,7 +48,8 @@ export type CashBucket = { count: number; total: number };
 export type CashCloseBlockerCode =
   | "ACTIVE_POS_SALES"
   | "ACTIVE_OTHER_ORDERS"
-  | "PENDING_PAYMENTS";
+  | "PENDING_PAYMENTS"
+  | "UNCONFIRMED_TRANSFERS";
 
 export type CashCloseBlocker = CashBucket & {
   code: CashCloseBlockerCode;
@@ -41,6 +58,7 @@ export type CashCloseBlocker = CashBucket & {
 };
 
 export type CashCloseSummary = {
+  summaryVersion: number;
   operationalDate: string;
   ordersCount: number;
   cancelledCount: number;
@@ -54,6 +72,13 @@ export type CashCloseSummary = {
   cashExpenses: CashBucket;
   expectedCash: number;
   expectedTransfers: number;
+  /** Transferencias entregadas de la jornada con pago confirmado / sin confirmar. */
+  transferConfirmedSales: CashBucket;
+  transferUnconfirmedSales: CashBucket;
+  /** Pedidos de la jornada cancelados con pago confirmado: reembolso por revisar. */
+  cancelledPaidTransfers: CashBucket;
+  /** Cobros de transferencia imputados a esta jornada efectiva (libro paymentEvents). */
+  transferCollections: TransferCollections;
   blockers: CashCloseBlocker[];
 };
 
@@ -73,6 +98,7 @@ export function summarizeCashDay(input: {
   operationalDate: string;
   orders: CashCloseOrder[];
   expenses: CashCloseExpense[];
+  paymentEvents?: LedgerEvent[];
 }): CashCloseSummary {
   const orderTotal = (order: CashCloseOrder) => amount(order.totals?.total);
   const live = input.orders.filter((order) => order.status !== "cancelled");
@@ -94,6 +120,11 @@ export function summarizeCashDay(input: {
   );
   const cashExpenses = activeExpenses.filter((expense) => expense.paymentMethod === "cash");
 
+  const transferStateOf = (order: CashCloseOrder) => classifyOrderPayment(order).transfer;
+  const deliveredTransfers = deliveredBy("transfer");
+  const unconfirmedTransfers = live.filter((order) => transferStateOf(order) === "unconfirmed");
+  const cancelledPaid = input.orders.filter((order) => transferStateOf(order) === "cancelled_paid");
+
   const cashSales = bucket(deliveredBy("cash"), orderTotal);
   const transferSales = bucket(deliveredBy("transfer"), orderTotal);
   const cashExpensesBucket = bucket(cashExpenses, (expense) => amount(expense.amount));
@@ -108,8 +139,12 @@ export function summarizeCashDay(input: {
   if (activePos.length > 0) blockers.push(toBlocker("ACTIVE_POS_SALES", activePos));
   if (activeOther.length > 0) blockers.push(toBlocker("ACTIVE_OTHER_ORDERS", activeOther));
   if (pending.length > 0) blockers.push(toBlocker("PENDING_PAYMENTS", pending));
+  if (unconfirmedTransfers.length > 0) {
+    blockers.push(toBlocker("UNCONFIRMED_TRANSFERS", unconfirmedTransfers));
+  }
 
   return {
+    summaryVersion: CASH_SUMMARY_VERSION,
     operationalDate: input.operationalDate,
     ordersCount: live.length,
     cancelledCount: input.orders.length - live.length,
@@ -123,16 +158,57 @@ export function summarizeCashDay(input: {
     cashExpenses: cashExpensesBucket,
     expectedCash: cashSales.total - cashExpensesBucket.total,
     expectedTransfers: transferSales.total,
+    transferConfirmedSales: bucket(
+      deliveredTransfers.filter((order) => transferStateOf(order) === "confirmed"),
+      orderTotal
+    ),
+    transferUnconfirmedSales: bucket(
+      deliveredTransfers.filter((order) => transferStateOf(order) === "unconfirmed"),
+      orderTotal
+    ),
+    cancelledPaidTransfers: bucket(cancelledPaid, orderTotal),
+    transferCollections: summarizeTransferCollections(input.operationalDate, input.paymentEvents ?? []),
     blockers,
   };
 }
 
 export function computeCashDifferences(
-  summary: Pick<CashCloseSummary, "expectedCash" | "expectedTransfers">,
+  summary: Pick<CashCloseSummary, "expectedCash" | "expectedTransfers"> & {
+    transferCollections?: Pick<TransferCollections, "net">;
+  },
   counted: { countedCash: number; transfersConfirmed: number }
-): { cashDifference: number; transferDifference: number } {
+): { cashDifference: number; transferDifference: number; collectionDifference: number } {
   return {
     cashDifference: counted.countedCash - summary.expectedCash,
     transferDifference: counted.transfersConfirmed - summary.expectedTransfers,
+    // FIN-01: lo verificado en el banco contra los cobros confirmados en el sistema.
+    collectionDifference: counted.transfersConfirmed - (summary.transferCollections?.net ?? 0),
   };
+}
+
+/** Diferencias que el operador declaró haber revisado al confirmar el cierre. */
+export type DeclaredDiscrepancy = { cashDifference: number; collectionDifference: number };
+
+export type DiscrepancyVerdict = "none" | "accepted" | "reason_required" | "stale";
+
+/**
+ * FIN-CLOSE-01: una diferencia financiera (efectivo o conciliación con el libro)
+ * solo se acepta con motivo y con las MISMAS cifras que el servidor recalcula
+ * en la transacción. `transferDifference` es operacional y no exige motivo.
+ * - none: ambas diferencias en 0 y nada declarado.
+ * - accepted: declaración presente y coincidente.
+ * - reason_required: hay diferencia y no se declaró.
+ * - stale: lo declarado ya no coincide con lo recalculado (incluye declarar
+ *   una diferencia que dejó de existir). Nunca se acepta tácitamente.
+ */
+export function evaluateDiscrepancy(
+  differences: { cashDifference: number; collectionDifference: number },
+  declared: DeclaredDiscrepancy | undefined
+): DiscrepancyVerdict {
+  const hasDifference = differences.cashDifference !== 0 || differences.collectionDifference !== 0;
+  if (!declared) return hasDifference ? "reason_required" : "none";
+  return declared.cashDifference === differences.cashDifference
+    && declared.collectionDifference === differences.collectionDifference
+    ? "accepted"
+    : "stale";
 }

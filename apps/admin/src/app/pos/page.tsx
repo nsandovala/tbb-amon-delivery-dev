@@ -31,6 +31,8 @@ import { StoreStatusStrip } from "@/components/store-status-strip";
 import { getHumanOrderLabel } from "../../lib/orders";
 import { OrderItemsSummary } from "../../components/order-items-summary";
 import { PosReceiptDialog } from "../../components/pos/pos-receipt-dialog";
+import { TransferPaymentControl } from "../../components/payments/transfer-payment-control";
+import type { AdminOrder } from "../../lib/firebase/queries/orders";
 import { receiptFromOrder, type PosReceipt } from "../../lib/pos-receipt";
 import { toDate } from "../../lib/time";
 import { useOperationalDayStartMs } from "../../hooks/use-operational-day";
@@ -78,6 +80,8 @@ type PosOrder = {
   channel?: string;
   total?: number;
   paymentMethod?: "pending" | "cash" | "card" | "transfer";
+  paymentStatus?: string;
+  paymentConfirmation?: AdminOrder["paymentConfirmation"];
   fulfillmentType?: "delivery" | "pickup";
   items?: { productId?: string; productName?: string; name?: string; qty?: number; unitPrice?: number }[];
   customer?: {
@@ -864,6 +868,9 @@ export default function PosPage() {
                           <p className="text-sm font-bold text-emerald-400">
                             {formatMoney(saleTotal)}
                           </p>
+                          {sale.paymentMethod === "transfer" ? (
+                            <TransferPaymentControl tenantId={tenantId} order={sale} compact />
+                          ) : null}
                         </div>
 
                         <button

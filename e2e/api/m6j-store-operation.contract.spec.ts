@@ -486,16 +486,46 @@ test.describe("M6J store operation + cash close (emulator)", () => {
 
       const expectedCash =
         deliveredSale.total + FIXTURE_PRODUCT.price + FIXTURE_PRODUCT.price * 2 - 2000;
+      const closeBody = {
+        tenantId,
+        countedCash: expectedCash - 500,
+        transfersConfirmed: 0,
+        observation: "Faltan 500 en monedas",
+        override: { reason: "Venta pendiente se cobra mañana por transferencia" },
+        idempotencyKey,
+      };
+
+      // FIN-CLOSE-01: una diferencia de efectivo sin motivo se rechaza con las cifras reales.
+      const unexplained = await api.post("closeCashSession", { headers: bearer(adminToken), data: closeBody });
+      expect(unexplained.status(), await unexplained.text()).toBe(422);
+      const unexplainedBody = await unexplained.json();
+      expect(unexplainedBody.error.code).toBe("CASH_DIFFERENCE_REASON_REQUIRED");
+      expect(unexplainedBody.error.details).toMatchObject({
+        expectedCash,
+        countedCash: expectedCash - 500,
+        cashDifference: -500,
+        collectionDifference: 0,
+      });
+
+      // Declaración con cifras distintas a las recalculadas: nunca se acepta tácitamente.
+      const discrepancy = {
+        reason: "Vuelto mal entregado en una venta",
+        acknowledged: true,
+        cashDifference: -500,
+        collectionDifference: 0,
+      };
+      const stale = await api.post("closeCashSession", {
+        headers: bearer(adminToken),
+        data: { ...closeBody, discrepancy: { ...discrepancy, cashDifference: -400 } },
+      });
+      expect(stale.status(), await stale.text()).toBe(409);
+      const staleBody = await stale.json();
+      expect(staleBody.error.code).toBe("CASH_CLOSE_DIFFERENCE_STALE");
+      expect(staleBody.error.details).toMatchObject({ cashDifference: -500, declared: { cashDifference: -400 } });
+
       const res = await api.post("closeCashSession", {
         headers: bearer(adminToken),
-        data: {
-          tenantId,
-          countedCash: expectedCash - 500,
-          transfersConfirmed: 0,
-          observation: "Faltan 500 en monedas",
-          override: { reason: "Venta pendiente se cobra mañana por transferencia" },
-          idempotencyKey,
-        },
+        data: { ...closeBody, discrepancy },
       });
       expect(res.status(), await res.text()).toBe(201);
       const { replayed, close } = (await res.json()).data;
@@ -513,6 +543,15 @@ test.describe("M6J store operation + cash close (emulator)", () => {
       expect(close.closedBy.email).toBe(adminEmail);
       expect(close.closedAtLocal).toMatch(LOCAL_ISO);
       expect(close.observation).toBe("Faltan 500 en monedas");
+      expect(close.discrepancy).toMatchObject({
+        reason: "Vuelto mal entregado en una venta",
+        acknowledged: true,
+        cashDifference: -500,
+        collectionDifference: 0,
+        actor: { email: adminEmail },
+      });
+      expect(close.transfersEntryMode).toBe("manual");
+      expect(close.ledgerSuggestion).toBeNull();
     });
 
     test("cierre de caja es idempotente por idempotencyKey", async () => {

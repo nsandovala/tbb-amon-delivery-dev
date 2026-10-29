@@ -45,6 +45,32 @@ export function deriveIdempotentOrderId(
   return id;
 }
 
+/**
+ * FIN-01: ID del evento de pago derivado de (tenant, pedido, acción, clave).
+ * Leer este documento dentro de la transacción ES la verificación de
+ * idempotencia: una clave ya usada para esa acción sobre ese pedido siempre
+ * apunta al mismo evento, aunque después haya sido revertido.
+ */
+export function derivePaymentEventId(
+  tenantId: string,
+  orderId: string,
+  action: string,
+  key: string
+): string {
+  const digest = createHash("sha256")
+    .update(`amon-payment-event:v1
+${tenantId}
+${orderId}
+${action}
+${key}`)
+    .digest();
+  let id = "";
+  for (let i = 0; i < 20; i += 1) {
+    id += BASE62[digest[i] % 62];
+  }
+  return id;
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") {

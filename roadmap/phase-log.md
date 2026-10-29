@@ -3,6 +3,83 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-10-29 — FIN-01: correcciones del QA humano (FIN-CLOSE-01/02, FIN-DATA-01, CASH-CLOSE-UX-01)
+
+### Qué cambió
+- **Diferencias financieras justificadas.**
+  - Con `cashDifference` o `collectionDifference` distinto de 0, `closeCashSession` exige un motivo y una aceptación explícita. Si faltan, responde 422 `CASH_DIFFERENCE_REASON_REQUIRED`.
+  - Si las cifras declaradas no son las que recalcula el servidor, responde 409 `CASH_CLOSE_DIFFERENCE_STALE` con las cifras reales.
+  - Ningún rechazo escribe. El motivo, el actor y los importes quedan en el snapshot y en el evento `cash_closed`.
+- **Conciliación separada de la diferencia operacional.** El comprobante distingue la conciliación con el libro de pagos (financiera) de la diferencia contra ventas entregadas (referencial). Los cierres v1 se muestran como se registraron.
+- **`unknownOrigin`.** Los eventos de pago sin jornada de origen válida, o con origen futuro, ya no se cuentan como confirmados de la jornada. `net` y la verificación contra el contador no cambian.
+- **Seed.** Los pedidos demo se crean con la jornada operacional (corte 05:00).
+- **Panel de caja.**
+  - Lista accesible de los motivos por los que no se puede cerrar.
+  - Sugerencia del importe desde el libro, que el operador debe contrastar con el banco. Queda registrada como `transfersEntryMode: ledger_suggestion`.
+  - Campos CLP con su unidad.
+- **Ayudas de UX.** Ayuda de Métricas accesible, separadores con tokens propios y aviso de no ingresar datos personales en la referencia bancaria.
+- **Pruebas.**
+  - La carrera FIN-H01 corre aislada en el proyecto Playwright `fin-h01-isolated`.
+  - `test:e2e:api` corre en dos fases y ya no arrastra las unitarias.
+
+### Por qué
+El QA humano encontró varios problemas:
+- Cierres con faltante sin explicación.
+- Una diferencia operacional presentada como si fuera faltante bancario.
+- Confirmaciones de origen desconocido contadas como de la jornada.
+- Un botón "Cerrar caja" deshabilitado sin decir por qué.
+
+### Archivos, contratos, validación, riesgos y siguiente paso
+Ver `roadmap/sprint-fin-01.md` (sección "Correcciones del QA humano"), `docs/architecture/store-operation-contract.md` y `docs/architecture/payment-confirmation-contract.md`.
+- **Contratos:** `summaryVersion` sigue en 2, solo con campos opcionales. Sin cambios en reglas, índices, FIN-H01, FIN-H02 ni COST-GUARD.
+- **Validación (gate del 29-10-2026, `demo-amon-ci`):**
+  - Builds y typechecks: OK.
+  - Unitarias: 207/207.
+  - API en emulador habitual: 154 + 2 aisladas.
+  - API en paquete piloto: 154 + 2 aisladas.
+  - Navegador: 22/22.
+  - Sin 500 ni ECONNRESET.
+- **Correcciones finales de la auditoría cruzada:**
+  - **FIN-R04:** `isOperationalDate` rechaza fechas imposibles (por ejemplo 2026-02-30) en Functions y en Admin. Esas fechas van a `unknownOrigin`, sin cambiar el neto ni FIN-H01.
+  - **FIN-R05:** en la ayuda de Métricas, Escape gana sobre el foco y el hover. Hay una prueba de teclado, hover y toque en Chromium con el componente y el CSS reales.
+  - Validación: unitarias 213/213, FIN-R05 en navegador 3/3, builds y typechecks afectados OK.
+- **Revisión de PR #88 (Codex):**
+  - **P2-01:** `TransferPaymentControl` remonta por `tenantId:orderId` y no arrastra estado, historial ni claves de idempotencia entre pedidos.
+  - **P2-02:** la consulta de `paymentEvents` de Métricas se acota arriba en períodos históricos, y en períodos en curso queda abierta para que el reloj de 60 s no la vuelva a suscribir.
+  - Validación: unitarias 217/217, API 158 + 2, navegador 28/28.
+- **Estado:** PR #88 abierto, correcciones de la revisión verificadas.
+
+## 2026-10-28 — FIN-01: confirmación individual y auditable de transferencias
+
+### Qué cambió
+- **Pago separado del estado operacional.** `paymentStatus` (`pending` / `paid`) solo cambia con `confirmTransferPayment` o `revertTransferConfirmation`. Una transferencia se puede confirmar antes de la entrega.
+- **Libro append-only `tenants/{t}/paymentEvents`.** Cada evento tiene actor, motivo o referencia, jornada efectiva y jornada de origen. El `eventId` se deriva de la clave de idempotencia, y la proyección mínima queda en el pedido.
+- **Contador `orderCounters/{D}.payments`.** Lo actualizan confirmar y revertir. `closeCashSession` lo lee en su transacción (FIN-H01) y verifica el libro contra el contador antes de cerrar (`CASH_CLOSE_INCONSISTENT` / `PAYMENT_EVENTS_LIMIT`).
+- **Confirmación tardía.** Se imputa a la jornada efectiva (zona horaria configurada y corte 05:00). Los snapshots de caja cerrada no se tocan, y los días cerrados se informan desde su snapshot.
+- **Cierre de caja v2 (aditivo).**
+  - Blocker `UNCONFIRMED_TRANSFERS` con override auditado.
+  - Buckets `transferConfirmedSales`, `transferUnconfirmedSales`, `cancelledPaidTransfers` y `transferCollections`.
+  - `collectionDifference`.
+- **Permisos y reglas.** `payments.view` y `payments.confirm_transfer` (owner y admin). Las reglas `canViewPayments` replican esa matriz, con prueba de paridad.
+- **Admin.** Confirmar o revertir desde `/pedidos` y `/pos`. El panel de caja muestra cobros confirmados y reembolsos por revisar. Métricas separa ventas registradas, ventas entregadas y cobros confirmados, con señal de datos incompletos (FIN-Q01).
+- **Corrección lateral.** Una membresía con rol o estado no reconocido responde 403 en vez de 500.
+
+### Por qué
+Elegir "transferencia" no confirmaba el abono. Caja y Métricas usaban fuentes distintas, y `paymentStatus` nunca cambiaba.
+
+### Archivos, contratos, validación, riesgos y siguiente paso
+Ver `roadmap/sprint-fin-01.md` y `docs/architecture/payment-confirmation-contract.md`.
+- **Validación:** unitarias 177/177; API 147/147 en emulador habitual y en paquete piloto (`demo-amon-ci`); navegador 22/22; builds y typechecks OK.
+- **Ronda de auditoría FIN-A01..A03:**
+  - Ningún neto truncado se muestra como monto ni se usa para conciliar.
+  - Métricas solo usa resultados de la consulta vigente de tenant y rango.
+  - El historial de pagos declara cuando es parcial.
+- **QA humano, FIN-QA-02:**
+  - La bitácora de Operación intercala confirmaciones y reversiones del libro de pagos, solo con `payments.view`, sin duplicar eventos ni tocar backend.
+  - Validación: unitarias 189/189; API 148/148 en emulador habitual y en paquete piloto; navegador 22/22.
+- **Resto de los hallazgos del QA:** backlog en `roadmap/backlog-fin-01-qa.md`.
+- **Estado:** READY FOR REVIEW, sin commit.
+
 ## 2026-10-23 — SEC-BASE: identidad, membresías y aislamiento multi-tenant
 
 ### Qué cambió

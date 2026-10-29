@@ -18,7 +18,12 @@ import { type AdminExpense } from "../../lib/firebase/queries/expenses";
 import { type AdminOrder } from "../../lib/firebase/queries/orders";
 import { auth, db } from "../../lib/firebase/client";
 import { getOperationalDayStart, OPERATIONAL_DAY_CUTOFF_HOUR, toDate } from "../../lib/time";
-import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay } from "../../lib/metrics";
+import { getOperationalNet, getPreviousMetricsRange, getTopMetricsDay, getTransferCollectionsInRange } from "../../lib/metrics";
+import { classifyOrderPayment } from "../../lib/payment-ledger";
+import { useLivePaymentEvents } from "../../hooks/use-live-payment-events";
+import { paymentEventsUntilMs } from "../../lib/payment-events-query";
+import { transferCollectionsCard } from "../../lib/payment-presentation";
+import { MetricHelp as Info } from "../../components/metrics/metric-help";
 import { useActiveTenant } from "@/components/tenant-provider";
 type Period = "today" | "last7" | "last30" | "custom";
 type Channel = "all" | "web" | "admin_pos";
@@ -97,10 +102,6 @@ function isDemoOrder(order: AdminOrder) {
 }
 function isActiveExpense(expense: AdminExpense) {
   return (expense.status ?? "active") === "active";
-}
-
-function Info({ label }: { label: string }) {
-  return <span title={label} aria-label={label} className="ml-1 inline-flex align-middle text-current/65"><CircleHelp className="h-3.5 w-3.5" /></span>;
 }
 
 function KpiCard({
@@ -330,6 +331,26 @@ export default function MetricasPage() {
     sinceMs: ordersSinceMs,
     max: LIVE_ORDERS_HARD_LIMIT,
   });
+  // FIN-01: cobros confirmados salen del libro paymentEvents, no del pedido.
+  // FIN-A02: solo se usan resultados de la consulta vigente (tenant + rango).
+  // PR #88 (P2-02): fin acotado solo en períodos históricos; en curso, abierto
+  // para que el reloj de 60 s no vuelva a suscribir la consulta.
+  const paymentEventsView = useLivePaymentEvents(
+    tenantId,
+    range.start.getTime(),
+    paymentEventsUntilMs(range.end.getTime(), nowMs)
+  );
+  const transferCollections = useMemo(
+    () => paymentEventsView.status !== "ready"
+      ? null
+      : getTransferCollectionsInRange(
+        paymentEventsView.data.map((event) => ({ type: event.type, signedAmount: event.signedAmount, at: toDate(event.at) })),
+        range,
+        paymentEventsView.complete,
+        channel
+      ),
+    [paymentEventsView, range, channel]
+  );
   const channelOrders = useMemo(() => orders.filter((order) => channel === "all" || order.channel === channel), [orders, channel]);
   const selectedOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), range)), [channelOrders, range]);
   const previousOrders = useMemo(() => channelOrders.filter((order) => within(toDate(order.createdAt), earlierRange)), [channelOrders, earlierRange]);
@@ -358,15 +379,18 @@ export default function MetricasPage() {
     const sales = validOrders.reduce((sum, order) => sum + amount(order), 0);
     const cashOrders = validOrders.filter((order) => order.paymentMethod === "cash");
     const cash = cashOrders.reduce((sum, order) => sum + amount(order), 0);
-    const transferOrders = validOrders.filter((order) => order.paymentMethod === "transfer");
-    const confirmedTransfers = transferOrders.filter((order) => order.paymentStatus === "paid");
-    const pendingTransfers = transferOrders.filter((order) => order.paymentStatus !== "paid");
+    // Clasificador compartido con el cierre de caja (FIN-01).
+    const confirmedTransfers = validOrders.filter((order) => classifyOrderPayment(order).transfer === "confirmed");
+    const pendingTransfers = validOrders.filter((order) => classifyOrderPayment(order).transfer === "unconfirmed");
+    const deliveredOrders = validOrders.filter((order) => classifyOrderPayment(order).deliveredSale);
     const pendingTransferAmount = pendingTransfers.reduce((sum, order) => sum + amount(order), 0);
     const unclassifiedOrders = validOrders.filter((order) => order.paymentMethod !== "cash" && order.paymentMethod !== "transfer");
     const unclassifiedAmount = unclassifiedOrders.reduce((sum, order) => sum + amount(order), 0);
     const expensesAmount = selectedExpenses.reduce((sum, expense) => sum + (expense.amount ?? 0), 0);
     return {
       validOrders, sales, cash, cashCount: cashOrders.length,
+      deliveredAmount: deliveredOrders.reduce((sum, order) => sum + amount(order), 0),
+      deliveredCount: deliveredOrders.length,
       confirmedTransferAmount: confirmedTransfers.reduce((sum, order) => sum + amount(order), 0),
       confirmedTransferCount: confirmedTransfers.length,
       pendingTransferAmount, pendingTransferCount: pendingTransfers.length,
@@ -379,7 +403,7 @@ export default function MetricasPage() {
     const valid = previousOrders.filter((order) => order.status !== "cancelled");
     const sales = valid.reduce((sum, order) => sum + amount(order), 0);
     const cash = valid.filter((order) => order.paymentMethod === "cash").reduce((sum, order) => sum + amount(order), 0);
-    const pendingTransfer = valid.filter((order) => order.paymentMethod === "transfer" && order.paymentStatus !== "paid").reduce((sum, order) => sum + amount(order), 0);
+    const pendingTransfer = valid.filter((order) => classifyOrderPayment(order).transfer === "unconfirmed").reduce((sum, order) => sum + amount(order), 0);
     return { sales, cash, pendingTransfer, count: valid.length, average: valid.length ? sales / valid.length : 0 };
   }, [previousOrders]);
   const paymentTotal = summary.cash + summary.confirmedTransferAmount + summary.pendingTransferAmount + summary.unclassifiedAmount;
@@ -399,7 +423,7 @@ export default function MetricasPage() {
   const paymentRows = [
     { id: "cash", label: "Efectivo", detail: `${summary.cashCount} ${summary.cashCount === 1 ? "pedido" : "pedidos"} · registrado`, amount: summary.cash, share: percent(summary.cash, paymentTotal), tone: "metric-tone-positive" },
     { id: "transfer-paid", label: "Transferencia confirmada", detail: summary.confirmedTransferCount ? `${summary.confirmedTransferCount} pedidos confirmados` : "Sin pagos confirmados en el período", amount: summary.confirmedTransferAmount, share: percent(summary.confirmedTransferAmount, paymentTotal), tone: "metric-tone-neutral" },
-    { id: "transfer-pending", label: "Transferencia pendiente", detail: summary.pendingTransferCount ? `${summary.pendingTransferCount} pedidos · por confirmar` : "Sin transferencias pendientes", amount: summary.pendingTransferAmount, share: percent(summary.pendingTransferAmount, paymentTotal), tone: "metric-tone-warning" },
+    { id: "transfer-pending", label: "Transferencia sin confirmar", detail: summary.pendingTransferCount ? `${summary.pendingTransferCount} pedidos · por confirmar` : "Sin transferencias por confirmar", amount: summary.pendingTransferAmount, share: percent(summary.pendingTransferAmount, paymentTotal), tone: "metric-tone-warning" },
     ...(summary.unclassifiedAmount > 0 ? [{ id: "other", label: "Otro método / sin clasificar", detail: `${summary.unclassifiedCount} ${summary.unclassifiedCount === 1 ? "pedido" : "pedidos"}`, amount: summary.unclassifiedAmount, share: percent(summary.unclassifiedAmount, paymentTotal), tone: "metric-tone-neutral" }] : []),
   ];
 
@@ -445,9 +469,14 @@ export default function MetricasPage() {
           <div role="alert" className="metric-error"><p className="font-semibold">No pudimos cargar las métricas.</p><p className="mt-1">{error.message.toLowerCase().includes("failed to fetch") ? "Sin conexión con Firestore. Comprueba que los emuladores estén activos." : error.message}</p></div>
         ) : <>
           <section className="metric-kpis mb-4" aria-label="Resumen del período">
-            <KpiCard label="Ventas registradas" value={money(summary.sales)} detail="Total de pedidos no anulados · período seleccionado" helper="Suma de pedidos no anulados; no significa que todos estén cobrados." tone="accent" comparison={comparison(summary.sales, previousSummary.sales)} />
+            <KpiCard label="Ventas registradas" value={money(summary.sales)} detail={`Pedidos no anulados · ventas entregadas: ${money(summary.deliveredAmount)} (${summary.deliveredCount})`} helper="Ventas registradas: pedidos no anulados. Ventas entregadas: pedidos en estado entregado. Ninguna de las dos implica cobro confirmado." tone="accent" comparison={comparison(summary.sales, previousSummary.sales)} />
             <KpiCard label="Efectivo registrado" value={money(summary.cash)} detail={`${summary.cashCount} ${summary.cashCount === 1 ? "pedido" : "pedidos"} con efectivo · validar con cierre de caja`} helper="Suma las ventas registradas con método efectivo. Validar contra el cierre de caja." comparison={comparison(summary.cash, previousSummary.cash)} />
-            <KpiCard label="Transferencia pendiente" value={money(summary.pendingTransferAmount)} detail={`${summary.pendingTransferCount} ${summary.pendingTransferCount === 1 ? "pedido" : "pedidos"} · por confirmar`} helper="Transferencias que aún no figuran como pagadas." tone="warning" comparison={comparison(summary.pendingTransferAmount, previousSummary.pendingTransfer)} />
+            <KpiCard
+              label="Cobros por transferencia confirmados"
+              {...transferCollectionsCard(paymentEventsView.status, transferCollections, money(summary.pendingTransferAmount), money)}
+              helper="Confirmaciones menos reversiones registradas en el período (libro de pagos). Se imputan a la fecha de confirmación, no a la del pedido."
+              tone="warning"
+            />
             <KpiCard label="Pedidos · ticket promedio" value={`${summary.validOrders.length} · ${money(summary.averageTicket)}`} detail="Pedidos no anulados · muestra del período" helper="El ticket promedio usa pedidos no anulados del período." comparison={comparison(summary.validOrders.length, previousSummary.count)} />
           </section>
 
@@ -464,7 +493,7 @@ export default function MetricasPage() {
           <section className="metric-smart-panel" aria-labelledby="smart-title">
             <div className="metric-smart-mark">A</div>
             <div className="min-w-0 flex-1"><p className="metric-label">Observación del período</p><h2 id="smart-title" className="metric-heading mt-1">AMON Finanzas Smart</h2>
-              <p className="metric-smart-copy mt-2">{summary.pendingTransferAmount > 0 ? <>Hay <strong>{money(summary.pendingTransferAmount)} en transferencia pendiente</strong>. </> : <>No se detectan transferencias pendientes en este período. </>}{demoOnly && summary.validOrders.length <= 5 ? "La muestra todavía es pequeña para identificar días o productos con rendimiento consistente." : summary.net === null ? `Se registran ${money(summary.expensesAmount)} en gastos activos de toda la tienda. El neto se oculta porque el filtro ${channel === "web" ? "Web" : "POS"} solo aplica a ventas.` : `Se registran ${money(summary.expensesAmount)} en gastos activos y un neto operacional preliminar de ${money(summary.net)}.`}</p>
+              <p className="metric-smart-copy mt-2">{summary.pendingTransferAmount > 0 ? <>Hay <strong>{money(summary.pendingTransferAmount)} en transferencias sin confirmar</strong>. </> : <>No se detectan transferencias sin confirmar en este período. </>}{demoOnly && summary.validOrders.length <= 5 ? "La muestra todavía es pequeña para identificar días o productos con rendimiento consistente." : summary.net === null ? `Se registran ${money(summary.expensesAmount)} en gastos activos de toda la tienda. El neto se oculta porque el filtro ${channel === "web" ? "Web" : "POS"} solo aplica a ventas.` : `Se registran ${money(summary.expensesAmount)} en gastos activos y un neto operacional preliminar de ${money(summary.net)}.`}</p>
               <p className="metric-muted mt-3 text-[11px]">Basado en pedidos y gastos · sin proyecciones ni conexión con Meta · {pendingAttribution} pedido{pendingAttribution === 1 ? "" : "s"} sin origen</p>
             </div>
             <div className="metric-smart-icon"><Users className="h-5 w-5" /></div>

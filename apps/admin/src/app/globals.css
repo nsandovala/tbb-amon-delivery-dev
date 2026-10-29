@@ -64,6 +64,8 @@ a {
   --ops-text: #f5f5f5;
   --ops-muted: #a3a3a3;
   --ops-line: rgb(255 255 255 / 0.12);
+  /* FIN-01 QA: separadores internos más discretos que los bordes de tarjeta. */
+  --ops-divider: rgb(255 255 255 / 0.06);
 }
 
 [data-admin-surface="operations"][data-theme="light"] {
@@ -74,6 +76,7 @@ a {
   --ops-text: #202821;
   --ops-muted: #5d685f;
   --ops-line: #d6ddd5;
+  --ops-divider: #e3e8e2;
   background: var(--ops-bg) !important;
   color: var(--ops-text) !important;
 }
@@ -87,6 +90,7 @@ a {
 [data-admin-surface="operations"] .ops-muted { color: var(--ops-muted); }
 [data-admin-surface="operations"] .ops-subtle { background-color: var(--ops-raised); }
 [data-admin-surface="operations"] .ops-badge { border-color: var(--ops-line); }
+[data-admin-surface="operations"] .ops-divider { border-color: var(--ops-divider); }
 
 [data-admin-surface="operations"][data-theme="light"] [class*="bg-[#"],
 [data-admin-surface="operations"][data-theme="light"] [class*="bg-black/"] {
@@ -155,6 +159,8 @@ a {
   --metric-accent: #c4a46a;
   --metric-accent-soft: rgb(196 164 106 / 0.12);
   --metric-grid: rgb(255 255 255 / 0.09);
+  /* FIN-01 QA: separadores internos más discretos que los bordes de tarjeta. */
+  --metric-divider: rgb(255 255 255 / 0.06);
   min-height: 100vh;
   background: var(--metric-bg);
   color: var(--metric-text);
@@ -171,15 +177,16 @@ a {
   --metric-accent: #805c24;
   --metric-accent-soft: #f4eedf;
   --metric-grid: rgb(32 37 33 / 0.11);
+  --metric-divider: rgb(32 37 33 / 0.08);
   color-scheme: light;
 }
 
 .metric-surface { background: var(--metric-panel); border: 1px solid var(--metric-border); border-radius: 12px; }
 .metric-panel { padding: 18px; }
 .metric-muted { color: var(--metric-muted); }
-.metric-divider > :not([hidden]) ~ :not([hidden]) { border-top: 1px solid var(--metric-border); }
+.metric-divider > :not([hidden]) ~ :not([hidden]) { border-top: 1px solid var(--metric-divider); }
 .metric-root { color: var(--metric-text); }
-.metric-context { display: flex; align-items: stretch; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--metric-border); padding-bottom: 14px; }
+.metric-context { display: flex; align-items: stretch; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--metric-divider); padding-bottom: 14px; }
 .metric-breadcrumb { display: flex; align-items: center; gap: 9px; color: var(--metric-muted); font-size: 11px; }
 .metric-breadcrumb strong { color: var(--metric-text); font-weight: 650; }
 .metric-context-items { display: flex; align-items: stretch; border: 1px solid var(--metric-border); border-radius: 10px; overflow: hidden; }
@@ -192,6 +199,13 @@ a {
 .metric-theme-button { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--metric-border); padding: 0 12px; color: var(--metric-text); font-size: 10px; transition: background .16s; }
 .metric-theme-button:hover { background: var(--metric-raised); }
 .metric-eyebrow, .metric-label { color: var(--metric-accent); font-size: 9px; font-weight: 700; letter-spacing: .17em; line-height: 1.5; text-transform: uppercase; }
+.metric-help { position: relative; display: inline-flex; margin-left: 4px; vertical-align: middle; }
+.metric-help-button { display: inline-flex; border-radius: 999px; color: inherit; opacity: .65; }
+.metric-help-button:hover, .metric-help-button:focus-visible { opacity: 1; }
+.metric-help-button:focus-visible { outline: 2px solid var(--metric-accent); outline-offset: 2px; }
+.metric-help-tip { position: absolute; top: calc(100% + 6px); left: 50%; z-index: 30; width: max-content; max-width: 240px; transform: translateX(-50%); border: 1px solid var(--metric-border); border-radius: 7px; background: var(--metric-panel); padding: 8px 10px; color: var(--metric-text); font-size: 11px; font-weight: 400; letter-spacing: normal; line-height: 1.4; text-transform: none; box-shadow: 0 10px 30px rgb(0 0 0 / .22); visibility: hidden; opacity: 0; transition: opacity .12s ease; }
+/* FIN-R05: hover y foco de teclado muestran la ayuda salvo tras Escape (data-dismissed); data-open = abierta por clic/toque. */
+.metric-help:not([data-dismissed]):hover .metric-help-tip, .metric-help:not([data-dismissed]) .metric-help-button:focus-visible + .metric-help-tip, .metric-help[data-open] .metric-help-tip { visibility: visible; opacity: 1; }
 .metric-title { color: var(--metric-text); font-size: 28px; font-weight: 720; letter-spacing: -.035em; line-height: 1.12; }
 .metric-heading { color: var(--metric-text); font-size: 16px; font-weight: 680; letter-spacing: -.015em; line-height: 1.25; }
 .metric-tag { display: inline-flex; align-items: center; align-self: center; border: 1px solid var(--metric-border); border-radius: 5px; background: var(--metric-raised); padding: 6px 9px; color: var(--metric-muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -246,7 +260,7 @@ a {
 .metric-tooltip-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; color: var(--metric-muted); font-size: 10px; }
 .metric-tooltip-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .metric-tooltip-row b { color: var(--metric-accent); }
-.metric-chart-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-top: 1px solid var(--metric-border); padding-top: 9px; color: var(--metric-muted); font-size: 9px; }
+.metric-chart-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-top: 1px solid var(--metric-divider); padding-top: 9px; color: var(--metric-muted); font-size: 9px; }
 .metric-chart-footer > span { display: inline-flex; align-items: center; gap: 5px; }
 .metric-chart-footer .metric-chart-summary { margin-left: auto; }
 .metric-legend-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--metric-raised); }
@@ -257,10 +271,10 @@ a {
 .metric-tone-warning { color: var(--metric-accent); }
 .metric-tone-neutral { color: var(--metric-muted); }
 [data-admin-surface="metrics"][data-theme="light"] .metric-tone-positive { color: #176e49; }
-.metric-product-row { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--metric-border); padding: 11px 0; }
+.metric-product-row { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--metric-divider); padding: 11px 0; }
 .metric-product-row:first-child { border-top: 0; }
 .metric-rank { color: var(--metric-accent); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.metric-empty { border-top: 1px solid var(--metric-border); padding: 29px 12px; color: var(--metric-muted); text-align: center; }
+.metric-empty { border-top: 1px solid var(--metric-divider); padding: 29px 12px; color: var(--metric-muted); text-align: center; }
 .metric-attribution-summary { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--metric-border); border-radius: 7px; background: var(--metric-raised); padding: 10px; }
 .metric-attribution-summary > div { min-width: 0; }
 .metric-note { border-top: 1px solid var(--metric-border); padding-top: 10px; color: var(--metric-muted); font-size: 10px; line-height: 1.5; }

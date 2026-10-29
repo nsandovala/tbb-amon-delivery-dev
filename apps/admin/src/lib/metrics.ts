@@ -48,3 +48,43 @@ export function getTopMetricsDay<T extends MetricsDay>(days: T[], mode: MetricsC
 export function getOperationalNet(sales: number, expenses: number, channel: MetricsChannel): number | null {
   return channel === "all" ? sales - expenses : null;
 }
+
+export type MetricsPaymentEvent = { type?: string; signedAmount?: number; at: Date | null };
+
+export type MetricsTransferCollections = {
+  /**
+   * Cobro neto (confirmaciones − reversiones) con fecha dentro del rango.
+   * null si la lectura se truncó (FIN-A01): con reversiones fuera del límite,
+   * la suma parcial no es total ni mínimo garantizado.
+   */
+  net: number | null;
+  /** Conteos de lo leído; con `complete: false` son parciales. */
+  confirmedCount: number;
+  revertedCount: number;
+  complete: boolean;
+};
+
+/**
+ * FIN-01: cobros por transferencia confirmados en el período, desde el libro
+ * `paymentEvents`. Los eventos no tienen canal: con un filtro de canal la
+ * métrica no aplica (null), igual que el neto operacional.
+ */
+export function getTransferCollectionsInRange(
+  events: MetricsPaymentEvent[],
+  range: MetricsRange,
+  complete: boolean,
+  channel: MetricsChannel
+): MetricsTransferCollections | null {
+  if (channel !== "all") return null;
+  let net = 0;
+  let confirmedCount = 0;
+  let revertedCount = 0;
+  for (const event of events) {
+    if (!event.at || event.at < range.start || event.at > range.end) continue;
+    const signed = typeof event.signedAmount === "number" && Number.isFinite(event.signedAmount) ? event.signedAmount : 0;
+    net += signed;
+    if (event.type === "transfer_confirmed") confirmedCount += 1;
+    else if (event.type === "transfer_confirmation_reverted") revertedCount += 1;
+  }
+  return { net: complete ? net : null, confirmedCount, revertedCount, complete };
+}

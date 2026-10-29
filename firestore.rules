@@ -26,6 +26,14 @@ service cloud.firestore {
         && get(membershipPath(tenantId)).data.role == role;
     }
 
+    // FIN-01: espejo de `payments.view` en apps/functions/src/lib/permissions.ts.
+    // Una prueba de paridad (e2e/unit/fin-01-ledger.spec.ts) compara esta lista
+    // de roles con la matriz de Functions.
+    function canViewPayments(tenantId) {
+      return hasActiveMembership(tenantId)
+        && get(membershipPath(tenantId)).data.role in ['owner', 'admin'];
+    }
+
     match /tenants/{tenantId} {
       // Lectura del contrato público del tenant (storefront). Sin filtros
       // sensibles — ningún dato privado vive en el documento raíz.
@@ -76,6 +84,13 @@ service cloud.firestore {
 
       match /cashCloseSessions/{sessionId} {
         allow read: if hasActiveMembership(tenantId);
+        allow write: if false;
+      }
+
+      // FIN-01: libro append-only de confirmaciones/reversiones de transferencia.
+      // Lectura solo con `payments.view`; toda escritura pasa por Functions.
+      match /paymentEvents/{eventId} {
+        allow read: if canViewPayments(tenantId);
         allow write: if false;
       }
 

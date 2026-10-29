@@ -300,7 +300,13 @@ pending | cash | card | transfer
 La venta se reconoce al entregar (devengo); el método de pago solo determina **a qué cuenta**
 entra. Registrar un `pending` como caja sería inventar plata que no está.
 
-> **No usar `paymentStatus` como señal de cobro.** El campo existe en el pedido con enum
+> **Actualización FIN-01 (2026-10-28):** `paymentStatus` ya no es un campo muerto para
+> transferencias: pasa a `paid` solo vía `confirmTransferPayment` y vuelve a `pending` vía
+> `revertTransferConfirmation`, con libro auditado en `tenants/{t}/paymentEvents`
+> (ver `docs/architecture/payment-confirmation-contract.md`). Para efectivo, tarjeta y `pending`
+> sigue sin actualizarse. R3 sigue abierto: el ERP aún no consume estos eventos.
+
+> **(Texto original, previo a FIN-01)** **No usar `paymentStatus` como señal de cobro.** El campo existe en el pedido con enum
 > `pending | paid | failed | refunded`, pero el backend lo escribe como `"pending"` al crear y
 > **ningún código lo actualiza jamás**. Es un campo muerto. El ERP no debe leerlo hasta que
 > AMON Shop tenga un flujo real de conciliación de pagos (ver R3).

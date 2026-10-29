@@ -1,9 +1,9 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Page } from "@playwright/test";
-import { bundle } from "./build";
+import { bundle, type HarnessKind } from "./build";
 
-type Kind = "web" | "pos";
+type Kind = HarnessKind;
 const bundles = new Map<Kind, Promise<{ js: string; css: string }>>();
 let origin: Promise<string> | null = null;
 
@@ -19,7 +19,7 @@ function serve(): Promise<string> {
   origin ??= new Promise((resolve) => {
     const server = http.createServer(async (req, res) => {
       const path = new URL(req.url ?? "/", "http://x").pathname;
-      const match = path.match(/^\/(web|pos)(\.js|\.css)?$/);
+      const match = path.match(/^\/(web|pos|metric-help|transfer-control)(\.js|\.css)?$/);
       if (!match) {
         res.writeHead(404).end();
         return;

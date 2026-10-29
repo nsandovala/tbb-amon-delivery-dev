@@ -22,6 +22,8 @@ export const PERMISSIONS = [
   "orders.read_private",
   "orders.update_status",
   "pos.create_sale",
+  "payments.view",
+  "payments.confirm_transfer",
   "members.manage",
 ] as const;
 
@@ -38,6 +40,11 @@ const OPERATIONAL_PERMISSIONS: Permission[] = [
   "orders.read_private",
   "orders.update_status",
   "pos.create_sale",
+  // FIN-01: lectura del libro `paymentEvents` y confirmación/reversión de
+  // transferencias. Las reglas Firestore replican esta lista de roles para
+  // `payments.view` (ver `canViewPayments` en firestore.rules).
+  "payments.view",
+  "payments.confirm_transfer",
 ];
 
 const ROLE_PERMISSIONS: Record<MembershipRole, ReadonlySet<Permission>> = {

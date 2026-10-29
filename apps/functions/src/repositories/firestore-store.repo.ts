@@ -20,6 +20,8 @@ import {
  *   tenants/{tenantId}/settings/storeOperation    active manual override + last observed state
  *   tenants/{tenantId}/storeEvents/{eventId}      append-only audit log
  *   tenants/{tenantId}/cashCloses/{operationalDate} immutable cash close, one per day
+ *   tenants/{tenantId}/orderCounters/{operationalDate} per-day control doc (FIN-01 adds `payments`)
+ *   tenants/{tenantId}/paymentEvents/{eventId}  FIN-01 append-only transfer ledger
  *
  * Firestore rules are unchanged: storeEvents and cashCloses fall under the
  * global deny, so they are only reachable through admin Functions.
@@ -45,6 +47,8 @@ export function storeRefs(tenantId: string) {
     dateException: (date: string) => tenant.collection("storeExceptions").doc(date),
     cashCloses: tenant.collection("cashCloses"),
     cashClose: (operationalDate: string) => tenant.collection("cashCloses").doc(operationalDate),
+    orderCounter: (operationalDate: string) => tenant.collection("orderCounters").doc(operationalDate),
+    paymentEvents: tenant.collection("paymentEvents"),
     orders: tenant.collection("orders"),
     expenses: tenant.collection("expenses"),
   };

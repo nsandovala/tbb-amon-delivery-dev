@@ -110,12 +110,29 @@ export type PublicStoreStatus = Omit<StoreStatus, "override"> & {
 export type CashBucket = { count: number; total: number };
 
 export type CashCloseBlocker = CashBucket & {
-  code: "ACTIVE_POS_SALES" | "ACTIVE_OTHER_ORDERS" | "PENDING_PAYMENTS";
+  code: "ACTIVE_POS_SALES" | "ACTIVE_OTHER_ORDERS" | "PENDING_PAYMENTS" | "UNCONFIRMED_TRANSFERS";
   orderIds: string[];
   displayCodes: string[];
 };
 
+/** FIN-01: cobros de transferencia imputados a la jornada efectiva (libro paymentEvents). */
+export type TransferCollections = {
+  confirmed: CashBucket;
+  late: CashBucket;
+  /** FIN-DATA-01: confirmaciones de pedidos sin jornada de origen conocida. Ausente en snapshots previos. */
+  unknownOrigin?: CashBucket;
+  reverted: CashBucket;
+  net: number;
+  eventCount: number;
+  complete: boolean;
+};
+
+/**
+ * Los campos FIN-01 son opcionales: una jornada cerrada antes de FIN-01 se
+ * informa desde su snapshot v1, que no los tiene.
+ */
 export type CashCloseSummary = {
+  summaryVersion?: number;
   operationalDate: string;
   ordersCount: number;
   cancelledCount: number;
@@ -129,6 +146,10 @@ export type CashCloseSummary = {
   cashExpenses: CashBucket;
   expectedCash: number;
   expectedTransfers: number;
+  transferConfirmedSales?: CashBucket;
+  transferUnconfirmedSales?: CashBucket;
+  cancelledPaidTransfers?: CashBucket;
+  transferCollections?: TransferCollections;
   blockers: CashCloseBlocker[];
 };
 
@@ -140,10 +161,39 @@ export type CashCloseRecord = {
   expectedTransfers: number;
   cashDifference: number;
   transferDifference: number;
+  /** FIN-01 (summaryVersion 2): transferencias verificadas − cobros confirmados en el sistema. */
+  collectionDifference?: number;
+  systemConfirmedTransfers?: number;
+  summaryVersion?: number;
   observation: string | null;
+  /** FIN-CLOSE-01: diferencia financiera aceptada con motivo. Ausente en cierres previos. */
+  discrepancy?: {
+    reason: string;
+    acknowledged: true;
+    cashDifference: number;
+    collectionDifference: number;
+    actor: StoreActor;
+  } | null;
+  /** D3: procedencia del importe de transferencias. Ausente en cierres previos (= manual). */
+  transfersEntryMode?: TransfersEntryMode;
+  ledgerSuggestion?: { suggestedAmount: number; bankVerified: true; actor: StoreActor } | null;
   override: { reason: string } | null;
   closedBy: StoreActor;
   closedAtLocal: string;
+};
+
+export type TransfersEntryMode = "manual" | "ledger_suggestion";
+
+/** Cifras recalculadas por el servidor en los rechazos de declaración (FIN-CLOSE-01). */
+export type CashCloseDeclarationDetails = {
+  countedCash: number;
+  transfersConfirmed: number;
+  expectedCash: number;
+  expectedTransfers: number;
+  systemConfirmedTransfers: number;
+  cashDifference: number;
+  transferDifference: number;
+  collectionDifference: number;
 };
 
 export type CashCloseDay = {
@@ -151,7 +201,11 @@ export type CashCloseDay = {
   isCurrentOperationalDay: boolean;
   timezone: string;
   window: { start: string; end: string };
-  summary: CashCloseSummary;
+  /** `snapshot`: jornada cerrada, cifras inmutables del cierre; `live`: recalculado ahora. */
+  summarySource?: "snapshot" | "live";
+  summary: CashCloseSummary | null;
+  /** Solo en vivo: contador `orderCounters/{D}.payments` y si coincide con el libro. */
+  ledger: { counter: { transferEventCount: number; transferNet: number }; consistent: boolean } | null;
   close: CashCloseRecord | null;
   storeState: StoreState;
 };
@@ -286,6 +340,9 @@ export function closeCashSessionApi(
     transfersConfirmed: number;
     observation?: string;
     overrideReason?: string;
+    discrepancy?: { reason: string; cashDifference: number; collectionDifference: number };
+    /** Solo si el operador marcó que contrastó el importe con el banco. */
+    ledgerSuggestion?: { suggestedAmount: number; bankVerified: true };
     idempotencyKey: string;
   }
 ): Promise<{ replayed: boolean; close: CashCloseRecord }> {
@@ -298,6 +355,11 @@ export function closeCashSessionApi(
       transfersConfirmed: input.transfersConfirmed,
       observation: input.observation || undefined,
       override: input.overrideReason ? { reason: input.overrideReason } : undefined,
+      discrepancy: input.discrepancy ? { ...input.discrepancy, acknowledged: true } : undefined,
+      transfersEntryMode: input.ledgerSuggestion ? "ledger_suggestion" : "manual",
+      ledgerSuggestion: input.ledgerSuggestion
+        ? { suggestedAmount: input.ledgerSuggestion.suggestedAmount, bankVerified: input.ledgerSuggestion.bankVerified }
+        : undefined,
       idempotencyKey: input.idempotencyKey,
     }),
   });
