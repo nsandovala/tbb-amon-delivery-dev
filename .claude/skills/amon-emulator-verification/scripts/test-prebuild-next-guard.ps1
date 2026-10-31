@@ -5,6 +5,7 @@ param()
 $ErrorActionPreference = "Stop"
 $target = Join-Path $PSScriptRoot "prebuild-next-guard.ps1"
 $global:fakeOccupied = $false
+
 function global:Get-NetTCPConnection {
   [CmdletBinding()]
   param([string]$State)
@@ -21,24 +22,28 @@ function global:Get-CimInstance {
     CommandLine = "next dev -p 3001"
   }
 }
+
+$temp = Join-Path ([IO.Path]::GetTempPath()) ("amon-prebuild-guard-test-" + [Guid]::NewGuid().ToString("N") + ".json")
 try {
   $clear = (& $target -ProjectRoot (Get-Location).Path | ConvertFrom-Json)
   if ($clear.status -ne "clear") { throw "Expected clear with no listeners." }
+
   $global:fakeOccupied = $true
-  $previous = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  $output = & $target -ProjectRoot (Get-Location).Path 2>&1
-  $ErrorActionPreference = $previous
-  $strings = @($output | Where-Object { $_ -is [string] })
-  $jsonString = $strings | Where-Object { $_.TrimStart().StartsWith("{") } | Select-Object -First 1
-  if (-not $jsonString) { throw "Expected JSON report for blocked build." }
-  $blocked = $jsonString | ConvertFrom-Json
-  if ($blocked.status -ne "blocked") { throw "Expected blocked state." }
-  if ((($output | Out-String) -notmatch "Prebuild Next.js guard: blocked")) {
-    throw "Blocked build must produce an error."
+  $caught = $false
+  try {
+    & $target -ProjectRoot (Get-Location).Path -OutputPath $temp | Out-Null
+  } catch {
+    $caught = $_.Exception.Message -like "*Prebuild Next.js guard: blocked*"
+    if (-not $caught) { throw }
   }
+  if (-not $caught) { throw "Expected blocked build to fail closed." }
+  if (-not (Test-Path -LiteralPath $temp)) { throw "Expected JSON report when blocked." }
+  $blocked = Get-Content -LiteralPath $temp -Raw | ConvertFrom-Json
+  if ($blocked.status -ne "blocked") { throw "Expected blocked state." }
+  if (@($blocked.listeners).Count -ne 1) { throw "Expected listener details in blocked report." }
   Write-Output "PASS: guard refuses an occupied Next port and does not clean it."
 } finally {
+  if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
   Remove-Item Function:\Get-NetTCPConnection -ErrorAction SilentlyContinue
   Remove-Item Function:\Get-CimInstance -ErrorAction SilentlyContinue
 }
