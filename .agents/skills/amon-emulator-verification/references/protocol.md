@@ -10,12 +10,20 @@ Make emulator-backed verification reproducible and diagnosable. The protocol sep
 2. **Ownership decision**: an empty port set is clean. A listener is allowed only when its owner and project/config are unambiguous and it is intentionally the instance for this run. Otherwise stop before tests.
 3. **Run**: use the official Firebase CLI/emulator suite. Keep automated CI on `demo-amon-ci`; do not share ports with the manual QA stack (`minerp-sentinel` in the reported incident).
 4. **Layer evidence**: unit, API emulator, browser emulator, and CI are separate claims. A compile, `--list`, mock, or offline simulation is not emulator evidence.
-5. **Postflight**: inspect the same ports and process metadata. Record clean shutdown or every residual process. A Firestore-only PID is still a lifecycle defect.
-6. **Authorized cleanup**: only after a human confirms the run is finished and identifies one orphan PID. Re-inspect immediately before termination and stop exactly that PID. Re-run postflight.
+5. **Postflight**: allow a read-only bounded grace window (default 90 seconds, polling every 10 seconds), capture shutdown_pending samples, then inspect the same ports and process metadata. Record clean shutdown or every residual process. A Firestore-only PID is still a lifecycle defect.
+6. **Authorized cleanup**: only after grace and after a human confirms the run is finished and identifies one orphan PID. Re-inspect immediately before termination and stop exactly that PID. Re-run postflight.
 
 ## Incident baseline
 
 The 29 Oct 2026 report recorded CI `363/363`, FIN-H01 isolated through Playwright projects, and a Firestore emulator left behind after `emulators:exec`: PID `33920`, ports `8080/9150`. Earlier local QA evidence showed PID `37736` on port `8080` with `cloud-firestore-emulator-v1.20.2.jar`, while other Firebase ports were not listening. These findings confirm lifecycle contamination risk; they do not alone prove that a `500` or `ECONNRESET` was caused by the orphan.
+
+## v1.1: Grace-aware lifecycle and Next.js build guard
+
+After emulators:exec, call postflight-emulators.ps1 with -GraceSeconds 90 -PollSeconds 10 (configurable). It reuses the fail-closed preflight and produces JSON with observations. Within the grace window an expected listener is labeled shutdown_pending; the final status is clean if it exits, residual if the same project's port remains past grace, ambiguous if ownership does not match, or error if inspection fails. Residual is not proof of orphan status; verify the current PID and obtain human authorization before using cleanup-authorized.ps1. No automatic Stop-Process or background cleanup.
+
+Before next build on Windows, call prebuild-next-guard.ps1. It inspects ports 3000/3001 with process metadata and fails closed on any listener, to prevent simultaneous next dev/next build writes to the same .next directory. Check custom dev ports manually. Never stop the development server automatically. On macOS use lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN and inspect Next processes manually.
+
+Synthetic scripts test-postflight-grace.ps1 and test-prebuild-next-guard.ps1 test safety logic only; they do not run real emulators, do not stop processes and cannot be cited as API/browser emulator coverage.
 
 ## Evidence matrix
 
@@ -84,7 +92,9 @@ Browser command/result:
 Playwright project and workers:
 Expected 409/422 cases:
 Unexpected 500/ECONNRESET cases:
-Postflight: clean | residual
+Postflight: clean | residual | ambiguous | error
+Shutdown grace/poll, intermediate samples:
+Next prebuild guard: clear | blocked | error | not run
 Residual PID/command/project:
 Authorized cleanup performed: yes/no (human authorization and PID)
 Unresolved risks:

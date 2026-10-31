@@ -2,7 +2,7 @@
 name: amon-emulator-verification
 description: Reusable verification protocol for AMON Shop agents running API or browser tests against official Firebase emulators. Use for orders, POS, idempotency, auth, memberships, Functions, cash closing, concurrency, and before declaring READY FOR REVIEW. It prevents emulator cross-run contamination, forbids Firebase mocks when an emulator/seed/real collection exists, isolates Playwright projects, and preserves honest evidence for 409/422 versus 500/ECONNRESET.
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # AMON Emulator Verification
@@ -19,8 +19,9 @@ Use this skill when a change touches orders, POS sales, idempotency, customer st
 6. In browser tests, use the real application, SDK, CSS, and emulator. Transport-only fault injection is allowed (`page.route`, delay/loss/drop-before-server, or a body change that produces a real 4xx). Do not invent backend responses. Serve the harness from a real loopback server; do not use `route.fulfill` as the harness server.
 7. Report evidence by layer: official emulator, non-official substitute/experiment, compile/list-only, or not run.
 8. Distinguish expected business responses (`409`, `422`) from infrastructure/application failures (`500`, `ECONNRESET`). Do not relabel the latter as success.
-9. Record emulator lifecycle evidence after the run. A residual process is an environment-isolation finding, not proof of the root cause of a transaction failure.
-10. Do not modify production code, real Firebase/Blaze resources, or repository history as part of this skill. No commit, push, PR, merge, deploy, or destructive cleanup without explicit human approval.
+9. Allow a read-only grace window (default 90s) after emulator shutdown before declaring a persistent listener residual. Record observations; a residual is not proof of an orphan. Record emulator lifecycle evidence after the run. A residual process is an environment-isolation finding, not proof of the root cause of a transaction failure.
+10. Before Next.js builds inspect ports 3000/3001 and check for active next dev in the same worktree; block unsafe concurrent .next writes and do not kill the dev server.
+11. Do not modify production code, real Firebase/Blaze resources, or repository history as part of this skill. No commit, push, PR, merge, deploy, or destructive cleanup without explicit human approval.
 
 ## Workflow
 
@@ -37,6 +38,8 @@ Claude agents use the equivalent `.\.claude\skills\amon-emulator-verification\sc
 If a listener is found, stop and inspect the report. Confirm the process belongs to this run and the project/config is correct before proceeding. If it is an unrelated or ambiguous process, ask the human to resolve it.
 
 ### 2. Build and unit layer
+
+On Windows run scripts/prebuild-next-guard.ps1 from the installed skill before invoking next build. It fails closed on occupied ports 3000/3001 or inspection errors. Custom ports must be inspected manually.
 
 Run the repository's normal builds, typechecks, and unit tests. Unit tests may use pure test doubles for pure logic, but they must not be presented as emulator evidence.
 
@@ -60,10 +63,10 @@ Run the real browser configuration against the emulator. Keep FIN-H01 in its own
 After the command exits, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\.agents\skills\amon-emulator-verification\scripts\postflight-emulators.ps1 -ProjectRoot (Get-Location).Path -ExpectedProjectId demo-amon-ci -OutputPath .\artifacts\emulator-postflight.json
+powershell -NoProfile -ExecutionPolicy Bypass -File .\.agents\skills\amon-emulator-verification\scripts\postflight-emulators.ps1 -ProjectRoot (Get-Location).Path -ExpectedProjectId demo-amon-ci -GraceSeconds 90 -PollSeconds 10 -OutputPath .\artifacts\emulator-postflight.json
 ```
 
-If a process remains, record it. Do not terminate it automatically. Use the cleanup script only after a human authorizes a specific PID and the report still identifies it as an orphan from the completed run. The cleanup script is never part of the default verification command.
+The postflight observes shutdown_pending while waiting, then outputs clean, residual, ambiguous or error. A residual PID is not automatically an orphan. If a process remains, record it. Do not terminate it automatically. Use the cleanup script only after a human authorizes a specific PID and the report still identifies it as an orphan from the completed run. The cleanup script is never part of the default verification command.
 
 ## Required report
 
