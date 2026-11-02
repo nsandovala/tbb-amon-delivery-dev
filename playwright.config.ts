@@ -13,11 +13,12 @@ const FIN_H01_RACE = "**/fin-01-concurrency.spec.ts";
 
 export default defineConfig({
   testDir: "./e2e",
-  // Las pruebas de navegador tienen su propia configuración (playwright.browser.config.ts).
-  testIgnore: ["**/browser/**"],
+  // Las pruebas de navegador y de hosting tienen su propia configuración
+  // (playwright.browser.config.ts, playwright.hosting.config.ts).
+  testIgnore: ["**/browser/**", "**/hosting/**"],
   fullyParallel: false,
   projects: [
-    { name: "contracts", testIgnore: ["**/browser/**", FIN_H01_RACE] },
+    { name: "contracts", testIgnore: ["**/browser/**", "**/hosting/**", FIN_H01_RACE] },
     {
       name: "fin-h01-isolated",
       testMatch: FIN_H01_RACE,

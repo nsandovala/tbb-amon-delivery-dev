@@ -19,6 +19,9 @@
 node_modules
 **/node_modules/
 **/.next/
+# HOSTING-SPIKE-01: build estático de Next (NEXT_OUTPUT=export)
+apps/web/out/
+apps/admin/out/
 **/*.log
 .env
 .env.local

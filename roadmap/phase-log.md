@@ -1199,3 +1199,10 @@ git diff --check
 - CR-04: `truncated` persistente; con historial truncado, la verificación es ambigua.
 - CR-05: el aviso de recuperación vive dentro del checkout abierto.
 - Validación: 146 unitarias; 122 contratos y 22 pruebas de navegador compiladas. La ejecución con el emulador oficial de Firestore queda pendiente en el PC.
+
+## 2026-11-01 — HOSTING-SPIKE-01: Firebase Hosting estático (resultado favorable, pendiente checklist en PC)
+
+- Web y admin se exportan como sitios estáticos con `NEXT_OUTPUT=export` (opcional; los builds normales no cambian). `/tienda/[slug]` usa `generateStaticParams` (`NEXT_PUBLIC_STORE_SLUGS`, por defecto `tbb`). Una URL explícita de Functions tiene prioridad sobre el proxy de `next dev`.
+- `firebase.hosting.json`: dos targets (`web`, `admin`), `cleanUrls`, redirección `/` → `/pedidos` en admin y caché inmutable para `/_next/static/**`.
+- Validado con los emuladores oficiales de Hosting, Auth y Functions: rutas, 404, redirección, cabeceras, login y llamada directa a Functions con CORS. Sin errores de JavaScript. La carga de datos con el emulador oficial de Firestore queda pendiente en el PC.
+- Detalle y checklist: `roadmap/sprint-hosting-spike.md`.
