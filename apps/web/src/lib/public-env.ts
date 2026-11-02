@@ -9,7 +9,10 @@
  *
  * En desarrollo y en los builds normales el comportamiento no cambia.
  */
-const PRODUCTION_BUILD = process.env.AMON_BUILD_TARGET === "production";
+// TBB-TABLET-PREVIEW-01: la vista previa tampoco conserva valores locales (fail-closed),
+// aunque en ese build este módulo no debería llegar al bundle.
+const PRODUCTION_BUILD =
+  process.env.AMON_BUILD_TARGET === "production" || process.env.AMON_BUILD_TARGET === "preview";
 
 const HAS_EXPLICIT_FUNCTIONS_BASE = Boolean(process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL);
 

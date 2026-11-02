@@ -3,6 +3,30 @@ Total output lines: 901
 
 # Phase Log
 
+## 2026-11-02 — TBB-TABLET-PREVIEW-01: vista previa estática para tablet (web)
+
+### Qué cambió
+- Nuevo build `AMON_BUILD_TARGET=preview` (`tools/build-preview.mjs`): la carta sale del seed de TBB y los módulos de Firestore y Functions de la web se sustituyen al compilar por `apps/web/src/preview/`. Crear o verificar pedidos falla con `PREVIEW_DISABLED` sin hacer solicitudes.
+- Escaneo de `out/` (sin SDK de Firebase, URLs de Google/Functions, endpoints, API keys ni hosts locales; exige la marca `amon-preview-build`). `build-hosting.mjs` rechaza esa marca en producción.
+- `firebase.preview-web.json`: solo Hosting, con CSP `connect-src 'self'`, `noindex` y `no-referrer`.
+- `tools/deploy-preview.mjs`: única vía para publicar en un canal temporal (≤ 7d), con `--project` obligatorio y rechazo de `minerp-sentinel`, `demo-*` y del canal live.
+- Pruebas: `tools/test-preview.mjs` (29), `e2e/preview` en perfiles Galaxy Tab S4 y workflow `tablet-preview.yml`.
+
+### Por qué
+Mostrar Web (y luego Admin) en una tablet sin backend ni datos reales, en un proyecto Spark independiente.
+
+### Archivos y contratos
+Ver `docs/architecture/tablet-preview-contract.md` y `roadmap/sprint-tbb-tablet-preview-01.md`. Sin cambios de API ni de Firestore.
+
+### Validación
+`node tools/test-preview.mjs` 29/29; `node tools/test-build-hosting.mjs` 28/28; tsc web/admin; unitarias 234; build productivo de web sin código de vista previa; `npm run test:e2e:preview` 4 pasadas y 2 omitidas (cabeceras en Windows).
+
+### Riesgos
+Admin pendiente de decisión (sus páginas usan el SDK directamente). En Windows el emulador de Hosting no aplica cabeceras. Nada publicado todavía.
+
+### Próximo paso
+Decidir la fuente de datos del Admin y aprobar la primera publicación del canal `tablet-web`.
+
 ## 2026-10-29 — FIN-01: correcciones del QA humano (FIN-CLOSE-01/02, FIN-DATA-01, CASH-CLOSE-UX-01)
 
 ### Qué cambió

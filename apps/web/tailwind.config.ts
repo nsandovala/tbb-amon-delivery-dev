@@ -5,6 +5,8 @@ export default {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    // TBB-TABLET-PREVIEW-01: módulos que solo usa el build de vista previa.
+    "./src/preview/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {

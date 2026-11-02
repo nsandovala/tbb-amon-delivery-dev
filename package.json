@@ -19,8 +19,10 @@
     "test:e2e:api": "playwright test e2e/api --config=playwright.config.ts --project=contracts && playwright test e2e/api --config=playwright.config.ts --project=fin-h01-isolated --no-deps",
     "test:e2e:browser": "playwright test --config=playwright.browser.config.ts",
     "test:e2e:hosting": "playwright test --config=playwright.hosting.config.ts",
+    "test:e2e:preview": "playwright test --config=playwright.preview.config.ts",
     "build:hosting:web": "node tools/build-hosting.mjs --app web",
-    "build:hosting:admin": "node tools/build-hosting.mjs --app admin"
+    "build:hosting:admin": "node tools/build-hosting.mjs --app admin",
+    "build:preview:web": "node tools/build-preview.mjs --app web"
   },
   "devDependencies": {  
     "@playwright/test": "^1.60.0",

@@ -44,8 +44,18 @@ const BASE_REQUIRED = [
 /** Valores que nunca deben llegar a un build productivo (comparación sin mayúsculas). */
 const FORBIDDEN_VALUE_MARKERS = ["localhost", "127.0.0.1", "0.0.0.0", "demo-", "minerp-sentinel", "minierp-sentinel"];
 
-/** Marcadores prohibidos en los artefactos de `out/`. */
-const FORBIDDEN_ARTIFACT_MARKERS = ["127.0.0.1", "localhost:", "minerp-sentinel", "minierp-sentinel", "demo-amon-ci"];
+/**
+ * Marcadores prohibidos en los artefactos de `out/`. `amon-preview-build` es la
+ * marca de la vista previa (TBB-TABLET-PREVIEW-01): su código nunca llega a producción.
+ */
+const FORBIDDEN_ARTIFACT_MARKERS = [
+  "127.0.0.1",
+  "localhost:",
+  "minerp-sentinel",
+  "minierp-sentinel",
+  "demo-amon-ci",
+  "amon-preview-build",
+];
 const TEXT_ARTIFACT = /\.(html|js|mjs|css|json|txt|map|xml|webmanifest)$/i;
 
 const PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;

@@ -15,10 +15,10 @@ export default defineConfig({
   testDir: "./e2e",
   // Las pruebas de navegador y de hosting tienen su propia configuración
   // (playwright.browser.config.ts, playwright.hosting.config.ts).
-  testIgnore: ["**/browser/**", "**/hosting/**"],
+  testIgnore: ["**/browser/**", "**/hosting/**", "**/preview/**"],
   fullyParallel: false,
   projects: [
-    { name: "contracts", testIgnore: ["**/browser/**", "**/hosting/**", FIN_H01_RACE] },
+    { name: "contracts", testIgnore: ["**/browser/**", "**/hosting/**", "**/preview/**", FIN_H01_RACE] },
     {
       name: "fin-h01-isolated",
       testMatch: FIN_H01_RACE,
