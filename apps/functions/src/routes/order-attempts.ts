@@ -1,4 +1,4 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { z } from "zod";
 import { requireMembershipPermission } from "../lib/authz";
 import { AppError, ValidationError } from "../lib/errors";
@@ -29,8 +29,7 @@ const lookupSchema = z.object({
  * - Canal POS: exige membresía activa con `pos.create_sale` en el tenant.
  * - Tenant explícito, sin fallback. Costo: 1 lectura (+ autorización en POS).
  */
-export const lookupOrderAttempt = onRequest(
-  { cors: true },
+export const lookupOrderAttempt = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") {

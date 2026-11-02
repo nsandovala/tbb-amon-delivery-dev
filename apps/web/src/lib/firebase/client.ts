@@ -4,12 +4,10 @@ import {
   getFirestore,
   type Firestore,
 } from "firebase/firestore";
+import { FIREBASE_CONFIG, FIRESTORE_EMULATOR_HOST, USE_FIRESTORE_EMULATOR } from "../public-env";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "dev",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "dev",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "minerp-sentinel",
-};
+// DEPLOY-READY-01: sin valores de desarrollo en un build productivo (ver public-env).
+const firebaseConfig = FIREBASE_CONFIG;
 
 const globalForFirebase = globalThis as typeof globalThis & {
   __web_firebase_app__?: FirebaseApp;
@@ -34,9 +32,8 @@ function getFirestoreInstance(): Firestore {
 
   const firestore = getFirestore(getFirebaseAppInstance());
 
-  const useEmulator = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
-  const emulatorHost =
-    process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
+  const useEmulator = USE_FIRESTORE_EMULATOR;
+  const emulatorHost = FIRESTORE_EMULATOR_HOST;
 
   if (
     typeof window !== "undefined" &&

@@ -1,4 +1,5 @@
-import { onRequest, type Request } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { createExpenseSchema } from "../schemas/expense.schema";
 import { handleCreateExpense } from "../services/expenses.service";
 import { requireMembershipPermission } from "../lib/authz";
@@ -20,8 +21,7 @@ function resolveTenantFromBody(req: Request): string | null {
  * POST /createExpense
  * Admin-only: requiere membresía activa con `expenses.create` en el tenant.
  */
-export const createExpense = onRequest(
-  { cors: true },
+export const createExpense = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") {

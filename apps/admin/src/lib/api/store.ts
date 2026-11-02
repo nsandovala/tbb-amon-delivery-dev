@@ -1,18 +1,11 @@
 import { auth } from "../firebase/client";
+import { FUNCTIONS_BASE } from "../public-env";
 
 /**
  * M6J — cliente HTTP de horario operativo y cierre de caja.
  * Los endpoints de control exigen ID token con claim `admin` (mismo claim que AdminGuard).
  * Contrato: docs/architecture/store-operation-contract.md
  */
-
-const USE_EMULATOR = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
-// HOSTING-SPIKE-01: una URL explícita de Functions tiene prioridad sobre el
-// proxy `/api/functions`, que solo existe en `next dev` (rewrite). En un build
-// estático no hay proxy: el navegador llama directo a Functions.
-const FUNCTIONS_BASE =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??
-  (USE_EMULATOR ? "/api/functions" : "http://127.0.0.1:5001/minerp-sentinel/us-central1");
 
 export type StoreState =
   | "scheduled_closed"

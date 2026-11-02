@@ -9,12 +9,10 @@ import {
   getAuth,
   type Auth,
 } from "firebase/auth";
+import { AUTH_EMULATOR_URL, FIREBASE_CONFIG, FIRESTORE_EMULATOR_HOST, USE_EMULATOR } from "../public-env";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "dev",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "dev",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "minerp-sentinel",
-};
+// DEPLOY-READY-01: sin valores de desarrollo en un build productivo (ver public-env).
+const firebaseConfig = FIREBASE_CONFIG;
 
 const globalForFirebase = globalThis as typeof globalThis & {
   __admin_firebase_app__?: FirebaseApp;
@@ -41,9 +39,8 @@ function getFirestoreInstance(): Firestore {
 
   const firestore = getFirestore(getFirebaseAppInstance());
 
-  const useEmulator = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
-  const emulatorHost =
-    process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
+  const useEmulator = USE_EMULATOR;
+  const emulatorHost = FIRESTORE_EMULATOR_HOST;
 
   if (
     typeof window !== "undefined" &&
@@ -75,19 +72,19 @@ function getAuthInstance(): Auth {
 
   const auth = getAuth(getFirebaseAppInstance());
 
-  const useEmulator = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
+  const useEmulator = USE_EMULATOR;
 
   if (
     typeof window !== "undefined" &&
     useEmulator &&
     !globalForFirebase.__admin_auth_emulator_connected__
   ) {
-    connectAuthEmulator(auth, "http://127.0.0.1:9099", {
+    connectAuthEmulator(auth, AUTH_EMULATOR_URL, {
       disableWarnings: true,
     });
     globalForFirebase.__admin_auth_emulator_connected__ = true;
 
-    console.log("[admin/firebase] Auth emulator connected at 127.0.0.1:9099");
+    console.log(`[admin/firebase] Auth emulator connected at ${AUTH_EMULATOR_URL}`);
   }
 
   globalForFirebase.__admin_auth__ = auth;

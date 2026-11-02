@@ -1206,3 +1206,13 @@ git diff --check
 - `firebase.hosting.json`: dos targets (`web`, `admin`), `cleanUrls`, redirección `/` → `/pedidos` en admin y caché inmutable para `/_next/static/**`.
 - Validado con los emuladores oficiales de Hosting, Auth y Functions: rutas, 404, redirección, cabeceras, login y llamada directa a Functions con CORS. Sin errores de JavaScript. La carga de datos con el emulador oficial de Firestore queda pendiente en el PC.
 - Detalle y checklist: `roadmap/sprint-hosting-spike.md`.
+
+## 2026-11-02 — DEPLOY-READY-01 Fase A: seguridad y configuración (local, sin commit)
+
+- A1: `tools/build-hosting.mjs` (`npm run build:hosting:web|admin`) valida el entorno efectivo de `next build` (incluido `.env.local`), compila el export con `AMON_BUILD_TARGET=production` y revisa `out/`. `src/lib/public-env.ts` en web/admin elimina del bundle productivo los respaldos `dev`/`minerp-sentinel`/`127.0.0.1`. CI: 28 guards + build con proyecto ficticio.
+- A2: CORS por allowlist en las 19 Functions (`onRequestWithCors`); producción solo `AMON_CORS_ALLOWED_ORIGINS`, fail-closed. Contrato: `docs/architecture/cors-contract.md`.
+- A3: fallback de tenant en `createOrder`/`getStoreStatus` preparado y NO aplicado (cambio contractual, espera aprobación).
+- A4: sin exposición actual (roles solo owner/admin); riesgo futuro al agregar roles.
+- A5: `bootstrap-owner.mjs` exige `--project` coherente con el entorno; `set-admin-claim.mjs` solo en emulador.
+- Validación: builds, typechecks, 234 unitarias y guards OK. Emulador oficial `firebase.json`: 212 + 2 aprobadas. `firebase.pilot.json`: 212 + 2 aprobadas. Residual Java del emulador de Firestore tras cada corrida en Windows (PID 23080 sin terminar).
+- Detalle: `roadmap/sprint-deploy-ready-01.md`.

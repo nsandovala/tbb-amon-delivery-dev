@@ -1,4 +1,5 @@
-import { onRequest, type Request } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { requireMembershipPermission } from "../lib/authz";
 import { ValidationError, AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
@@ -62,8 +63,7 @@ function methodNotAllowed(res: Res, allowed: string): void {
  * GET /getStoreStatus?tenantId=tbb
  * Public, safe status for storefront/POS/kitchen screens (no actor, no reasons).
  */
-export const getStoreStatus = onRequest(
-  { cors: true },
+export const getStoreStatus = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");
@@ -79,8 +79,7 @@ export const getStoreStatus = onRequest(
  * GET /getStoreControl?tenantId=tbb  (admin)
  * Full status, schedule config and recent audit events for the control room.
  */
-export const getStoreControl = onRequest(
-  { cors: true },
+export const getStoreControl = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");
@@ -98,8 +97,7 @@ export const getStoreControl = onRequest(
  * POST /setStoreOperation  (admin)
  * Body: { action: "open" | "close" | "resume_schedule", reason?: string }
  */
-export const setStoreOperation = onRequest(
-  { cors: true },
+export const setStoreOperation = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
@@ -121,8 +119,7 @@ export const setStoreOperation = onRequest(
  * POST /updateStoreHours  (admin)
  * Body: { config: StoreHoursConfig, reason?: string }
  */
-export const updateStoreHours = onRequest(
-  { cors: true },
+export const updateStoreHours = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST" && req.method !== "PUT") return methodNotAllowed(res, "POST/PUT");
@@ -149,8 +146,7 @@ export const updateStoreHours = onRequest(
  * POST /updateStoreDateException (admin)
  * Body: { exception: { date, mode, open?, close?, customerMessage? }, reason? }
  */
-export const updateStoreDateException = onRequest(
-  { cors: true },
+export const updateStoreDateException = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST" && req.method !== "PUT") return methodNotAllowed(res, "POST/PUT");
@@ -172,8 +168,7 @@ export const updateStoreDateException = onRequest(
  * POST /deleteStoreDateException (admin)
  * Body: { date: "YYYY-MM-DD", reason? }
  */
-export const deleteStoreDateException = onRequest(
-  { cors: true },
+export const deleteStoreDateException = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
@@ -194,8 +189,7 @@ export const deleteStoreDateException = onRequest(
 /**
  * GET /getCashCloseSummary?tenantId=tbb&operationalDate=YYYY-MM-DD  (admin)
  */
-export const getCashCloseSummary = onRequest(
-  { cors: true },
+export const getCashCloseSummary = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");
@@ -222,8 +216,7 @@ export const getCashCloseSummary = onRequest(
  * devuelven las cifras recalculadas por el servidor (FIN-CLOSE-01).
  * 201 on first close, 200 when replaying the same idempotencyKey.
  */
-export const closeCashSession = onRequest(
-  { cors: true },
+export const closeCashSession = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
