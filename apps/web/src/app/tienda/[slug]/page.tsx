@@ -1,133 +1,20 @@
-"use client";
+import StorePage from "./store-page";
 
-import { PendingOrderNotice } from "@/components/store/pending-order-notice";
-import { use, useEffect, useState } from "react";
-import { getTenantBySlug } from "@/lib/firebase/queries/tenants";
-import { getTenantCategories } from "@/lib/firebase/queries/categories";
-import { getTenantProducts } from "@/lib/firebase/queries/products";
-import { StoreHeader } from "@/components/store/store-header";
-import { CartDrawer } from "@/components/cart/cart-drawer";
-import { HeroSection } from "@/components/store/hero-section";
-import { StorefrontClient } from "@/components/store/storefront-client";
-import { StoreSpecialDates } from "@/components/store/store-special-dates";
-import type { Category, Product, Tenant } from "@/types";
-
-interface StorePageProps {
-  params: Promise<{ slug: string }>;
+/**
+ * HOSTING-SPIKE-01: en un build estático (`NEXT_OUTPUT=export`) cada tienda se
+ * genera de antemano. Los slugs salen de `NEXT_PUBLIC_STORE_SLUGS` (separados
+ * por coma; por defecto `tbb`). Agregar una tienda requiere volver a construir.
+ * Con servidor Next (dev o standalone) cualquier slug sigue resolviéndose al vuelo.
+ * Los datos de la tienda se cargan igual que antes, desde el navegador.
+ */
+export function generateStaticParams() {
+  return (process.env.NEXT_PUBLIC_STORE_SLUGS ?? "tbb")
+    .split(",")
+    .map((slug) => slug.trim())
+    .filter(Boolean)
+    .map((slug) => ({ slug }));
 }
 
-export default function StorePage({ params }: StorePageProps) {
-  const { slug } = use(params);
-  const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadStorefront() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const nextTenant = await getTenantBySlug(slug);
-        if (cancelled) return;
-
-        if (!nextTenant) {
-          setTenant(null);
-          setCategories([]);
-          setProducts([]);
-          return;
-        }
-
-        const [nextCategories, nextProducts] = await Promise.all([
-          getTenantCategories(nextTenant.id),
-          getTenantProducts(nextTenant.id),
-        ]);
-
-        if (cancelled) return;
-
-        setTenant(nextTenant);
-        setCategories(nextCategories);
-        setProducts(nextProducts);
-      } catch (loadError) {
-        if (cancelled) return;
-        const message =
-          loadError instanceof Error
-            ? loadError.message
-            : "No pudimos cargar la tienda.";
-        setError(message);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadStorefront();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-8 text-center flex-col gap-4">
-        <h1 className="text-2xl font-bold text-white">Cargando tienda</h1>
-        <p className="text-neutral-400">Estamos trayendo el cat&aacute;logo de {slug}.</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-8 text-center flex-col gap-4">
-        <h1 className="text-2xl font-bold text-white">Algo sali&oacute; mal</h1>
-        <p className="text-neutral-400">{error}</p>
-      </div>
-    );
-  }
-
-  if (!tenant) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-8 text-center flex-col gap-4">
-        <h1 className="text-2xl font-bold text-white">Tienda no encontrada</h1>
-        <p className="text-neutral-400">No existe una tienda con el slug &quot;{slug}&quot;.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#0B0B0B] relative flex flex-col pb-24 overflow-x-hidden">
-      {/* Background Subtle Glow */}
-      <div className="pointer-events-none fixed inset-0 z-0 flex justify-center">
-        <div className="absolute top-[-20%] w-[1000px] aspect-square bg-[radial-gradient(circle,rgba(0,255,156,0.08),transparent_70%)] opacity-80" />
-      </div>
-
-      <div className="relative z-10 w-full">
-        <StoreHeader tenantName={tenant.name} />
-      </div>
-
-      <StoreSpecialDates tenantId={tenant.id} />
-
-      <main className="relative z-10 flex-1 w-full max-w-[1400px] mx-auto flex flex-col">
-        <HeroSection />
-
-        <StorefrontClient 
-          categories={categories} 
-          products={products} 
-          city={tenant.location?.city} 
-        />
-      </main>
-
-      {/* Cart Drawer */}
-      <CartDrawer tenantId={tenant.id} />
-
-      {/* ORDER-IDEMPOTENCY: intento de compra sin confirmar o en conflicto */}
-      <PendingOrderNotice tenantId={tenant.id} />
-    </div>
-  );
+export default function Page({ params }: { params: Promise<{ slug: string }> }) {
+  return <StorePage params={params} />;
 }

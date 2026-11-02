@@ -5,10 +5,12 @@ import type {
 } from "../firebase/queries/expenses";
 
 const USE_EMULATOR = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";
-const FUNCTIONS_BASE = USE_EMULATOR
-  ? "/api/functions"
-  : (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??
-    "http://127.0.0.1:5001/minerp-sentinel/us-central1");
+// HOSTING-SPIKE-01: una URL explícita de Functions tiene prioridad sobre el
+// proxy `/api/functions`, que solo existe en `next dev` (rewrite). En un build
+// estático no hay proxy: el navegador llama directo a Functions.
+const FUNCTIONS_BASE =
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??
+  (USE_EMULATOR ? "/api/functions" : "http://127.0.0.1:5001/minerp-sentinel/us-central1");
 
 interface ApiError {
   ok: false;
