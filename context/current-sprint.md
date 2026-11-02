@@ -1,5 +1,7 @@
 # Current Sprint
 
+> **2026-11-02 — LEER PRIMERO:** `roadmap/handoff-2026-11-02.md`. La meta real es un deploy simple de AMON real a la web; la preview simulada (TBB-TABLET-PREVIEW-01) quedó DETENIDA por Nelson.
+
 ## Sprint: backend-1
 
 **Goal:** Move AMON Delivery to backend-first writes without breaking current storefront, POS, and orders panel.
