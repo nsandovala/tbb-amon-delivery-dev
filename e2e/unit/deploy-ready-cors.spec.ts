@@ -111,6 +111,7 @@ test.describe("applyCors", () => {
     expect(ex.status()).toBe(204);
     expect(ex.headers["access-control-allow-origin"]).toBe(SITE);
     expect(ex.headers["access-control-allow-methods"]).toContain("POST");
+    expect(ex.headers["access-control-allow-methods"]).toContain("PUT");
     expect(ex.headers["access-control-allow-headers"]).toBe("Authorization, Content-Type");
   });
 
