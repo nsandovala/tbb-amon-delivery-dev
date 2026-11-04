@@ -1,15 +1,4 @@
-const HAS_EXPLICIT_FUNCTIONS_BASE = Boolean(
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL
-);
-const USE_EMULATOR =
-  process.env.NEXT_PUBLIC_USE_EMULATOR === "true" ||
-  (process.env.NODE_ENV === "development" && !HAS_EXPLICIT_FUNCTIONS_BASE);
-// HOSTING-SPIKE-01: una URL explícita de Functions tiene prioridad sobre el
-// proxy `/api/functions`, que solo existe en `next dev` (rewrite). En un build
-// estático no hay proxy: el navegador llama directo a Functions.
-const FUNCTIONS_BASE =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ??
-  (USE_EMULATOR ? "/api/functions" : "http://127.0.0.1:5001/minerp-sentinel/us-central1");
+import { FUNCTIONS_BASE } from "../public-env";
 
 interface ApiError {
   ok: false;

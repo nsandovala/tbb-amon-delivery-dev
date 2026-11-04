@@ -1,4 +1,4 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { createOrderSchema } from "../schemas/create-order.schema";
 import { handleCreateOrder, handleGetOrder } from "../services/orders.service";
 import { ValidationError, AppError } from "../lib/errors";
@@ -14,8 +14,7 @@ const DEFAULT_TENANT = "tbb";
  * POST /orders
  * Creates a new order in tenants/{tenantId}/orders.
  */
-export const createOrder = onRequest(
-  { cors: true },
+export const createOrder = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") {
@@ -77,8 +76,7 @@ const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
  * distingue un pedido existente de uno inexistente (401/403 antes de 404).
  * No es un endpoint de tracking público; ese contrato queda para otro sprint.
  */
-export const getOrder = onRequest(
-  { cors: true },
+export const getOrder = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") {

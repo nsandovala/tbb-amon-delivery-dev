@@ -101,7 +101,7 @@ $u = Invoke-RestMethod -Method Post -ContentType "application/json" `
   -Uri "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key" `
   -Body '{"email":"owner@demo.amon.test","password":"demo-password-123","returnSecureToken":true}'
 $env:FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099"; $env:GCLOUD_PROJECT = "demo-amon-ci"
-node tools/bootstrap-owner.mjs --tenant tbb --uid $u.localId --created-by-uid system:bootstrap
+node tools/bootstrap-owner.mjs --project demo-amon-ci --tenant tbb --uid $u.localId --created-by-uid system:bootstrap
 ```
 
 Abrir:

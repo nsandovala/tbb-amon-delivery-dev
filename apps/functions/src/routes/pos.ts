@@ -1,4 +1,5 @@
-import { onRequest, type Request } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { updateOrderStatusSchema } from "../schemas/update-order-status.schema";
 import { createPosSaleSchema } from "../schemas/create-pos-sale.schema";
 import { handleUpdateOrderStatus } from "../services/orders.service";
@@ -28,8 +29,7 @@ function readTenantFromQueryOrBody(req: Request): string {
  * Transitions an order to a new status.
  * Validates transition rules at service/repository layer.
  */
-export const updateOrderStatus = onRequest(
-  { cors: true },
+export const updateOrderStatus = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "PATCH") {
@@ -82,8 +82,7 @@ export const updateOrderStatus = onRequest(
  * POST /pos/sale
  * Records a POS sale (creates order with channel=admin_pos).
  */
-export const createPosSale = onRequest(
-  { cors: true },
+export const createPosSale = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") {

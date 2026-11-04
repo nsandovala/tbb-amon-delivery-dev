@@ -1,4 +1,5 @@
-import { onRequest, type Request } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { requireMembershipPermission } from "../lib/authz";
 import { AppError, ValidationError } from "../lib/errors";
 import { logger } from "../lib/logger";
@@ -45,8 +46,7 @@ function methodNotAllowed(res: Res, allowed: string): void {
  * Body: { tenantId, orderId, expectedAmount, reference?, idempotencyKey }
  * 201 al confirmar; 200 + replayed:true al reproducir la misma clave.
  */
-export const confirmTransferPayment = onRequest(
-  { cors: true },
+export const confirmTransferPayment = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
@@ -70,8 +70,7 @@ export const confirmTransferPayment = onRequest(
  * Body: { tenantId, orderId, expectedConfirmationEventId, reason, idempotencyKey }
  * Corrección contable (el abono no existe o no corresponde). NO es un reembolso.
  */
-export const revertTransferConfirmation = onRequest(
-  { cors: true },
+export const revertTransferConfirmation = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "POST") return methodNotAllowed(res, "POST");
@@ -94,8 +93,7 @@ export const revertTransferConfirmation = onRequest(
  * GET /listPaymentEvents?tenantId=...&orderId=... | &operationalDate=YYYY-MM-DD
  * Lectura del libro con actor y motivo; exige `payments.view`.
  */
-export const listPaymentEvents = onRequest(
-  { cors: true },
+export const listPaymentEvents = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") return methodNotAllowed(res, "GET");

@@ -95,6 +95,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
 GCLOUD_PROJECT=minerp-sentinel \
 node tools/bootstrap-owner.mjs \
+  --project minerp-sentinel \
   --tenant tbb \
   --uid <AUTH_UID_DEL_OWNER_TBB> \
   --created-by-uid system:bootstrap
@@ -109,10 +110,16 @@ node tools/bootstrap-owner.mjs \
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/ruta/sa.json \
 node tools/bootstrap-owner.mjs \
+  --project <proyecto-aprobado> \
   --tenant tbb \
   --uid <AUTH_UID> \
-  --created-by-uid <operador>
+  --created-by-uid <operador> \
+  --i-understand-this-is-not-emulator
 ```
+
+DEPLOY-READY-01: `--project` es obligatorio y debe coincidir con el proyecto del
+entorno (`GCLOUD_PROJECT`, `FIREBASE_PROJECT_ID`, `project_id` del SA, etc.); si
+no, el script aborta antes de tocar Firestore.
 
 4. Verificar en console que el doc existe como `owner/active`.
 5. Guardar un registro fuera del repo del par (operador, uid).

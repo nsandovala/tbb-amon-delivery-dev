@@ -43,6 +43,27 @@ jobs:
       - name: Build Firebase functions
         run: npm --workspace apps/functions run build
 
+      # DEPLOY-READY-01: el build productivo de Hosting rechaza entornos locales
+      # (variables o .env de la app) y artefactos con valores de desarrollo.
+      - name: Verify production Hosting build guards
+        run: node tools/test-build-hosting.mjs
+
+      # Build productivo real con un proyecto ficticio (no existe ni se despliega):
+      # comprueba que out/ no conserva emuladores ni proyectos de desarrollo.
+      # La API key ficticia se genera al vuelo (aleatoria, con el formato que exige
+      # el validador) para no versionar un literal con forma de credencial.
+      - name: Production Hosting build with placeholder project
+        env:
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: tbb-pilot-placeholder.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: tbb-pilot-placeholder
+          NEXT_PUBLIC_FUNCTIONS_BASE_URL: https://us-central1-tbb-pilot-placeholder.cloudfunctions.net
+          NEXT_PUBLIC_STORE_SLUGS: tbb
+        run: |
+          NEXT_PUBLIC_FIREBASE_API_KEY="$(node tools/test-build-hosting.mjs --print-placeholder-key)"
+          export NEXT_PUBLIC_FIREBASE_API_KEY
+          npm run build:hosting:web
+          npm run build:hosting:admin
+
   api-contracts:
     name: api-contracts
     runs-on: ubuntu-latest

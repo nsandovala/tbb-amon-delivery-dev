@@ -1,4 +1,5 @@
-import { onRequest, type Request } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import { onRequestWithCors } from "../lib/cors";
 import { getAdminAuth } from "../lib/firebase-admin";
 import { listActiveMembershipsForUid } from "../repositories/firestore-memberships.repo";
 import { requireActiveMembership } from "../lib/authz";
@@ -19,8 +20,7 @@ function readTenant(req: Request): string {
  * Devuelve el rol y permisos resueltos del usuario autenticado en el tenant
  * indicado. Reemplaza al chequeo cliente de `token.claims.admin`.
  */
-export const getMyMembership = onRequest(
-  { cors: true },
+export const getMyMembership = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") {
@@ -57,8 +57,7 @@ export const getMyMembership = onRequest(
  * ID arbitrario — el servidor devuelve la lista autorizada y el cliente elige
  * entre ella.
  */
-export const listMyMemberships = onRequest(
-  { cors: true },
+export const listMyMemberships = onRequestWithCors(
   async (req, res): Promise<void> => {
     try {
       if (req.method !== "GET") {
