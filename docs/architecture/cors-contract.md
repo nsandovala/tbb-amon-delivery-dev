@@ -8,7 +8,7 @@ Todas las Functions HTTP (19 al 2026-11-02, las exportadas en `apps/functions/sr
 |---|---|
 | Origen permitido | `Access-Control-Allow-Origin: <origen>` y `Vary: Origin` |
 | Origen ajeno o sin `Origin` | Sin `Access-Control-Allow-Origin`; el handler se ejecuta igual |
-| `OPTIONS` (preflight) permitido | `204`, `Allow-Origin`, `Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS`, `Allow-Headers: Authorization, Content-Type`, `Max-Age: 3600` |
+| `OPTIONS` (preflight) permitido | `204`, `Allow-Origin`, `Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS`, `Allow-Headers: Authorization, Content-Type`, `Max-Age: 3600` |
 | `OPTIONS` ajeno | `204` sin cabeceras CORS |
 
 El preflight nunca llega al handler: no lee Firestore.
