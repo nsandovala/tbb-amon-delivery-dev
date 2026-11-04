@@ -84,6 +84,7 @@ test.describe("DEPLOY-READY-01 CORS allowlist (emulator)", () => {
         const headers = res.headers();
         expect(headers["access-control-allow-origin"]).toBe(origin);
         expect(headers["access-control-allow-methods"]).toContain("POST");
+        expect(headers["access-control-allow-methods"]).toContain("PUT");
         expect(headers["access-control-allow-headers"]).toContain("Authorization");
         expect(headers["access-control-allow-headers"]).toContain("Content-Type");
         expect(headers["vary"]).toContain("Origin");
