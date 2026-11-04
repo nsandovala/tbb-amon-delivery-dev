@@ -31,7 +31,7 @@ export const LOCAL_EMULATOR_ORIGINS: readonly string[] = LOCAL_PORTS.flatMap((po
   `http://127.0.0.1:${port}`,
 ]);
 
-const ALLOWED_METHODS = "GET, POST, PATCH, DELETE, OPTIONS";
+const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
 const ALLOWED_HEADERS = "Authorization, Content-Type";
 const PREFLIGHT_MAX_AGE_SECONDS = "3600";
 
