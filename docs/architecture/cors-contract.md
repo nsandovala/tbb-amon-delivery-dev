@@ -28,19 +28,16 @@ El preflight nunca llega al handler: no lee Firestore.
 - Si algún valor es inválido, se descarta la lista completa.
 - En ambos casos se registra `CORS fail-closed` en el log de Functions.
 
-## Cómo se fija en el despliegue (DEPLOY-PILOT-01, pendiente)
+## Cómo se fija en el despliegue (BACKEND-PREVIEW-02)
 
 Firebase CLI carga `.env.<projectId>` desde el directorio fuente de Functions al desplegar. El workflow piloto despliega `.firebase-pilot/functions` (generado por `tools/prepare-firebase-pilot.mjs`, que hoy solo copia `lib/`, `package.json` y el lock). Pasos:
 
-1. Variable de GitHub (no secreta) `FIREBASE_PILOT_CORS_ORIGINS` con los dominios de Hosting reales.
-2. Tras `prepare-firebase-pilot.mjs`, escribir `.firebase-pilot/functions/.env.<projectId>` con `AMON_CORS_ALLOWED_ORIGINS=<valor>`.
-3. Preflight del workflow: fallar si la variable está vacía o contiene `localhost`, `127.0.0.1` o `http://`.
-
-El repo no guarda IDs ni dominios reales. Placeholder documentado:
+1. Configurar en el entorno GitHub `firebase-pilot` la variable no secreta `FIREBASE_PILOT_CORS_ORIGINS` con los dominios de Hosting aprobados.
+2. Tras preparar el paquete en el runner aislado, `tools/configure-pilot-cors.mjs` valida los orígenes y crea exclusivamente `.firebase-pilot/functions/.env.<projectId>`. Falla si ya existe; no depende de archivos locales ignorados.
+3. Para `tbb-amon-preview`, el guard exige exactamente los dos orígenes siguientes; falla ante valores vacíos, externos o malformados. La variable aún debe configurarse en GitHub antes de un despliegue futuro.
 
 ```env
-# apps/functions/.env.<projectId>  (NO commitear con valores reales hasta DEPLOY-PILOT-01)
-AMON_CORS_ALLOWED_ORIGINS=https://<proyecto>-web.web.app,https://<proyecto>-admin.web.app
+FIREBASE_PILOT_CORS_ORIGINS=https://tbb-amon-preview.web.app,https://tbb-amon-preview-admin.web.app
 ```
 
 ## Lo que CORS no es
@@ -56,4 +53,5 @@ App Check y el rate limit siguen como decisión pendiente.
 ## Pruebas
 
 - `e2e/unit/deploy-ready-cors.spec.ts`: política productiva (fail-closed, lista exacta, sin locales) y cabeceras.
+- `node --test tools/test-configure-pilot-cors.mjs`: validación del guard de configuración del workflow.
 - `e2e/api/deploy-ready-cors.contract.spec.ts`: preflight permitido y ajeno en los 19 endpoints, `GET` y errores 400/401 contra el emulador oficial.
