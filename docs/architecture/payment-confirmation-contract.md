@@ -8,13 +8,14 @@
 
 | Eje | Campo | Valores | Quién lo cambia |
 |---|---|---|---|
-| Operacional | `status` | `queued` … `delivered`, `cancelled` | `updateOrderStatus` (sin cambios) |
+| Operacional | `status` | `queued` … `delivered`, `cancelled` | `updateOrderStatus` |
 | Pago | `paymentStatus` | `pending` \| `paid` (`refunded` queda reservado para FIN-02) | Solo `confirmTransferPayment` y `revertTransferConfirmation` |
 
 - Elegir `paymentMethod: "transfer"` **no** confirma el abono.
 - Una transferencia se puede confirmar en cualquier estado salvo `cancelled`, también antes de la entrega.
-- Cancelar un pedido `paid` está permitido mientras la caja de su jornada esté abierta. El pago sigue `paid` y el pedido aparece como **reembolso por revisar** (`cancelledPaidTransfers`). Nunca suma como venta.
-- La regla de cancelación tras el cierre no cambia: `updateOrderStatus` sigue bloqueado por `assertCashCloseOpen(order.operationalDate)`.
+- Un pedido de transferencia `paid` en estado activo (`queued`, `preparing`, `ready` u `on_the_way`) puede cancelarse si la caja de su jornada está abierta. El pago sigue `paid` y el pedido aparece como **reembolso por revisar** (`cancelledPaidTransfers`); la cancelación no devuelve dinero y el pedido no suma como venta.
+- `delivered → cancelled` se rechaza con `409 CONFLICT`, también cuando el pedido está `paid` y la caja está abierta. La validación ocurre en la transacción antes de escribir: el pedido, el pago y los eventos financieros permanecen sin cambios. No existe aquí una anulación financiera de pedidos entregados.
+- Cuando el pedido tiene `operationalDate`, `updateOrderStatus` comprueba con `assertCashCloseOpen` que la caja de esa jornada siga abierta; los pedidos legacy sin esa fecha no pasan por esa comprobación.
 
 ### Tres medidas que nunca se suman entre sí
 

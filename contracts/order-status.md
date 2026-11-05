@@ -5,7 +5,7 @@
 ```
 queued → preparing → ready → on_the_way → delivered
                                     ↓
-                               cancelled (from any state)
+                               cancelled (from active states)
 ```
 
 ## Status Definitions
@@ -27,9 +27,9 @@ queued → preparing → ready → on_the_way → delivered
    order through every intermediate state. A presential POS sale is closed in one step; a web
    order walks the full kitchen flow because the admin UI offers it that way, not because the
    contract requires it.
-3. **`cancelled` is reachable from any state, including `delivered`.** Cancelling a delivered
-   order is what makes an accounting reversal possible (see `contracts/financial-events.md`,
-   event `order.cancelled`). Once `cancelled`, no further transitions are allowed.
+3. **`cancelled` is reachable from active states only** (`queued`, `preparing`, `ready`, or
+   `on_the_way`), subject to the cash-close guard. `delivered → cancelled` returns `409 CONFLICT`;
+   financial cancellation of a delivered order is not implemented. Once `cancelled`, no further transitions are allowed.
 4. **Backend validates all transitions.** Frontend sends the desired target status; backend checks
    legality. `ILLEGAL_TRANSITIONS` in `apps/functions/src/schemas/order.shared.ts` is the **single
    source of enforcement**. Any allowlist in a frontend is a UX affordance, not the contract:
@@ -44,21 +44,18 @@ Mirrors `ILLEGAL_TRANSITIONS` exactly.
 
 | From | To | Reason |
 |---|---|---|
-| `delivered` | `queued`, `preparing`, `ready`, `on_the_way` | No backward transitions |
+| `delivered` | `queued`, `preparing`, `ready`, `on_the_way`, `cancelled` | No backward transitions or cancellation after delivery |
 | `cancelled` | any (except no-op) | Terminal state |
 | any | unknown status | Not in enum |
 
-### Explicitly legal (previously documented as invalid — the doc was wrong)
+### Explicitly legal forward skips
 
 | From | To | Why it must stay legal |
 |---|---|---|
-| `delivered` | `cancelled` | Required for accounting reversals. Never blocked by the backend |
 | `queued` | `delivered` | Lets a presential POS sale be closed in one step, without faking a kitchen flow that did not happen |
 | `queued` | `ready` / `on_the_way` | Same forward-skip rule |
 
-> **Nota:** hasta 2026-07-12 este documento declaraba `delivered → cancelled` y `queued → delivered`
-> como transiciones inválidas. El backend **siempre** las permitió. El documento estaba equivocado,
-> no el código. La UI de `/pedidos` mantiene un allowlist más estricto por decisión de producto.
+> **P0 POS-READY:** `delivered → cancelled` was previously allowed; it is now rejected; a financial cancellation flow is not implemented. Forward skips remain allowed.
 
 ## Firestore Representation
 
