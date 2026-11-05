@@ -8,6 +8,7 @@
 
 ---
 
+> **Actualización P0 POS-READY:** las referencias históricas de este borrador a `delivered → cancelled` como transición disponible quedaron superadas. El backend ahora la rechaza con `409 CONFLICT`; el flujo futuro de anulación financiera y reverso ERP aún no está implementado. La sección 4.2 conserva la evidencia histórica, no describe el comportamiento actual.
 ## 0. Alcance y reglas de integración (leer antes que nada)
 
 1. **AMON Shop no escribe directo al ERP.** Nunca. Ni HTTP directo, ni escritura a su base,
@@ -242,7 +243,7 @@ Reglas:
 | `refund_method` | **No existe** | Constante: el `payment_method` del evento reversado |
 | `courier_fee_refunded` | **No existe** | Constante `false` |
 
-### 4.2 R2 — resuelto: `delivered → cancelled` ya era legal
+### 4.2 R2 — evidencia histórica, anterior a P0 POS-READY
 
 Este evento requiere que `delivered → cancelled` sea una transición **legal**. Lo era desde
 siempre; el que mentía era el documento.
