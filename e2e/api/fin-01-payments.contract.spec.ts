@@ -234,6 +234,20 @@ test.describe("confirmar · replay · reversión", () => {
     );
   });
 
+  test("entregado no puede cancelarse y conserva pedido y movimientos", async () => {
+    const { orderId, total } = await seedOrder(api, tenantId, "fin01deliveredblock01", { status: "delivered" });
+    await expectCode(await confirmTransfer(api, token, { tenantId, orderId, expectedAmount: total, idempotencyKey: payKey() }), 201);
+    const beforeOrder = await readDoc(api, `tenants/${tenantId}/orders/${orderId}`);
+    const beforeEvents = await eventsOf(tenantId, orderId);
+    const beforeCounter = await readDoc(api, `tenants/${tenantId}/orderCounters/${today}`);
+    const response = await api.patch(`updateOrderStatus?orderId=${orderId}&tenantId=${tenantId}`, {
+      headers: bearer(token), data: { status: "cancelled", tenantId },
+    });
+    expect(response.status(), await response.text()).toBe(409);
+    expect(await readDoc(api, `tenants/${tenantId}/orders/${orderId}`)).toEqual(beforeOrder);
+    expect(await eventsOf(tenantId, orderId)).toEqual(beforeEvents);
+    expect(await readDoc(api, `tenants/${tenantId}/orderCounters/${today}`)).toEqual(beforeCounter);
+  });
   test("confirmar y luego cancelar con caja abierta: reembolso por revisar, cobro vigente", async () => {
     const { orderId, total } = await seedOrder(api, tenantId, "fin01paidcancel00001", { status: "ready" });
     await expectCode(

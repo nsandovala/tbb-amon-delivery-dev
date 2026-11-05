@@ -14,7 +14,7 @@ export const ORDER_STATUSES = [
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const ILLEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  delivered: ["queued", "preparing", "ready", "on_the_way"],
+  delivered: ["queued", "preparing", "ready", "on_the_way", "cancelled"],
   cancelled: ["queued", "preparing", "ready", "on_the_way", "delivered"],
   queued: [],
   preparing: [],

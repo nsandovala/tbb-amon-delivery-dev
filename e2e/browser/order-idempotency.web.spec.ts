@@ -409,6 +409,10 @@ test.describe("ORDER-IDEMPOTENCY web (navegador + emuladores)", () => {
       const first = await transport.next("createOrder", 0);
       const firstCode = await codeOf(first);
       await first.loseResponse();
+      await expect(toasts(page).filter({ hasText: "No pudimos confirmar tu pedido." })).toBeVisible();
+      // Espera el cierre natural del toast antes del siguiente clic.
+      await page.mouse.move(0, 0);
+      await expect(toasts(page)).toHaveCount(0, { timeout: 15_000 });
 
       await backToCart(page);
       await page.getByRole("button", { name: "Aumentar cantidad" }).click();
