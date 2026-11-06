@@ -83,6 +83,11 @@ jobs:
           npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix .firebase-pilot/functions --workspaces=false
           node -e 'const p="./.firebase-pilot/functions/"; const z=require(p+"node_modules/zod/package.json").version; if (!z.startsWith("4.")) throw Error(`Expected Zod 4, got ${z}`); require(p+"lib/index.js")'
 
+      - name: Configure exact CORS origins for pilot
+        env:
+          AMON_CORS_ALLOWED_ORIGINS: ${{ vars.FIREBASE_PILOT_CORS_ORIGINS }}
+        run: node tools/configure-pilot-cors.mjs "$FIREBASE_PROJECT_ID" .firebase-pilot/functions
+
       - name: Authenticate with approved pilot identity
         uses: google-github-actions/auth@v3
         with:

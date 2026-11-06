@@ -13,8 +13,8 @@ import {
  * e2e/api/deploy-ready-cors.contract.spec.ts.
  */
 
-const SITE = "https://tbb-pilot-placeholder-web.web.app";
-const ADMIN = "https://tbb-pilot-placeholder-admin.web.app";
+const SITE = "https://tbb-amon-preview.web.app";
+const ADMIN = "https://tbb-amon-preview-admin.web.app";
 
 function fakeExchange(method: string, origin?: string) {
   const headers: Record<string, string> = {};
@@ -88,7 +88,17 @@ test.describe("resolveCorsPolicy", () => {
 });
 
 test.describe("applyCors", () => {
-  const policy = resolveCorsPolicy({ AMON_CORS_ALLOWED_ORIGINS: SITE });
+  const policy = resolveCorsPolicy({ AMON_CORS_ALLOWED_ORIGINS: `${SITE},${ADMIN}` });
+
+  test("ambos orígenes preview reciben cabeceras y preflight autorizado", () => {
+    for (const origin of [SITE, ADMIN]) {
+      const ex = fakeExchange("OPTIONS", origin);
+      expect(applyCors(ex.req, ex.res, policy)).toBe(true);
+      expect(ex.status()).toBe(204);
+      expect(ex.headers["access-control-allow-origin"]).toBe(origin);
+      expect(ex.headers["access-control-allow-headers"]).toBe("Authorization, Content-Type");
+    }
+  });
 
   test("origen permitido: refleja el origen y agrega Vary", () => {
     const ex = fakeExchange("POST", SITE);

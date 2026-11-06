@@ -5,9 +5,24 @@
   "targets": {
     "demo-amon-ci": {
       "hosting": {
-        "web": ["demo-amon-ci-web"],
-        "admin": ["demo-amon-ci-admin"]
+        "web": [
+          "demo-amon-ci-web"
+        ],
+        "admin": [
+          "demo-amon-ci-admin"
+        ]
+      }
+    },
+    "tbb-amon-preview": {
+      "hosting": {
+        "web": [
+          "tbb-amon-preview"
+        ],
+        "admin": [
+          "tbb-amon-preview-admin"
+        ]
       }
     }
-  }
+  },
+  "etags": {}
 }
