@@ -48,6 +48,9 @@ jobs:
       - name: Verify production Hosting build guards
         run: node tools/test-build-hosting.mjs
 
+      - name: Verify pilot CORS configuration guard
+        run: node --test tools/test-configure-pilot-cors.mjs
+
       # Build productivo real con un proyecto ficticio (no existe ni se despliega):
       # comprueba que out/ no conserva emuladores ni proyectos de desarrollo.
       # La API key ficticia se genera al vuelo (aleatoria, con el formato que exige
