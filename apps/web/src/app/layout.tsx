@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
-import { HeoChatbot } from "@/components/ui/heo-chatbot";
+
 import "./global.css";
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <body suppressHydrationWarning>
         {children}
-        <HeoChatbot />
+
         <Toaster theme="dark" position="bottom-right" />
       </body>
     </html>

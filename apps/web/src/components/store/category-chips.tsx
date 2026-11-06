@@ -23,11 +23,11 @@ export function CategoryChips({
       : [{ id: "", name: "Menú" }];
 
   return (
-    <div className="sticky top-[72px] z-40 border-y border-white/5 bg-[#0B0B0B]/88 backdrop-blur-xl">
+    <nav aria-label="Categorías del menú" className="sticky top-16 z-40 border-y border-white/5 bg-[#0B0B0B]/88 backdrop-blur-xl">
       <div
         className="
           overflow-x-auto overflow-y-hidden
-          px-4 py-4 md:px-8
+          px-4 py-2 md:px-8
           [scrollbar-width:none]
           [-ms-overflow-style:none]
           [&::-webkit-scrollbar]:hidden
@@ -43,6 +43,7 @@ export function CategoryChips({
             return (
               <button
                 key={chip.id || "all"}
+                aria-pressed={isActive}
                 onClick={() => onSelectCategory?.(chip.id)}
                 className={cn(
                   "relative shrink-0 overflow-hidden rounded-full border",
@@ -79,6 +80,6 @@ export function CategoryChips({
           })}
         </div>
       </div>
-    </div>
+    </nav>
   );
 }

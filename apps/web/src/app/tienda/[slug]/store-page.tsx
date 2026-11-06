@@ -101,15 +101,13 @@ export default function StorePage({ params }: StorePageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0B0B] relative flex flex-col pb-24 overflow-x-hidden">
+    <div className="min-h-screen bg-[#0B0B0B] relative flex flex-col pb-24">
       {/* Background Subtle Glow */}
       <div className="pointer-events-none fixed inset-0 z-0 flex justify-center">
         <div className="absolute top-[-20%] w-[1000px] aspect-square bg-[radial-gradient(circle,rgba(0,255,156,0.08),transparent_70%)] opacity-80" />
       </div>
 
-      <div className="relative z-10 w-full">
-        <StoreHeader tenantName={tenant.name} />
-      </div>
+      <StoreHeader tenantName={tenant.name} />
 
       <StoreSpecialDates tenantId={tenant.id} />
 
