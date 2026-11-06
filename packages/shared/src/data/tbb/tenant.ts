@@ -14,9 +14,10 @@ export const TBB_TENANT = {
   },
   contact: {
     instagram: "@tbestburger",
-    whatsapp: "",
+    whatsapp: "+56969681939",
   },
   location: {
+    address: "Pasaje Nueve 344, Tercer Sector, Playa Ancha, Valparaíso",
     commune: "Playa Ancha",
     city: "Valparaíso",
   },
