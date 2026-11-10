@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { Product } from "@/types";
 import { useCartStore } from "@/lib/store/cart-store";
 import { cn } from "@/lib/utils";
-import { Heart, Star, Plus, Minus } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
+import { getDisplayDescription } from "@/lib/store/product-descriptions";
 
 interface ProductCardProps {
   product: Product;
@@ -35,11 +36,6 @@ function getFallbackImage(categoryId?: string) {
   }
 }
 
-function formatLikes(value?: number) {
-  if (typeof value !== "number") return null;
-  return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value);
-}
-
 export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
@@ -49,9 +45,6 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
 
   const quantity = cartItem?.quantity || 0;
   const inCart = quantity > 0;
-  const likes = useMemo(() => formatLikes(product.ui?.likesCount), [product.ui?.likesCount]);
-  const rating =
-    typeof product.ui?.rating === "number" ? product.ui.rating.toFixed(1) : null;
   const [imgSrc, setImgSrc] = useState(
     product.imageUrl || getFallbackImage(product.categoryId)
   );
@@ -80,28 +73,6 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
           className="object-cover transition-transform duration-700 group-hover:scale-105"
           onError={() => setImgSrc(getFallbackImage(product.categoryId))}
         />
-
-        {(rating || likes) ? (
-          <div className="absolute top-4 z-20 flex w-full justify-between px-4">
-            {rating ? (
-              <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-3 py-1.5 backdrop-blur-xl">
-                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                <span className="text-[11px] font-bold text-white">{rating}</span>
-              </div>
-            ) : (
-              <div />
-            )}
-
-            {likes ? (
-              <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-3 py-1.5 backdrop-blur-xl">
-                <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />
-                <span className="text-[11px] font-bold tracking-tight text-white">
-                  {likes}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       <div className="flex flex-1 flex-col gap-4 p-6">
@@ -117,8 +88,8 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
           ) : null}
         </div>
 
-        <p className="min-h-[3.6rem] flex-1 line-clamp-3 text-xs leading-relaxed text-neutral-400 opacity-60 transition-opacity group-hover:opacity-100">
-          {product.description}
+        <p className="flex-1 text-sm leading-relaxed text-neutral-300">
+          {getDisplayDescription(product)}
         </p>
 
         <div className="relative z-10 mt-auto flex items-center justify-between border-t border-white/5 pt-5">
@@ -129,6 +100,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
           {inCart ? (
             <div className="relative z-20 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-md">
               <button
+                aria-label={`Quitar una unidad de ${product.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   updateQuantity(product.id, quantity - 1);
@@ -143,6 +115,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
               </span>
 
               <button
+                aria-label={`Agregar una unidad de ${product.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   updateQuantity(product.id, quantity + 1);
@@ -154,6 +127,7 @@ export function ProductCard({ product, onHoverCategory }: ProductCardProps) {
             </div>
           ) : (
             <button
+              aria-label={`Agregar ${product.name} al carrito`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleAddClick();

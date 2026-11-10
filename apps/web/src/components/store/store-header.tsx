@@ -17,9 +17,9 @@ export function StoreHeader({ tenantName }: StoreHeaderProps) {
   );
 
   return (
-    <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-background/80 border-b border-white/5 py-4 px-6 md:px-12 flex items-center justify-between transition-all">
-      <div className="flex items-center gap-2">
-        <h1 className="text-xl font-bold tracking-tight text-white">{tenantName}</h1>
+    <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-background/80 border-b border-white/5 h-16 px-4 md:px-12 flex items-center justify-between gap-4 transition-all">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <h1 className="truncate text-xl font-bold tracking-tight text-white">{tenantName}</h1>
       </div>
 
       <button
@@ -30,9 +30,10 @@ export function StoreHeader({ tenantName }: StoreHeaderProps) {
           "text-white transition-all duration-300 ease-in-out",
           "hover:border-accent hover:bg-accent/10 hover:shadow-[0_0_15px_rgba(0,255,156,0.3)]"
         )}
-        aria-label="Abrir carrito"
+        aria-label={`Abrir carrito, ${count} ${count === 1 ? "producto" : "productos"}`}
       >
-        <ShoppingCart className="w-5 h-5" />
+        <ShoppingCart className="w-5 h-5" aria-hidden="true" />
+        <span className="text-sm font-semibold">Carrito</span>
         {count > 0 && (
           <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] flex items-center justify-center rounded-full bg-accent text-background text-[11px] font-bold px-1.5 animate-in zoom-in">
             {count}
