@@ -42,11 +42,8 @@ jobs:
           test "$GITHUB_REF" = 'refs/heads/main' || { echo '::error::Run only from main after an approved merge.'; exit 1; }
           test "$CONFIRMATION" = 'DEPLOY_PILOT' || { echo '::error::Manual confirmation is missing.'; exit 1; }
           test "$DEPLOY_ENABLED" = 'true' || { echo '::error::Pilot deploy is not enabled.'; exit 1; }
-          test -n "$APPROVED_PROJECT" || { echo '::error::Approved pilot project is unset.'; exit 1; }
-          test "$REQUESTED_PROJECT" = "$APPROVED_PROJECT" || { echo '::error::Project does not match the approved pilot.'; exit 1; }
-          case "$APPROVED_PROJECT" in
-            minerp-sentinel|minierp-sentinel|demo-*) echo '::error::This is not an approved real pilot project.'; exit 1 ;;
-          esac
+          test "$APPROVED_PROJECT" = 'tbb-amon-preview' || { echo '::error::Approved project must be tbb-amon-preview.'; exit 1; }
+          test "$REQUESTED_PROJECT" = 'tbb-amon-preview' || { echo '::error::Requested project must be tbb-amon-preview.'; exit 1; }
           test -n "$WIF_PROVIDER" && test -n "$SERVICE_ACCOUNT" || { echo '::error::Pilot identity configuration is incomplete.'; exit 1; }
           printf 'wif_provider=%s\n' "$WIF_PROVIDER" >> "$GITHUB_OUTPUT"
           printf 'service_account=%s\n' "$SERVICE_ACCOUNT" >> "$GITHUB_OUTPUT"
@@ -94,5 +91,5 @@ jobs:
           workload_identity_provider: ${{ needs.preflight.outputs.wif_provider }}
           service_account: ${{ needs.preflight.outputs.service_account }}
 
-      - name: Deploy pilot Functions codebase only
-        run: npx --yes firebase-tools@15.34.1 deploy --config firebase.pilot.json --project "$FIREBASE_PROJECT_ID" --only functions:amon-functions --non-interactive
+      - name: Deploy getStoreStatus canary only
+        run: npx --yes firebase-tools@15.34.1 deploy --config firebase.pilot.json --project tbb-amon-preview --only functions:amon-functions:getStoreStatus --non-interactive
