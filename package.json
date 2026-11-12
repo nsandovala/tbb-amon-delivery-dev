@@ -23,8 +23,8 @@
     "build:hosting:admin": "node tools/build-hosting.mjs --app admin"
   },
   "devDependencies": {  
-    "@playwright/test": "^1.60.0",
-    "concurrently": "^10.0.3",
-    "wait-on": "^9.0.10"
+    "@playwright/test": "^1.62.1",
+    "concurrently": "^10.0.5",
+    "wait-on": "^9.1.0"
   }
 }
