@@ -1,6 +1,6 @@
 # amon-emulator-verification
 
-Version 1.1.0 portable skill package for Claude, Codex, and AMON Shop agents. It hardens local and CI verification against official Firebase emulators without changing application code.
+Version 1.1.1 portable skill package for Claude, Codex, and AMON Shop agents. It hardens local and CI verification against official Firebase emulators without changing application code.
 
 ## Contents
 
@@ -44,3 +44,14 @@ Windows synthetic safety regressions (no emulators or process termination):
 - powershell -NoProfile -ExecutionPolicy Bypass -File .\.agents\skills\amon-emulator-verification\scripts\test-prebuild-next-guard.ps1
 
 macOS manual inspection: lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN. The PowerShell scripts require Windows Get-NetTCPConnection/CIM cmdlets.
+
+## v1.1.1: Require both process identifiers
+
+Postflight now requires both the worktree root and expected project ID to match
+for shutdown_pending/residual. Partial matches, foreign processes and missing
+command-line identity remain ambiguous. The postflight-v2 schema, grace window
+and prohibition on automatic cleanup are unchanged.
+
+Run scripts/test-postflight-grace.ps1 for nine synthetic scenarios covering full,
+partial, absent and mixed identities, delayed shutdown and an empty inventory.
+These tests do not establish Windows process inspection or emulator coverage.
